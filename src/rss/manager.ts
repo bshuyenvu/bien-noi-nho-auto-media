@@ -1,53 +1,25 @@
 import * as cheerio from 'cheerio';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { all, run } from '../storage/db.js';
 
 export interface RssSource { id:string; name:string; url:string; createdAt:string; lastScanAt?:string; lastError?:string; }
 export interface RssItem { id:string; sourceId:string; sourceName:string; title:string; link:string; publishedAt?:string; discoveredAt:string; }
 
-export const rssSources:RssSource[]=[];
-export const rssItems:RssItem[]=[];
-const seen=new Set<string>();
+type SourceRow={id:string;name:string;url:string;created_at:string;last_scan_at?:string;last_error?:string};
+type ItemRow={id:string;source_id:string;source_name:string;title:string;link:string;published_at?:string;discovered_at:string};
+const mapSource=(r:SourceRow):RssSource=>({id:r.id,name:r.name,url:r.url,createdAt:r.created_at,lastScanAt:r.last_scan_at||undefined,lastError:r.last_error||undefined});
+const mapItem=(r:ItemRow):RssItem=>({id:r.id,sourceId:r.source_id,sourceName:r.source_name,title:r.title,link:r.link,publishedAt:r.published_at||undefined,discoveredAt:r.discovered_at});
+export const rssSources:RssSource[]=all<SourceRow>('SELECT * FROM rss_sources ORDER BY created_at DESC').map(mapSource);
+export const rssItems:RssItem[]=all<ItemRow>('SELECT * FROM rss_items ORDER BY discovered_at DESC LIMIT 300').map(mapItem);
+const seen=new Set(rssItems.map(i=>i.link));
 
-function privateIp(ip:string){
- if(ip.includes(':')) return ip==='::1'||ip.startsWith('fc')||ip.startsWith('fd')||ip.startsWith('fe80:');
- const p=ip.split('.').map(Number);return p[0]===10||p[0]===127||(p[0]===169&&p[1]===254)||(p[0]===172&&p[1]>=16&&p[1]<=31)||(p[0]===192&&p[1]===168);
-}
-async function assertPublicUrl(raw:string){
- const u=new URL(raw);if(!['http:','https:'].includes(u.protocol))throw new Error('RSS chỉ hỗ trợ HTTP/HTTPS');
- if(isIP(u.hostname)){if(privateIp(u.hostname))throw new Error('RSS private/internal host bị chặn');}
- else {const rows=await lookup(u.hostname,{all:true});if(!rows.length||rows.some(x=>privateIp(x.address)))throw new Error('RSS private/internal host bị chặn');}
- return u;
-}
+function privateIp(ip:string){if(ip.includes(':'))return ip==='::1'||ip.startsWith('fc')||ip.startsWith('fd')||ip.startsWith('fe80:');const p=ip.split('.').map(Number);return p[0]===10||p[0]===127||(p[0]===169&&p[1]===254)||(p[0]===172&&p[1]>=16&&p[1]<=31)||(p[0]===192&&p[1]===168);}
+async function assertPublicUrl(raw:string){const u=new URL(raw);if(!['http:','https:'].includes(u.protocol))throw new Error('RSS chỉ hỗ trợ HTTP/HTTPS');if(isIP(u.hostname)){if(privateIp(u.hostname))throw new Error('RSS private/internal host bị chặn');}else{const rows=await lookup(u.hostname,{all:true});if(!rows.length||rows.some(x=>privateIp(x.address)))throw new Error('RSS private/internal host bị chặn');}return u;}
 function text($:cheerio.CheerioAPI,node:any,selector:string){return $(node).find(selector).first().text().replace(/\s+/g,' ').trim();}
 function attr($:cheerio.CheerioAPI,node:any,selector:string,name:string){return $(node).find(selector).first().attr(name)?.trim()||'';}
 
-export function addRssSource(input:{name?:string;url:string}){
- const existing=rssSources.find(s=>s.url===input.url);if(existing)return existing;
- const host=new URL(input.url).hostname.replace(/^www\./,'');
- const source:RssSource={id:crypto.randomUUID(),name:(input.name||host).slice(0,120),url:input.url,createdAt:new Date().toISOString()};rssSources.unshift(source);return source;
-}
+export function addRssSource(input:{name?:string;url:string}){const existing=rssSources.find(s=>s.url===input.url);if(existing)return existing;const host=new URL(input.url).hostname.replace(/^www\./,'');const source:RssSource={id:crypto.randomUUID(),name:(input.name||host).slice(0,120),url:input.url,createdAt:new Date().toISOString()};rssSources.unshift(source);run('INSERT INTO rss_sources(id,name,url,created_at) VALUES(?,?,?,?)',source.id,source.name,source.url,source.createdAt);return source;}
 
-export async function scanRssSource(source:RssSource){
- await assertPublicUrl(source.url);
- try{
-  const r=await fetch(source.url,{headers:{'user-agent':'Mozilla/5.0 (compatible; BienNoiNhoAutoMedia/1.2)'},signal:AbortSignal.timeout(15000)});
-  if(!r.ok)throw new Error(`RSS HTTP ${r.status}`);
-  const xml=await r.text();if(xml.length>5_000_000)throw new Error('RSS quá lớn');
-  const $=cheerio.load(xml,{xmlMode:true});
-  const nodes=$('item').length?$('item').toArray():$('entry').toArray();let added=0;
-  for(const n of nodes.slice(0,50)){
-   const title=text($,n,'title');
-   let link=text($,n,'link')||attr($,n,'link','href');
-   const guid=text($,n,'guid')||text($,n,'id');
-   const publishedAt=text($,n,'pubDate')||text($,n,'published')||text($,n,'updated')||undefined;
-   if(!title||!link)continue;
-   try{link=new URL(link,source.url).toString();}catch{continue;}
-   const key=guid||link;if(seen.has(key)||rssItems.some(i=>i.link===link))continue;seen.add(key);
-   rssItems.unshift({id:crypto.randomUUID(),sourceId:source.id,sourceName:source.name,title:title.slice(0,180),link,publishedAt,discoveredAt:new Date().toISOString()});added++;
-  }
-  rssItems.splice(300);source.lastScanAt=new Date().toISOString();source.lastError=undefined;return {added,total:nodes.length};
- }catch(e){source.lastScanAt=new Date().toISOString();source.lastError=e instanceof Error?e.message:String(e);throw e;}
-}
-
+export async function scanRssSource(source:RssSource){await assertPublicUrl(source.url);try{const r=await fetch(source.url,{headers:{'user-agent':'Mozilla/5.0 (compatible; BienNoiNhoAutoMedia/1.3)'},signal:AbortSignal.timeout(15000)});if(!r.ok)throw new Error(`RSS HTTP ${r.status}`);const xml=await r.text();if(xml.length>5_000_000)throw new Error('RSS quá lớn');const $=cheerio.load(xml,{xmlMode:true});const nodes=$('item').length?$('item').toArray():$('entry').toArray();let added=0;for(const n of nodes.slice(0,50)){const title=text($,n,'title');let link=text($,n,'link')||attr($,n,'link','href');const guid=text($,n,'guid')||text($,n,'id');const publishedAt=text($,n,'pubDate')||text($,n,'published')||text($,n,'updated')||undefined;if(!title||!link)continue;try{link=new URL(link,source.url).toString();}catch{continue;}const key=guid||link;if(seen.has(key)||rssItems.some(i=>i.link===link))continue;seen.add(key);const item:RssItem={id:crypto.randomUUID(),sourceId:source.id,sourceName:source.name,title:title.slice(0,180),link,publishedAt,discoveredAt:new Date().toISOString()};rssItems.unshift(item);run('INSERT OR IGNORE INTO rss_items(id,source_id,source_name,title,link,published_at,discovered_at) VALUES(?,?,?,?,?,?,?)',item.id,item.sourceId,item.sourceName,item.title,item.link,item.publishedAt||null,item.discoveredAt);added++;}rssItems.splice(300);source.lastScanAt=new Date().toISOString();source.lastError=undefined;run('UPDATE rss_sources SET last_scan_at=?,last_error=NULL WHERE id=?',source.lastScanAt,source.id);return {added,total:nodes.length};}catch(e){source.lastScanAt=new Date().toISOString();source.lastError=e instanceof Error?e.message:String(e);run('UPDATE rss_sources SET last_scan_at=?,last_error=? WHERE id=?',source.lastScanAt,source.lastError,source.id);throw e;}}
 export async function scanAllRss(){let added=0;for(const s of rssSources){try{added+=(await scanRssSource(s)).added}catch{}}return {added,sources:rssSources.length,items:rssItems.length};}

@@ -3,7 +3,6 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 function run(command:string,args:string[]){return new Promise<void>((resolve,reject)=>{let stderr='';const c=spawn(command,args,{stdio:['ignore','inherit','pipe']});c.stderr?.on('data',d=>{const s=String(d);stderr=(stderr+s).slice(-6000);process.stderr.write(s)});c.once('error',reject);c.once('exit',code=>code===0?resolve():reject(new Error(`${command} exited with ${code}${stderr?`: ${stderr.trim().slice(-1800)}`:''}`)))});}
-function esc(s:string){return s.replace(/\\/g,'\\\\').replace(/:/g,'\\:').replace(/'/g,"\\'").replace(/%/g,'\\%');}
 function escPath(s:string){return s.replace(/\\/g,'/').replace(/:/g,'\\:').replace(/'/g,"\\'");}
 function wrapHeadline(input:string,max=28,maxLines=4){
  const words=input.trim().split(/\s+/);const lines:string[]=[];let line='';let index=0;
@@ -21,11 +20,11 @@ function wrapHeadline(input:string,max=28,maxLines=4){
 
 export type VideoTemplate='classic'|'breaking'|'clean';
 
-function templateOverlay(template:VideoTemplate,label:string,headlineFile:string,source:string,srtPath?:string){
+function templateOverlay(template:VideoTemplate,label:string,headlineFile:string,sourceFile?:string,srtPath?:string){
  const headlineText=`textfile='${escPath(headlineFile)}':reload=0`;
  const shared=[
   `drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='BIỂN & NỖI NHỚ':fontcolor=white:fontsize=34:x=320:y=76`,
-  source?`drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='Nguồn\: ${source}':fontcolor=0xcbd5e1:fontsize=27:x=65:y=1425`:'null',
+  sourceFile?`drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:textfile='${escPath(sourceFile)}':reload=0:fontcolor=0xcbd5e1:fontsize=27:x=65:y=1425`:'null',
   srtPath?`subtitles='${escPath(srtPath)}':force_style='FontName=DejaVu Sans,FontSize=18,Alignment=2,MarginV=170,Outline=2,Shadow=1'`:'null'
  ];
  if(template==='clean')return [
@@ -55,10 +54,15 @@ function templateOverlay(template:VideoTemplate,label:string,headlineFile:string
 
 export async function renderNewsVideo(opts:{audioPath:string;srtPath?:string;outputPath:string;duration?:number;headline?:string;source?:string;breaking?:boolean;imagePath?:string;template?:VideoTemplate}){
  await mkdir(dirname(opts.outputPath),{recursive:true});
- const duration=opts.duration??60,label=opts.breaking?'TIN NÓNG':'TIN MỚI',source=esc(opts.source??''),template=opts.template??(opts.breaking?'breaking':'classic');
+ const duration=opts.duration??60,label=opts.breaking?'TIN NÓNG':'TIN MỚI',template=opts.template??(opts.breaking?'breaking':'classic');
  const headlineFile=opts.outputPath.replace(/\.mp4$/i,'-headline.txt');
  await writeFile(headlineFile,wrapHeadline(opts.headline??'BIỂN & NỖI NHỚ'),'utf8');
- const overlay=templateOverlay(template,label,headlineFile,source,opts.srtPath);
+ let sourceFile:string|undefined;
+ if(opts.source?.trim()){
+  sourceFile=opts.outputPath.replace(/\.mp4$/i,'-source.txt');
+  await writeFile(sourceFile,`Nguồn: ${opts.source.trim()}`,'utf8');
+ }
+ const overlay=templateOverlay(template,label,headlineFile,sourceFile,opts.srtPath);
  const mediaY=template==='breaking'?650:630,mediaH=template==='breaking'?740:760;
  if(opts.imagePath){
   const filter=`[1:v]scale=970:${mediaH}:force_original_aspect_ratio=increase,crop=970:${mediaH}[img];[0:v][img]overlay=55:${mediaY}[base];[base]${overlay}[v]`;

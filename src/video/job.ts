@@ -1,5 +1,6 @@
 import { generateSpeech, type VoiceId, type VoiceStyle } from '../tts/edge.js';
 import { downloadRemoteImage } from '../media/download.js';
+import { selectBestMedia } from '../media/select.js';
 import { importArticleFromUrl } from '../import/url.js';
 import { all, run } from '../storage/db.js';
 import { renderNewsVideo, type VideoTemplate, type MotionLevel, type TickerMode } from './ffmpeg.js';
@@ -13,8 +14,9 @@ export function enqueueRender(input:{draftId:string;text:string;headline:string;
  const job:RenderJob={id:crypto.randomUUID(),draftId:input.draftId,status:'queued',progress:0,createdAt:new Date().toISOString()};renderJobs.unshift(job);save(job);
  void(async()=>{try{job.status='rendering';job.progress=10;save(job);const base=`output/${job.id}`;let discovered:string[]=[];
  if(input.autoCollectImages!==false&&input.sourceUrl){try{const article=await importArticleFromUrl(input.sourceUrl);discovered=article.imageUrls||[];job.progress=18;save(job)}catch(e){console.warn('Auto image collection skipped:',e)}}
- const urls=[input.imageUrl,...(input.imageUrls||[]),...discovered].filter((x):x is string=>Boolean(x)).filter((x,i,a)=>a.indexOf(x)===i).slice(0,10);const imagePaths:string[]=[];
- for(let i=0;i<urls.length;i++){try{imagePaths.push(await downloadRemoteImage(urls[i],`${base}-image-${i+1}`))}catch(e){console.warn(`Image ${i+1} download skipped:`,e)}job.progress=Math.min(38,20+Math.round(((i+1)/Math.max(1,urls.length))*18));save(job)}
+ const manualUrls=[input.imageUrl,...(input.imageUrls||[])].filter((x):x is string=>Boolean(x));const discoveredUrls=discovered.filter(x=>!manualUrls.includes(x));const urls=[...manualUrls,...discoveredUrls].filter((x,i,a)=>a.indexOf(x)===i).slice(0,14);const downloaded:{path:string;url:string;manual:boolean}[]=[];
+ for(let i=0;i<urls.length;i++){const url=urls[i],manual=manualUrls.includes(url);try{downloaded.push({path:await downloadRemoteImage(url,`${base}-image-${i+1}`),url,manual})}catch(e){console.warn(`Image ${i+1} download skipped:`,e)}job.progress=Math.min(36,20+Math.round(((i+1)/Math.max(1,urls.length))*16));save(job)}
+ const media=await selectBestMedia(downloaded,10);for(const r of media.rejected)console.warn(`Smart Media rejected ${r.url||r.path}: ${r.width}x${r.height} — ${r.reason}`);const imagePaths=media.selected.map(x=>x.path);job.progress=42;save(job);
  await generateSpeech({text:input.text,voice:input.voice??'vi-male',rate:input.voiceRate??'+0%',style:input.voiceStyle??(input.breaking?'breaking':'news'),audioPath:`${base}.mp3`,srtPath:`${base}.srt`});job.progress=60;save(job);
  job.output=await renderNewsVideo({audioPath:`${base}.mp3`,srtPath:`${base}.srt`,outputPath:`${base}.mp4`,headline:input.headline,source:input.source,breaking:input.breaking,imagePaths,template:input.template,motion:input.motion,tickerMode:input.tickerMode,tickerText:input.tickerText,tickerSpeed:input.tickerSpeed});job.progress=100;job.status='ready';save(job)
  }catch(e){job.status='failed';job.error=e instanceof Error?e.message:String(e);save(job)}})();return job;

@@ -13,11 +13,6 @@ Hệ thống tự động hoá sản xuất video tin tức ngắn tiếng Việ
 - Hàng đợi render, xem trước và duyệt
 - Thư viện video
 
-## Video engine
-
-Dự án phát triển dựa trên ý tưởng và video engine của `Cuongyd196/auto-video-gen`, phát hành theo giấy phép MIT. Giấy phép gốc được giữ trong `LICENSE`.
-
-Upstream: https://github.com/Cuongyd196/auto-video-gen
 
 ## Kiến trúc dự kiến
 

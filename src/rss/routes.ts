@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { deleteRssItem,deleteRssItems,deleteRssSource,rssSources,updateRssSource } from './manager.js';
+import { all,run } from '../storage/db.js';
+import { deleteRenderJob,deleteRenderJobs,deleteRenderJobsForDraft,renderJobs } from '../video/job.js';
+import { deleteReview } from '../review/store.js';
+import { deleteQueueItem } from '../queue/production.js';
 
 export const rssAdminRouter=Router();
 
@@ -29,3 +33,9 @@ rssAdminRouter.post('/rss-items/delete',(req,res)=>{
  const deleted=deleteRssItems(p.data);
  return res.json({ok:true,deleted});
 });
+
+type DraftAdminRow={id:string;title:string;body:string;source_url?:string;source_name?:string;image_url?:string;format:string;status:string;created_at:string};
+rssAdminRouter.get('/content/drafts',(_req,res)=>{const rows=all<DraftAdminRow>('SELECT * FROM drafts ORDER BY created_at DESC');return res.json(rows.map(r=>({id:r.id,title:r.title,body:r.body,sourceUrl:r.source_url||undefined,sourceName:r.source_name||undefined,imageUrl:r.image_url||undefined,format:r.format,status:r.status,createdAt:r.created_at})))});
+rssAdminRouter.delete('/content/drafts/:id',async(req,res)=>{const found=all<{id:string}>('SELECT id FROM drafts WHERE id=?',req.params.id)[0];if(!found)return res.status(404).json({error:'Không tìm thấy bản tin'});await deleteRenderJobsForDraft(req.params.id);run('DELETE FROM drafts WHERE id=?',req.params.id);deleteReview(req.params.id);deleteQueueItem(req.params.id);return res.json({ok:true,id:req.params.id})});
+rssAdminRouter.delete('/render-jobs/:id',async(req,res)=>{if(!await deleteRenderJob(req.params.id))return res.status(404).json({error:'Không tìm thấy tác vụ render'});return res.json({ok:true,id:req.params.id})});
+rssAdminRouter.post('/render-jobs/delete',async(req,res)=>{const p=z.object({ids:z.array(z.string().uuid()).max(200).optional(),status:z.enum(['failed','ready','all']).optional()}).safeParse(req.body||{});if(!p.success)return res.status(400).json({error:'Dữ liệu xóa render không hợp lệ'});let ids=p.data.ids||[];if(p.data.status)ids=renderJobs.filter(j=>p.data.status==='all'||j.status===p.data.status).map(j=>j.id);const deleted=ids.length?await deleteRenderJobs(ids):0;return res.json({ok:true,deleted})});

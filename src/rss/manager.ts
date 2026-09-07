@@ -3,12 +3,12 @@ import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { all, run } from '../storage/db.js';
 
-export interface RssSource { id:string; name:string; url:string; createdAt:string; lastScanAt?:string; lastError?:string; }
+export interface RssSource { id:string; name:string; url:string; createdAt:string; lastScanAt?:string; lastError?:string; locked:boolean; managed:boolean; }
 export interface RssItem { id:string; sourceId:string; sourceName:string; title:string; link:string; publishedAt?:string; discoveredAt:string; }
 
-type SourceRow={id:string;name:string;url:string;created_at:string;last_scan_at?:string;last_error?:string};
+type SourceRow={id:string;name:string;url:string;created_at:string;last_scan_at?:string;last_error?:string;locked?:number;managed?:number};
 type ItemRow={id:string;source_id:string;source_name:string;title:string;link:string;published_at?:string;discovered_at:string};
-const mapSource=(r:SourceRow):RssSource=>({id:r.id,name:r.name,url:r.url,createdAt:r.created_at,lastScanAt:r.last_scan_at||undefined,lastError:r.last_error||undefined});
+const mapSource=(r:SourceRow):RssSource=>({id:r.id,name:r.name,url:r.url,createdAt:r.created_at,lastScanAt:r.last_scan_at||undefined,lastError:r.last_error||undefined,locked:Boolean(r.locked),managed:Boolean(r.managed)});
 const mapItem=(r:ItemRow):RssItem=>({id:r.id,sourceId:r.source_id,sourceName:r.source_name,title:r.title,link:r.link,publishedAt:r.published_at||undefined,discoveredAt:r.discovered_at});
 export const rssSources:RssSource[]=all<SourceRow>('SELECT * FROM rss_sources ORDER BY created_at DESC').map(mapSource);
 export const rssItems:RssItem[]=all<ItemRow>('SELECT * FROM rss_items ORDER BY discovered_at DESC LIMIT 300').map(mapItem);
@@ -19,9 +19,11 @@ async function assertPublicUrl(raw:string){const u=new URL(raw);if(!['http:','ht
 function text($:cheerio.CheerioAPI,node:any,selector:string){return $(node).find(selector).first().text().replace(/\s+/g,' ').trim();}
 function attr($:cheerio.CheerioAPI,node:any,selector:string,name:string){return $(node).find(selector).first().attr(name)?.trim()||'';}
 
-export function addRssSource(input:{name?:string;url:string}){const existing=rssSources.find(s=>s.url===input.url);if(existing)return existing;const host=new URL(input.url).hostname.replace(/^www\./,'');const source:RssSource={id:crypto.randomUUID(),name:(input.name||host).slice(0,120),url:input.url,createdAt:new Date().toISOString()};rssSources.unshift(source);run('INSERT INTO rss_sources(id,name,url,created_at) VALUES(?,?,?,?)',source.id,source.name,source.url,source.createdAt);return source;}
+export function addRssSource(input:{name?:string;url:string;locked?:boolean;managed?:boolean}){const existing=rssSources.find(s=>s.url===input.url);if(existing)return existing;const host=new URL(input.url).hostname.replace(/^www\./,'');const source:RssSource={id:crypto.randomUUID(),name:(input.name||host).slice(0,120),url:input.url,createdAt:new Date().toISOString(),locked:Boolean(input.locked),managed:Boolean(input.managed)};rssSources.unshift(source);run('INSERT INTO rss_sources(id,name,url,created_at,locked,managed) VALUES(?,?,?,?,?,?)',source.id,source.name,source.url,source.createdAt,source.locked?1:0,source.managed?1:0);return source;}
 
 export function updateRssSource(id:string,input:{name?:string;url?:string}){const source=rssSources.find(s=>s.id===id);if(!source)return undefined;const nextUrl=input.url?.trim()||source.url;const duplicate=rssSources.find(s=>s.id!==id&&s.url===nextUrl);if(duplicate)throw new Error('RSS URL đã tồn tại');const nextName=(input.name?.trim()||new URL(nextUrl).hostname.replace(/^www\./,'')).slice(0,120);source.name=nextName;source.url=nextUrl;source.lastError=undefined;run('UPDATE rss_sources SET name=?,url=?,last_error=NULL WHERE id=?',source.name,source.url,source.id);for(const item of rssItems.filter(x=>x.sourceId===id)){item.sourceName=source.name;run('UPDATE rss_items SET source_name=? WHERE id=?',source.name,item.id)}return source;}
+
+export function setRssSourceLock(id:string,locked:boolean){const source=rssSources.find(s=>s.id===id);if(!source)return undefined;source.locked=locked;if(locked)source.managed=false;run('UPDATE rss_sources SET locked=?,managed=? WHERE id=?',source.locked?1:0,source.managed?1:0,id);return source}
 
 export function deleteRssSource(id:string,deleteItems=true){const index=rssSources.findIndex(s=>s.id===id);if(index<0)return false;if(deleteItems){const removed=rssItems.filter(x=>x.sourceId===id);for(const item of removed)seen.delete(item.link);for(let i=rssItems.length-1;i>=0;i--)if(rssItems[i].sourceId===id)rssItems.splice(i,1);run('DELETE FROM rss_items WHERE source_id=?',id)}rssSources.splice(index,1);run('DELETE FROM rss_sources WHERE id=?',id);return true;}
 

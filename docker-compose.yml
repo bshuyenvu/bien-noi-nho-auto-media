@@ -8,6 +8,12 @@ services:
     environment:
       PORT: 8787
       RENDER_API_KEY: ${RENDER_API_KEY:-}
+      AI_API_URL: ${AI_API_URL:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-}
+      VISION_API_URL: ${VISION_API_URL:-}
+      VISION_API_KEY: ${VISION_API_KEY:-}
+      VISION_MODEL: ${VISION_MODEL:-}
     volumes:
       - ./data:/app/data
       - ./output:/app/output

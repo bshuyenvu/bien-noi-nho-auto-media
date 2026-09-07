@@ -15,7 +15,7 @@ function requireApiKey(req:express.Request,res:express.Response,next:express.Nex
  next();
 }
 
-app.get('/health',(_q,r)=>r.json({ok:true,service:'bien-noi-nho-auto-media',version:'0.8.0'}));
+app.get('/health',(_q,r)=>r.json({ok:true,service:'bien-noi-nho-auto-media',version:'0.9.0',mode:'self-hosted'}));
 app.use('/api',requireApiKey);
 app.use('/output',requireApiKey,express.static('output',{fallthrough:false,maxAge:'1h'}));
 app.use(express.static('public'));
@@ -30,4 +30,4 @@ app.post('/api/drafts/:id/approve',(q,r)=>{const d=drafts.find(x=>x.id===q.param
 app.get('/api/render-jobs',(_q,r)=>r.json(renderJobs));
 app.post('/api/drafts/:id/render',(q,r)=>{const d=drafts.find(x=>x.id===q.params.id);if(!d)return r.status(404).json({error:'Draft not found'});d.status='rendering';const job=enqueueRender({draftId:d.id,text:`${d.title}. ${d.body}`,headline:d.title,source:d.sourceName,breaking:d.format==='breaking',voice:q.body?.voice==='female'?'female':'male'});return r.status(202).json(job)});
 app.get('/',(_q,r)=>r.sendFile('app.html',{root:'public'}));
-app.listen(PORT,'0.0.0.0',()=>console.log(`Auto Media V0.8 running on :${PORT}`));
+app.listen(PORT,'0.0.0.0',()=>console.log(`Auto Media V0.9 self-hosted running on :${PORT}`));

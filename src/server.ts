@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import { z } from 'zod';
 import { enqueueRender, renderJobs } from './video/job.js';
+import { importArticleFromUrl } from './import/url.js';
 
 const app=express();
 app.use(express.json({limit:'1mb'}));
@@ -15,19 +16,25 @@ function requireApiKey(req:express.Request,res:express.Response,next:express.Nex
  next();
 }
 
-app.get('/health',(_q,r)=>r.json({ok:true,service:'bien-noi-nho-auto-media',version:'0.9.0',mode:'self-hosted'}));
+app.get('/health',(_q,r)=>r.json({ok:true,service:'bien-noi-nho-auto-media',version:'1.0.0',mode:'self-hosted'}));
 app.use('/api',requireApiKey);
 app.use('/output',requireApiKey,express.static('output',{fallthrough:false,maxAge:'1h'}));
 app.use(express.static('public'));
 
 const NewsDraft=z.object({title:z.string().min(5).max(180),sourceUrl:z.string().url().optional(),sourceName:z.string().max(120).optional(),body:z.string().min(20).max(10000),format:z.enum(['breaking','latest','standard']).default('latest')});
-type Draft=z.infer<typeof NewsDraft>&{id:string;status:'draft'|'approved'|'rendering'|'ready'|'failed';createdAt:string};
+type Draft=z.infer<typeof NewsDraft>&{id:string;status:'draft'|'approved'|'rendering'|'ready'|'failed';createdAt:string;imageUrl?:string};
 const drafts:Draft[]=[];
 
+app.post('/api/import-url',async(q,r)=>{
+ const p=z.object({url:z.string().url()}).safeParse(q.body);
+ if(!p.success)return r.status(400).json({error:'URL không hợp lệ'});
+ try{return r.json(await importArticleFromUrl(p.data.url));}
+ catch(e){return r.status(422).json({error:e instanceof Error?e.message:String(e)});}
+});
 app.get('/api/drafts',(_q,r)=>r.json(drafts));
 app.post('/api/drafts',(q,r)=>{const p=NewsDraft.safeParse(q.body);if(!p.success)return r.status(400).json({error:p.error.flatten()});const d:Draft={...p.data,id:crypto.randomUUID(),status:'draft',createdAt:new Date().toISOString()};drafts.unshift(d);return r.status(201).json(d)});
 app.post('/api/drafts/:id/approve',(q,r)=>{const d=drafts.find(x=>x.id===q.params.id);if(!d)return r.status(404).json({error:'Draft not found'});d.status='approved';return r.json(d)});
 app.get('/api/render-jobs',(_q,r)=>r.json(renderJobs));
 app.post('/api/drafts/:id/render',(q,r)=>{const d=drafts.find(x=>x.id===q.params.id);if(!d)return r.status(404).json({error:'Draft not found'});d.status='rendering';const job=enqueueRender({draftId:d.id,text:`${d.title}. ${d.body}`,headline:d.title,source:d.sourceName,breaking:d.format==='breaking',voice:q.body?.voice==='female'?'female':'male'});return r.status(202).json(job)});
 app.get('/',(_q,r)=>r.sendFile('app.html',{root:'public'}));
-app.listen(PORT,'0.0.0.0',()=>console.log(`Auto Media V0.9 self-hosted running on :${PORT}`));
+app.listen(PORT,'0.0.0.0',()=>console.log(`Auto Media V1.0 self-hosted running on :${PORT}`));

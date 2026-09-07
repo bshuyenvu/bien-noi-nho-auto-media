@@ -1,11 +1,11 @@
 import { generateVietnameseSpeech } from './tts/edge.js';
 import { renderNewsVideo } from './video/ffmpeg.js';
 
-const text = process.argv.slice(2).join(' ') || 'Tin mới. Đây là video thử nghiệm đầu tiên của hệ thống Biển và Nỗi Nhớ Auto Media.';
+const text = process.argv.slice(2).join(' ') || 'Tin mới. Đây là video thử nghiệm đầu tiên của hệ thống VietNewsFlow AI.';
 
 await generateVietnameseSpeech({
   text,
-  voice: 'male',
+  voice: 'vi-male',
   audioPath: 'output/demo.mp3',
   srtPath: 'output/demo.srt',
 });

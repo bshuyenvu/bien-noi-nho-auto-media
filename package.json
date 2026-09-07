@@ -1,6 +1,6 @@
 {
   "name": "bien-noi-nho-auto-media",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Vietnamese automated short-news video production system for Bien & Noi Nho",
   "type": "module",
@@ -8,10 +8,12 @@
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit",
-    "build": "tsc"
+    "build": "tsc",
+    "tts:demo": "tsx src/cli-tts.ts"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
+    "edge-tts-universal": "^1.4.0",
     "express": "^5.1.0",
     "zod": "^4.3.6"
   },

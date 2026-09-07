@@ -11,13 +11,26 @@ export const VOICE_CATALOG = [
   { id:'multi-emma', name:'Emma', language:'Quốc tế • hỗ trợ tiếng Việt', locale:'en-US', gender:'Nữ', edgeVoice:'en-US-EmmaMultilingualNeural', tier:'multilingual', recommended:true, description:'Nữ quốc tế multilingual; hỗ trợ vi-VN.' },
 ] as const;
 export type VoiceId=typeof VOICE_CATALOG[number]['id'];
-export type VoiceStyle='news'|'breaking'|'story'|'podcast';
-export const VOICE_STYLES={news:{name:'Bản tin chuyên nghiệp',rate:'+0%',pitch:'+0Hz'},breaking:{name:'Tin nóng',rate:'+10%',pitch:'+2Hz'},story:{name:'Kể chuyện',rate:'-10%',pitch:'-1Hz'},podcast:{name:'Podcast tự nhiên',rate:'-5%',pitch:'-1Hz'}} as const;
+export type VoiceStyle='news'|'breaking'|'viral'|'story'|'podcast';
+export const VOICE_STYLES={
+ news:{name:'Bản tin chuyên nghiệp',rate:'+0%',pitch:'+0Hz'},
+ breaking:{name:'Tin nóng',rate:'+10%',pitch:'+2Hz'},
+ viral:{name:'Tin thu hút / retention',rate:'+14%',pitch:'+3Hz'},
+ story:{name:'Kể chuyện',rate:'-10%',pitch:'-1Hz'},
+ podcast:{name:'Podcast tự nhiên',rate:'-5%',pitch:'-1Hz'}
+} as const;
 export function isVoiceId(value:string):value is VoiceId{return VOICE_CATALOG.some(v=>v.id===value)}
 export function isVoiceStyle(value:string):value is VoiceStyle{return value in VOICE_STYLES}
 export function getVoice(id:VoiceId){return VOICE_CATALOG.find(v=>v.id===id)!}
 export const VIETNAMESE_VOICE_TEST='Xin chào quý vị. Đây là bản tin mới nhất từ Biển và Nỗi Nhớ. Thành phố Hồ Chí Minh hôm nay có nhiều thay đổi đáng chú ý.';
-export function directVietnameseText(text:string,style:VoiceStyle='news'){let x=text.replace(/\s+/g,' ').trim().replace(/\s*([,.;:!?])\s*/g,'$1 ');x=x.replace(/([.!?])\s+(?=[A-ZÀ-ỸĐ])/g,'$1  ');if(style==='breaking')x=x.replace(/([:;])/g,'$1 ');if(style==='story'||style==='podcast')x=x.replace(/;\s*/g,'. ').replace(/:\s*/g,':  ');return x.trim()}
+export function directVietnameseText(text:string,style:VoiceStyle='news'){
+ let x=text.replace(/\s+/g,' ').trim().replace(/\s*([,.;:!?])\s*/g,'$1 ');
+ x=x.replace(/([.!?])\s+(?=[A-ZÀ-ỸĐ])/g,'$1  ');
+ if(style==='breaking'||style==='viral')x=x.replace(/([:;])/g,'$1 ').replace(/([!?])\s*/g,'$1  ');
+ if(style==='viral')x=x.replace(/^(.*?[.!?])\s+/,'$1   ');
+ if(style==='story'||style==='podcast')x=x.replace(/;\s*/g,'. ').replace(/:\s*/g,':  ');
+ return x.trim();
+}
 const sleep=(ms:number)=>new Promise(r=>setTimeout(r,ms));
 async function synthesize(text:string,voice:VoiceId,rate:string,style:VoiceStyle){const selected=getVoice(voice),preset=VOICE_STYLES[style];const tts=new EdgeTTS(text,selected.edgeVoice,{rate,pitch:preset.pitch,volume:'+0%'});const result=await tts.synthesize();const audio=Buffer.from(await result.audio.arrayBuffer());if(!audio.length)throw new Error('No audio was received.');return{selected,result,audio}}
 export async function generateSpeech(options:{text:string;audioPath:string;srtPath?:string;voice?:VoiceId;rate?:string;style?:VoiceStyle}){

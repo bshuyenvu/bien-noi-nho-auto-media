@@ -1,0 +1,5 @@
+export type ReviewStatus='needs_review'|'needs_fix'|'approved'|'ready';export interface ReviewLocks{script:boolean;media:boolean;voice:boolean;scenes:boolean}export interface ReviewState{draftId:string;status:ReviewStatus;locks:ReviewLocks;updatedAt:string}
+const reviews=new Map<string,ReviewState>();const empty=():ReviewLocks=>({script:false,media:false,voice:false,scenes:false});
+export function getReview(draftId:string):ReviewState{return reviews.get(draftId)||{draftId,status:'needs_review',locks:empty(),updatedAt:new Date().toISOString()}}
+export function setReview(draftId:string,input:{status:ReviewStatus;locks:ReviewLocks}){const all=Object.values(input.locks).every(Boolean);const status=input.status==='approved'&&!all?'needs_review':input.status;const x:ReviewState={draftId,status,locks:input.locks,updatedAt:new Date().toISOString()};reviews.set(draftId,x);return x}
+export function canRender(draftId:string){const x=reviews.get(draftId);return Boolean(x&&(x.status==='approved'||x.status==='ready')&&Object.values(x.locks).every(Boolean))}

@@ -23,9 +23,10 @@ function templateOverlay(template:VideoTemplate,label:string,headlineFile:string
 function imageClip(inputIndex:number,outLabel:string,mediaH:number,level:MotionLevel,clipDuration:number){
  const fade=Math.min(0.45,Math.max(0.15,clipDuration/8));
  const end=Math.max(fade,clipDuration-fade);
- if(level==='off')return `[${inputIndex}:v]scale=970:${mediaH}:force_original_aspect_ratio=increase,crop=970:${mediaH},fps=30,trim=duration=${clipDuration.toFixed(3)},setpts=PTS-STARTPTS,fade=t=in:st=0:d=${fade.toFixed(2)},fade=t=out:st=${end.toFixed(2)}:d=${fade.toFixed(2)}[${outLabel}]`;
+ const normalize=`fps=30,setsar=1,format=yuv420p,trim=duration=${clipDuration.toFixed(3)},setpts=PTS-STARTPTS,fade=t=in:st=0:d=${fade.toFixed(2)},fade=t=out:st=${end.toFixed(2)}:d=${fade.toFixed(2)}`;
+ if(level==='off')return `[${inputIndex}:v]scale=970:${mediaH}:force_original_aspect_ratio=increase,crop=970:${mediaH},${normalize}[${outLabel}]`;
  const settings={light:{step:'0.00030',cap:'1.04'},medium:{step:'0.00055',cap:'1.075'},strong:{step:'0.00090',cap:'1.12'}}[level];
- return `[${inputIndex}:v]scale=1220:${mediaH+190}:force_original_aspect_ratio=increase,crop=1220:${mediaH+190},zoompan=z='min(max(zoom,pzoom)+${settings.step},${settings.cap})':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=970x${mediaH}:fps=30,trim=duration=${clipDuration.toFixed(3)},setpts=PTS-STARTPTS,fade=t=in:st=0:d=${fade.toFixed(2)},fade=t=out:st=${end.toFixed(2)}:d=${fade.toFixed(2)}[${outLabel}]`;
+ return `[${inputIndex}:v]scale=1220:${mediaH+190}:force_original_aspect_ratio=increase,crop=1220:${mediaH+190},zoompan=z='min(max(zoom,pzoom)+${settings.step},${settings.cap})':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=970x${mediaH}:fps=30,setsar=1,format=yuv420p,trim=duration=${clipDuration.toFixed(3)},setpts=PTS-STARTPTS,fade=t=in:st=0:d=${fade.toFixed(2)},fade=t=out:st=${end.toFixed(2)}:d=${fade.toFixed(2)}[${outLabel}]`;
 }
 
 export async function renderNewsVideo(opts:{audioPath:string;srtPath?:string;outputPath:string;duration?:number;headline?:string;source?:string;breaking?:boolean;imagePath?:string;imagePaths?:string[];template?:VideoTemplate;motion?:MotionLevel;tickerMode?:TickerMode;tickerText?:string;tickerSpeed?:number}){
@@ -41,13 +42,13 @@ export async function renderNewsVideo(opts:{audioPath:string;srtPath?:string;out
   const clipDuration=duration/images.length;
   const clips=images.map((_,i)=>imageClip(i+1,`im${i}`,mediaH,motionLevel,clipDuration));
   const concatInputs=images.map((_,i)=>`[im${i}]`).join('');
-  const filter=`${clips.join(';')};${concatInputs}concat=n=${images.length}:v=1:a=0[imgseq];[0:v][imgseq]overlay=55:${mediaY}[base];[base]${overlay}[v]`;
+  const filter=`${clips.join(';')};${concatInputs}concat=n=${images.length}:v=1:a=0,setsar=1,format=yuv420p[imgseq];[0:v]setsar=1[bg];[bg][imgseq]overlay=55:${mediaY}[base];[base]${overlay}[v]`;
   const args=['-y','-f','lavfi','-i',`color=c=0x04111f:s=1080x1920:r=30:d=${duration}`];
   for(const image of images)args.push('-loop','1','-i',image);
   const audioIndex=images.length+1;args.push('-i',opts.audioPath,'-filter_complex',filter,'-map','[v]','-map',`${audioIndex}:a:0`,'-c:v','libx264','-preset','veryfast','-crf','23','-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-shortest','-movflags','+faststart',opts.outputPath);
   await run('ffmpeg',args);
  }else{
-  const filters=`drawbox=x=55:y=${mediaY}:w=970:h=${mediaH}:color=0x172033:t=fill,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='ẢNH / VIDEO MINH HỌA':fontcolor=0x94a3b8:fontsize=38:x=(w-text_w)/2:y=990,${overlay}`;
+  const filters=`setsar=1,drawbox=x=55:y=${mediaY}:w=970:h=${mediaH}:color=0x172033:t=fill,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='ẢNH / VIDEO MINH HỌA':fontcolor=0x94a3b8:fontsize=38:x=(w-text_w)/2:y=990,${overlay}`;
   await run('ffmpeg',['-y','-f','lavfi','-i',`color=c=0x04111f:s=1080x1920:r=30:d=${duration}`,'-i',opts.audioPath,'-vf',filters,'-map','0:v:0','-map','1:a:0','-c:v','libx264','-preset','veryfast','-crf','23','-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-shortest','-movflags','+faststart',opts.outputPath]);
  }
  return opts.outputPath;

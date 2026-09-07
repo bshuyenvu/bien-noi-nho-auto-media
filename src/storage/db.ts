@@ -45,6 +45,14 @@ CREATE TABLE IF NOT EXISTS render_jobs (
  error TEXT,
  created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS autopilot_items (
+ source_url TEXT PRIMARY KEY,
+ status TEXT NOT NULL,
+ draft_id TEXT,
+ job_id TEXT,
+ error TEXT,
+ updated_at TEXT NOT NULL
+);
 `);
 
 export function all<T=any>(sql:string,...params:any[]):T[]{return db.prepare(sql).all(...params) as T[];}

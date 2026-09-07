@@ -1,6 +1,6 @@
 {
-  "name":"bien-noi-nho-auto-media","version":"0.9.0","private":true,"description":"Self-hosted Vietnamese automated short-news video production system for Bien & Noi Nho","type":"module",
+  "name":"bien-noi-nho-auto-media","version":"1.0.0","private":true,"description":"Self-hosted Vietnamese automated short-news video production system for Bien & Noi Nho","type":"module",
   "scripts":{"dev":"tsx watch src/server.ts","start":"tsx src/server.ts","typecheck":"tsc --noEmit","build":"tsc","tts:demo":"tsx src/cli-tts.ts","video:demo":"tsx src/cli-video.ts"},
-  "dependencies":{"dotenv":"^17.4.2","edge-tts-universal":"^1.4.0","express":"^5.1.0","zod":"^4.3.6"},
+  "dependencies":{"cheerio":"^1.1.2","dotenv":"^17.4.2","edge-tts-universal":"^1.4.0","express":"^5.1.0","zod":"^4.3.6"},
   "devDependencies":{"@types/express":"^5.0.3","@types/node":"^25.6.0","tsx":"^4.21.0","typescript":"^6.0.3"}
 }

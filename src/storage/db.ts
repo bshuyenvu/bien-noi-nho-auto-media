@@ -55,5 +55,8 @@ CREATE TABLE IF NOT EXISTS autopilot_items (
 );
 `);
 
-try{db.exec('ALTER TABLE rss_sources ADD COLUMN locked INTEGER NOT NULL DEFAULT 0')}catch{}\ntry{db.exec('ALTER TABLE rss_sources ADD COLUMN managed INTEGER NOT NULL DEFAULT 0')}catch{}\n\nexport function all<T=any>(sql:string,...params:any[]):T[]{return db.prepare(sql).all(...params) as T[];}
+try{db.exec('ALTER TABLE rss_sources ADD COLUMN locked INTEGER NOT NULL DEFAULT 0')}catch{}
+try{db.exec('ALTER TABLE rss_sources ADD COLUMN managed INTEGER NOT NULL DEFAULT 0')}catch{}
+
+export function all<T=any>(sql:string,...params:any[]):T[]{return db.prepare(sql).all(...params) as T[];}
 export function run(sql:string,...params:any[]){return db.prepare(sql).run(...params);}

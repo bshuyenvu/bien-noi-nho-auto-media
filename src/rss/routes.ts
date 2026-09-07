@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { deleteRssItem,deleteRssItems,deleteRssSource,rssSources,updateRssSource } from './manager.js';
+import { deleteRssItem,deleteRssItems,deleteRssSource,rssSources,setRssSourceLock,updateRssSource } from './manager.js';
 import { all,run } from '../storage/db.js';
 import { deleteRenderJob,deleteRenderJobs,deleteRenderJobsForDraft,renderJobs } from '../video/job.js';
 import { deleteReview } from '../review/store.js';
 import { deleteQueueItem } from '../queue/production.js';
+import { curateTrustedRss,trustedRssCatalog } from './curator.js';
 
 export const rssAdminRouter=Router();
 
@@ -15,6 +16,9 @@ rssAdminRouter.put('/rss-sources/:id',(req,res)=>{
  if(!p.success)return res.status(400).json({error:'Tên hoặc RSS URL không hợp lệ'});
  try{return res.json(updateRssSource(source.id,p.data))}catch(e){return res.status(422).json({error:e instanceof Error?e.message:String(e)})}
 });
+
+rssAdminRouter.put('/rss-sources/:id/lock',(req,res)=>{const p=z.object({locked:z.boolean()}).safeParse(req.body||{});if(!p.success)return res.status(400).json({error:'Trạng thái khóa không hợp lệ'});const source=setRssSourceLock(req.params.id,p.data.locked);if(!source)return res.status(404).json({error:'Không tìm thấy nguồn RSS'});return res.json(source)});
+rssAdminRouter.post('/rss-sources/curate',(_req,res)=>res.json({...curateTrustedRss(),catalog:trustedRssCatalog.length}));
 
 rssAdminRouter.delete('/rss-sources/:id',(req,res)=>{
  const deleteItems=String(req.query.deleteItems??'true')!=='false';

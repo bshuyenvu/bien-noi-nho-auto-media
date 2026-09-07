@@ -1,0 +1,12 @@
+services:
+  auto-media:
+    build: .
+    container_name: bien-noi-nho-auto-media
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      PORT: 8787
+    volumes:
+      - ./data:/app/data
+      - ./output:/app/output

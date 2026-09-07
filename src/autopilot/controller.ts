@@ -1,0 +1,32 @@
+import { scanAllRss,rssItems } from '../rss/manager.js';
+import { prepareAutoNews } from '../producer/auto.js';
+import { enqueueRender,renderJobs } from '../video/job.js';
+import { setReview } from '../review/store.js';
+import { ensureQueueItem,setQueueStatus } from '../queue/production.js';
+import { all,run } from '../storage/db.js';
+import type { ScriptLength } from '../ai/editor.js';
+
+export type AutoPilotFormat='breaking'|'latest'|'standard';
+export interface AutoPilotConfig{enabled:boolean;intervalMinutes:number;length:ScriptLength;format:AutoPilotFormat;template:'classic'|'breaking'|'clean';motion:'off'|'light'|'medium'|'strong';maxPerDay:number}
+export interface AutoPilotDraft{id:string;title:string;body:string;sourceUrl?:string;sourceName?:string;imageUrl?:string;format:AutoPilotFormat;status:'draft'|'approved'|'rendering'|'ready'|'failed';createdAt:string}
+type ProcessRow={source_url:string;status:string;draft_id?:string;job_id?:string;error?:string;updated_at:string};
+const bool=(v:string|undefined,d=false)=>v==null?d:/^(1|true|yes|on)$/i.test(v);
+const num=(v:string|undefined,d:number,min:number,max:number)=>Math.max(min,Math.min(max,Number(v)||d));
+let config:AutoPilotConfig={enabled:bool(process.env.AUTOPILOT_ENABLED,true),intervalMinutes:num(process.env.AUTOPILOT_INTERVAL_MINUTES,15,2,1440),length:(['30','60','90'].includes(process.env.AUTOPILOT_LENGTH||'')?process.env.AUTOPILOT_LENGTH:'60') as ScriptLength,format:(['breaking','latest','standard'].includes(process.env.AUTOPILOT_FORMAT||'')?process.env.AUTOPILOT_FORMAT:'latest') as AutoPilotFormat,template:(['classic','breaking','clean'].includes(process.env.AUTOPILOT_TEMPLATE||'')?process.env.AUTOPILOT_TEMPLATE:'clean') as AutoPilotConfig['template'],motion:(['off','light','medium','strong'].includes(process.env.AUTOPILOT_MOTION||'')?process.env.AUTOPILOT_MOTION:'light') as AutoPilotConfig['motion'],maxPerDay:num(process.env.AUTOPILOT_MAX_PER_DAY,24,1,200)};
+let busy=false,timer:NodeJS.Timeout|undefined,lastRunAt:string|undefined,lastError:string|undefined,lastResult='Chưa chạy';
+const processed=()=>new Set(all<ProcessRow>("SELECT source_url,status,draft_id,job_id,error,updated_at FROM autopilot_items WHERE status IN ('processing','queued','rendering','ready')").map(x=>x.source_url));
+const todayCount=()=>Number((all<{n:number}>("SELECT COUNT(*) n FROM autopilot_items WHERE status IN ('queued','rendering','ready') AND updated_at>=?",new Date().toISOString().slice(0,10)+'T00:00:00.000Z')[0]?.n)||0);
+function saveItem(url:string,status:string,extra:{draftId?:string;jobId?:string;error?:string}={}){run('INSERT INTO autopilot_items(source_url,status,draft_id,job_id,error,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(source_url) DO UPDATE SET status=excluded.status,draft_id=COALESCE(excluded.draft_id,autopilot_items.draft_id),job_id=COALESCE(excluded.job_id,autopilot_items.job_id),error=excluded.error,updated_at=excluded.updated_at',url,status,extra.draftId||null,extra.jobId||null,extra.error||null,new Date().toISOString())}
+function activeRender(){return renderJobs.some(x=>x.status==='queued'||x.status==='rendering')}
+export function autoPilotStatus(){const rows=all<ProcessRow>('SELECT source_url,status,draft_id,job_id,error,updated_at FROM autopilot_items ORDER BY updated_at DESC LIMIT 20');return{config,busy,lastRunAt,lastError,lastResult,todayCount:todayCount(),activeRender:activeRender(),recent:rows}}
+export function updateAutoPilotConfig(next:Partial<AutoPilotConfig>){config={...config,...next,intervalMinutes:num(String(next.intervalMinutes??config.intervalMinutes),config.intervalMinutes,2,1440),maxPerDay:num(String(next.maxPerDay??config.maxPerDay),config.maxPerDay,1,200)};schedule();return autoPilotStatus()}
+export function createAutoPilot(input:{drafts:AutoPilotDraft[];saveDraft:(draft:AutoPilotDraft)=>void}){
+ async function tick(force=false){if(busy)return autoPilotStatus();if(!config.enabled&&!force)return autoPilotStatus();if(activeRender()){lastResult='Đang chờ video hiện tại render xong';return autoPilotStatus()}if(todayCount()>=config.maxPerDay){lastResult='Đã đạt giới hạn video trong ngày';return autoPilotStatus()}busy=true;lastRunAt=new Date().toISOString();lastError=undefined;
+  try{const scan=await scanAllRss(),done=processed(),item=rssItems.find(x=>!done.has(x.link));if(!item){lastResult=`Đã quét ${scan.sources} nguồn; chưa có tin mới`;return autoPilotStatus()}saveItem(item.link,'processing');
+   try{const p=await prepareAutoNews({url:item.link,length:config.length,format:config.format});if(!p.edited.completeness?.complete)throw Error('Kiểm tra nội dung chưa đủ: '+(p.edited.completeness?.missing||[]).join(', '));const images=p.media.images.map(x=>x.url).filter((x):x is string=>Boolean(x));const d:AutoPilotDraft={id:crypto.randomUUID(),title:p.edited.headline,body:p.edited.script,sourceUrl:item.link,sourceName:p.article.sourceName||item.sourceName,imageUrl:images[0],format:config.format,status:'rendering',createdAt:new Date().toISOString()};input.drafts.unshift(d);input.saveDraft(d);ensureQueueItem(d.id,d.title);setReview(d.id,{status:'approved',locks:{script:true,media:true,voice:true,scenes:true}});setQueueStatus(d.id,'rendering');const job=enqueueRender({draftId:d.id,text:`${d.title}. ${d.body}`,headline:d.title,source:d.sourceName,sourceUrl:d.sourceUrl,breaking:d.format==='breaking',voice:p.voice.voice,voiceStyle:p.voice.style,imageUrl:d.imageUrl,imageUrls:images.slice(1),autoCollectImages:true,smartScenes:true,scenes:p.scenes,template:config.template,motion:config.motion,tickerMode:'headline'});setQueueStatus(d.id,'rendering',{jobId:job.id});saveItem(item.link,'queued',{draftId:d.id,jobId:job.id});lastResult='Đã tự tạo và đưa vào render: '+d.title;
+   }catch(e){const error=e instanceof Error?e.message:String(e);saveItem(item.link,'failed',{error});lastError=error;lastResult='Bỏ qua tin lỗi: '+item.title}
+  }catch(e){lastError=e instanceof Error?e.message:String(e);lastResult='Autopilot gặp lỗi'}finally{busy=false}return autoPilotStatus()}
+ function schedule(){if(timer)clearInterval(timer);timer=setInterval(()=>void tick(),config.intervalMinutes*60_000)}
+ schedule();if(config.enabled)setTimeout(()=>void tick(),12_000);
+ return{tick,status:autoPilotStatus,update:updateAutoPilotConfig};
+}

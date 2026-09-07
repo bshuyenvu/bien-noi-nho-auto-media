@@ -45,6 +45,40 @@ CREATE TABLE IF NOT EXISTS render_jobs (
  error TEXT,
  created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS accounts (
+ id TEXT PRIMARY KEY,
+ clerk_user_id TEXT NOT NULL UNIQUE,
+ email TEXT,
+ role TEXT NOT NULL DEFAULT 'member',
+ plan TEXT NOT NULL DEFAULT 'free',
+ status TEXT NOT NULL DEFAULT 'active',
+ created_at TEXT NOT NULL,
+ updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS channels (
+ id TEXT PRIMARY KEY,
+ owner_id TEXT NOT NULL,
+ name TEXT NOT NULL,
+ tagline TEXT,
+ logo_url TEXT,
+ primary_color TEXT NOT NULL DEFAULT '#075bc7',
+ secondary_color TEXT NOT NULL DEFAULT '#061426',
+ is_default INTEGER NOT NULL DEFAULT 1,
+ created_at TEXT NOT NULL,
+ updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS api_keys (
+ id TEXT PRIMARY KEY,
+ owner_id TEXT NOT NULL,
+ name TEXT NOT NULL,
+ key_prefix TEXT NOT NULL,
+ key_hash TEXT NOT NULL UNIQUE,
+ last_used_at TEXT,
+ revoked_at TEXT,
+ created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_channels_owner ON channels(owner_id);
+CREATE INDEX IF NOT EXISTS idx_api_keys_owner ON api_keys(owner_id);
 CREATE TABLE IF NOT EXISTS autopilot_items (
  source_url TEXT PRIMARY KEY,
  status TEXT NOT NULL,

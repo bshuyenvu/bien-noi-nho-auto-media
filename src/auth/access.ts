@@ -16,7 +16,13 @@ function digest(value:string){return createHash('sha256').update(value).digest('
 function safeEqual(a:string,b:string){const aa=Buffer.from(a),bb=Buffer.from(b);return aa.length===bb.length&&timingSafeEqual(aa,bb)}
 function ensureAccount(clerkUserId:string){
  const found=all<any>('SELECT * FROM accounts WHERE clerk_user_id=? LIMIT 1',clerkUserId)[0];
- if(found)return found;
+ if(found){
+  if(adminUserIds.has(clerkUserId)&&found.role!=='admin'){
+   run('UPDATE accounts SET role=?,updated_at=? WHERE id=?','admin',new Date().toISOString(),found.id);
+   found.role='admin';
+  }
+  return found;
+ }
  const id=randomUUID(),role:AccountRole=adminUserIds.has(clerkUserId)?'admin':'member',now=new Date().toISOString();
  run('INSERT INTO accounts(id,clerk_user_id,role,plan,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?)',id,clerkUserId,role,'free','active',now,now);
  run('INSERT INTO channels(id,owner_id,name,is_default,created_at,updated_at) VALUES(?,?,?,?,?,?)',randomUUID(),id,role==='admin'?'Biển & Nỗi Nhớ':'Kênh của tôi',1,now,now);

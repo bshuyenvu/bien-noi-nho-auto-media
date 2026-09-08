@@ -1,0 +1,47 @@
+const base=String(process.env.PROD_CHECK_URL||'http://127.0.0.1:8787').replace(/\/$/,'');
+const apiKey=String(process.env.RENDER_API_KEY||'').trim();
+const strict=process.env.PROD_CHECK_STRICT==='true';
+const timeoutMs=Math.max(1000,Number(process.env.PROD_CHECK_TIMEOUT_MS||5000));
+
+async function request(path,authenticated=false){
+  const headers={accept:'application/json'};
+  if(authenticated&&apiKey)headers.authorization=`Bearer ${apiKey}`;
+  const r=await fetch(`${base}${path}`,{headers,signal:AbortSignal.timeout(timeoutMs)});
+  const text=await r.text();
+  let data={};
+  try{data=text?JSON.parse(text):{}}catch{}
+  if(!r.ok)throw new Error(`${path} -> HTTP ${r.status}: ${String(data.error||text||'unknown').slice(0,300)}`);
+  return data;
+}
+
+function line(label,ok,detail=''){console.log(`${ok?'✓':'✗'} ${label}${detail?`: ${detail}`:''}`)}
+
+try{
+  const health=await request('/health');
+  if(!health.ok)throw new Error('/health did not return ok=true');
+  line('Service health',true,`${health.service||'auto-media'} / ${health.storage||'storage unknown'}`);
+
+  if(!apiKey){
+    line('Publisher readiness',false,'skipped because RENDER_API_KEY is not set locally');
+    if(strict)throw new Error('PROD_CHECK_STRICT=true requires RENDER_API_KEY');
+    process.exit(0);
+  }
+
+  const deployment=await request('/api/publish-deployment-readiness',true);
+  line('Publisher configuration',Boolean(deployment.configurationReady),deployment.configurationReady?'configured':'not complete');
+  line('YouTube production gate',Boolean(deployment.youtubeLiveReady),deployment.youtubeLiveReady?'READY':'LOCKED');
+  const blockers=Array.isArray(deployment.blockers)?deployment.blockers:[];
+  if(blockers.length)console.log(`  Blockers: ${blockers.join(' | ')}`);
+  const privacy=deployment.config?.privacyStatus;
+  if(privacy)console.log(`  YouTube privacy: ${privacy}`);
+  if(deployment.privateTest?.passed)console.log(`  Private test: PASS (${deployment.privateTest.videoId||'video id recorded'})`);
+
+  if(strict){
+    if(!deployment.configurationReady)throw new Error('Publisher configuration is not ready');
+    if(process.env.PUBLISH_LIVE_ENABLED==='true'&&!deployment.youtubeLiveReady)throw new Error('LIVE requested but YouTube production gate is locked');
+  }
+  console.log('Production check completed.');
+}catch(e){
+  console.error(`Production check failed: ${e instanceof Error?e.message:String(e)}`);
+  process.exit(1);
+}

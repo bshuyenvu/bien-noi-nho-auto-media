@@ -21,6 +21,12 @@ jobs:
         run: npm run typecheck
       - name: TypeScript build
         run: npm run build
+      - name: Compiled production server startup smoke test
+        run: npm run smoke:production
+      - name: Docker Compose production config validation
+        run: docker compose config -q
+      - name: Production operator check syntax
+        run: node --check scripts/production-check.mjs
       - name: Persistent render recovery smoke test
         run: npm run smoke:recovery
       - name: Publish queue and credential vault smoke test

@@ -1,19 +1,41 @@
 services:
   auto-media:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: bien-noi-nho-auto-media
     restart: unless-stopped
     init: true
-    stop_grace_period: 15s
+    stop_grace_period: 20s
     ports:
-      - "8787:8787"
+      - "${BIND_ADDRESS:-127.0.0.1}:${PORT:-8787}:8787"
     environment:
+      NODE_ENV: production
       PORT: 8787
+      NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=768}
+      DB_PATH: /app/data/auto-media.sqlite
+      RENDER_OUTPUT_DIR: /app/output
       RENDER_API_KEY: ${RENDER_API_KEY:-}
       CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-}
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
       ADMIN_CLERK_USER_IDS: ${ADMIN_CLERK_USER_IDS:-}
       DEFAULT_CHANNEL_NAME: ${DEFAULT_CHANNEL_NAME:-Biển & Nỗi Nhớ}
+
+      CREDENTIAL_VAULT_KEY: ${CREDENTIAL_VAULT_KEY:-}
+      OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET:-}
+      PUBLISH_LIVE_ENABLED: ${PUBLISH_LIVE_ENABLED:-false}
+      PUBLISH_WORKER_INTERVAL_MS: ${PUBLISH_WORKER_INTERVAL_MS:-15000}
+      PUBLISH_STARTUP_DIAGNOSTICS: ${PUBLISH_STARTUP_DIAGNOSTICS:-true}
+      PUBLISH_STRICT_STARTUP: ${PUBLISH_STRICT_STARTUP:-false}
+      YOUTUBE_CLIENT_ID: ${YOUTUBE_CLIENT_ID:-}
+      YOUTUBE_CLIENT_SECRET: ${YOUTUBE_CLIENT_SECRET:-}
+      YOUTUBE_REDIRECT_URI: ${YOUTUBE_REDIRECT_URI:-}
+      YOUTUBE_PRIVACY_STATUS: ${YOUTUBE_PRIVACY_STATUS:-private}
+      YOUTUBE_CATEGORY_ID: ${YOUTUBE_CATEGORY_ID:-22}
+      YOUTUBE_UPLOAD_CHUNK_BYTES: ${YOUTUBE_UPLOAD_CHUNK_BYTES:-8388608}
+      YOUTUBE_CONTAINS_SYNTHETIC_MEDIA: ${YOUTUBE_CONTAINS_SYNTHETIC_MEDIA:-true}
+      YOUTUBE_READINESS_MAX_AGE_MS: ${YOUTUBE_READINESS_MAX_AGE_MS:-900000}
+
       AI_API_URL: ${AI_API_URL:-}
       AI_API_KEY: ${AI_API_KEY:-}
       AI_MODEL: ${AI_MODEL:-}
@@ -30,6 +52,7 @@ services:
       VIENEU_TTS_ENABLED: ${VIENEU_TTS_ENABLED:-false}
       VIENEU_TTS_URL: ${VIENEU_TTS_URL:-http://vieneu-tts:7861}
       VIENEU_TTS_TIMEOUT_MS: ${VIENEU_TTS_TIMEOUT_MS:-240000}
+
       LOW_MEMORY_MODE: ${LOW_MEMORY_MODE:-true}
       RENDER_QUEUE_PAUSED: ${RENDER_QUEUE_PAUSED:-false}
       RENDER_MIN_AVAILABLE_MB: ${RENDER_MIN_AVAILABLE_MB:-512}
@@ -55,8 +78,19 @@ services:
     volumes:
       - ./data:/app/data
       - ./output:/app/output
+    mem_limit: ${APP_MEM_LIMIT:-2800m}
+    mem_reservation: 512m
+    cpus: ${APP_CPUS:-2.0}
+    pids_limit: 256
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
   vieneu-tts:
     profiles: ["vieneu"]
     build:

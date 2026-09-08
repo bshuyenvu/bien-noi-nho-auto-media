@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import nodemailer from 'nodemailer';
 import { all, run } from '../storage/db.js';
+import { alertSuppression, maintenanceStatus } from './maintenance.js';
 
 export type AlertSeverity='green'|'yellow'|'red';
 export type AlertKind='open'|'update'|'recovery'|'test';
@@ -46,8 +47,12 @@ async function sendEmail(event:AlertEvent){const from=String(process.env.ALERT_E
 async function sendChannel(event:AlertEvent,channel:AlertChannel){if(channel==='webhook')return sendWebhook(event);if(channel==='telegram')return sendTelegram(event);return sendEmail(event)}
 
 export async function dispatchExternalAlert(event:AlertEvent,force=false){
-  const results:{channel:AlertChannel;sent:boolean;error?:string}[]=[];
-  for(const channel of configuredChannels()){
+  const channels=configuredChannels(),results:{channel:AlertChannel;sent:boolean;suppressed?:boolean;suppressionReason?:string;error?:string}[]=[];
+  if(!force&&event.kind!=='test'){
+    const suppression=alertSuppression(event.incidentId,event.ownerId);
+    if(suppression.suppressed){for(const channel of channels)results.push({channel,sent:false,suppressed:true,suppressionReason:suppression.reason});return results}
+  }
+  for(const channel of channels){
     if(!shouldDeliver(event,channel,force)){results.push({channel,sent:false});continue}
     try{await sendChannel(event,channel);record(event,channel,'sent');results.push({channel,sent:true})}
     catch(e){const error=safeError(e);record(event,channel,'failed',error);console.warn(`[alert-delivery] ${channel} failed: ${error}`);results.push({channel,sent:false,error})}
@@ -55,4 +60,4 @@ export async function dispatchExternalAlert(event:AlertEvent,force=false){
   return results;
 }
 export async function sendExternalAlertTest(ownerId:string){const event:AlertEvent={incidentId:`test:${randomUUID()}`,ownerId,kind:'test',component:'alerting',severity:'red',message:'Đây là cảnh báo kiểm tra từ Production Monitor. Không có hành động production nào được thay đổi.',occurredAt:new Date().toISOString()};return{event,results:await dispatchExternalAlert(event,true)}}
-export function alertingStatus(){const channels=configuredChannels(),rows=all<{status:string;sent_at:string}>('SELECT status,sent_at FROM system_alert_deliveries ORDER BY sent_at DESC LIMIT 100');return{enabled:channels.length>0,channels:{webhook:channels.includes('webhook'),telegram:channels.includes('telegram'),email:channels.includes('email')},minSeverity:minSeverity(),cooldownMs:envNumber('ALERT_COOLDOWN_MS',60*60_000),notifyRecovery:envBool('ALERT_NOTIFY_RECOVERY',true),lastDeliveryAt:rows[0]?.sent_at,failedRecent:rows.filter(x=>x.status==='failed').length}}
+export function alertingStatus(){const channels=configuredChannels(),rows=all<{status:string;sent_at:string}>('SELECT status,sent_at FROM system_alert_deliveries ORDER BY sent_at DESC LIMIT 100');return{enabled:channels.length>0,channels:{webhook:channels.includes('webhook'),telegram:channels.includes('telegram'),email:channels.includes('email')},minSeverity:minSeverity(),cooldownMs:envNumber('ALERT_COOLDOWN_MS',60*60_000),notifyRecovery:envBool('ALERT_NOTIFY_RECOVERY',true),maintenance:maintenanceStatus(),lastDeliveryAt:rows[0]?.sent_at,failedRecent:rows.filter(x=>x.status==='failed').length}}

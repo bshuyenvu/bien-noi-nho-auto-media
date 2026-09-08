@@ -11,7 +11,7 @@ process.env.MAINTENANCE_DEFAULT_MINUTES='30';
 process.env.MAINTENANCE_MAX_MINUTES='240';
 process.env.INCIDENT_SILENCE_DEFAULT_MINUTES='60';
 let networkCalls=0;
-globalThis.fetch=async()=>{networkCalls++;return new Response('',{status:204})};
+globalThis.fetch=async()=>{networkCalls++;return new Response(null,{status:204})};
 
 try{
   const {run,db}=await import('../src/storage/db.js');

@@ -8,7 +8,7 @@ export type ReconcileResolution='retry'|'cancel'|'published'|'failed';
 export interface PublishJob{
   id:string; ownerId:string; renderJobId:string; draftId:string; platform:PublishPlatform; status:PublishStatus;
   title:string; description?:string; scheduledAt?:string; publishedAt?:string; remoteId?:string; remoteUrl?:string;
-  error?:string; attempts:number; maxAttempts:number; dryRun:boolean; deploymentTest:boolean; publicCanary:boolean; createdAt:string; updatedAt:string;
+  error?:string; attempts:number; maxAttempts:number; dryRun:boolean; deploymentTest:boolean; publicCanary?:boolean; createdAt:string; updatedAt:string;
   reconcileReason?:string; reconcileAt?:string; reconciledAt?:string; reconciledBy?:string; reconcileNote?:string;
 }
 

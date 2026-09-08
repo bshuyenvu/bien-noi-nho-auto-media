@@ -5,7 +5,7 @@ import { all, run } from '../storage/db.js';
 export type ContentSafetySeverity='pass'|'warn'|'fail';
 export interface ContentSafetyCheck{id:string;label:string;severity:ContentSafetySeverity;detail:string}
 export interface ContentSafetySnapshot{
-  ok:boolean;ownerId:string;draftId:string;renderJobId:string;checkedAt:string;windowHours:number;
+  ok:boolean;ownerId:string;draftId:string;renderJobId:string;publishTitle:string;checkedAt:string;windowHours:number;
   checks:ContentSafetyCheck[];blockers:string[];warnings:string[];
   fingerprints:{title:string;body:string;source?:string;video?:string};
   duplicate?:{publishJobId:string;draftId:string;reason:string;publishedAt?:string;titleSimilarity?:number;bodySimilarity?:number};
@@ -63,17 +63,17 @@ export function evaluateContentSafety(input:{ownerId:string;draftId:string;rende
     if(exact||ts>=cfg.titleSimilarity||bs>=cfg.bodySimilarity){duplicate={publishJobId:r.publish_job_id,draftId:r.draft_id,publishedAt:r.published_at,reason:exact?'Trùng fingerprint/source/video':'Nội dung gần giống vượt ngưỡng',titleSimilarity:Number(ts.toFixed(3)),bodySimilarity:Number(bs.toFixed(3))};break}
     if(Math.max(ts,bs)>=cfg.warnSimilarity&&(!bestWarn||Math.max(ts,bs)>Math.max(bestWarn.title,bestWarn.body)))bestWarn={title:ts,body:bs,job:r.publish_job_id};
   }
-  if(duplicate)checks.push(fail('duplicate','Chống đăng trùng',`${duplicate.reason} • job ${duplicate.publishJobId} • title ${(duplicate.titleSimilarity||0)*100|0}% • body ${(duplicate.bodySimilarity||0)*100|0}%`));
+  if(duplicate)checks.push(fail('duplicate','Chống đăng trùng',`${duplicate.reason} • job ${duplicate.publishJobId} • title ${Math.round((duplicate.titleSimilarity||0)*100)}% • body ${Math.round((duplicate.bodySimilarity||0)*100)}%`));
   else if(bestWarn)checks.push(warn('duplicate','Chống đăng trùng',`Có nội dung tương tự nhưng dưới ngưỡng khóa • job ${bestWarn.job} • title ${Math.round(bestWarn.title*100)}% • body ${Math.round(bestWarn.body*100)}%`));
   else checks.push(pass('duplicate','Chống đăng trùng',`Không thấy bản PUBLIC trùng trong ${cfg.windowHours} giờ`));
   const blockers=checks.filter(x=>x.severity==='fail').map(x=>`${x.label}: ${x.detail}`),warnings=checks.filter(x=>x.severity==='warn').map(x=>`${x.label}: ${x.detail}`);
-  return{ok:blockers.length===0,ownerId:input.ownerId,draftId:input.draftId,renderJobId:input.renderJobId,checkedAt,windowHours:cfg.windowHours,checks,blockers,warnings,fingerprints:{title:titleHash,body:bodyHash,source:sourceHash,video:videoHash},duplicate};
+  return{ok:blockers.length===0,ownerId:input.ownerId,draftId:input.draftId,renderJobId:input.renderJobId,publishTitle:title,checkedAt,windowHours:cfg.windowHours,checks,blockers,warnings,fingerprints:{title:titleHash,body:bodyHash,source:sourceHash,video:videoHash},duplicate};
 }
 
 export function assertContentSafety(input:{ownerId:string;draftId:string;renderJobId:string;publishTitle?:string}){const x=evaluateContentSafety(input);if(!x.ok)throw new Error(`Pre-Publish Content Safety chặn PUBLIC: ${x.blockers.join(' | ')}`);return x}
 export function recordContentFingerprint(publishJobId:string,snapshot:ContentSafetySnapshot){
   const draft=all<DraftRow>('SELECT title,body,source_url,id,owner_id FROM drafts WHERE id=? AND owner_id=? LIMIT 1',snapshot.draftId,snapshot.ownerId)[0];if(!draft)return;
   const source=normalizeUrl(draft.source_url),now=new Date().toISOString();
-  run('INSERT OR REPLACE INTO publish_content_fingerprints(id,owner_id,publish_job_id,draft_id,render_job_id,title_hash,body_hash,source_hash,video_hash,title_tokens_json,body_tokens_json,source_normalized,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',randomUUID(),snapshot.ownerId,publishJobId,snapshot.draftId,snapshot.renderJobId,snapshot.fingerprints.title,snapshot.fingerprints.body,snapshot.fingerprints.source||null,snapshot.fingerprints.video||null,JSON.stringify(tokens(draft.title,80)),JSON.stringify(tokens(draft.body,256)),source||null,now);
+  run('INSERT OR REPLACE INTO publish_content_fingerprints(id,owner_id,publish_job_id,draft_id,render_job_id,title_hash,body_hash,source_hash,video_hash,title_tokens_json,body_tokens_json,source_normalized,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',randomUUID(),snapshot.ownerId,publishJobId,snapshot.draftId,snapshot.renderJobId,snapshot.fingerprints.title,snapshot.fingerprints.body,snapshot.fingerprints.source||null,snapshot.fingerprints.video||null,JSON.stringify(tokens(snapshot.publishTitle,80)),JSON.stringify(tokens(draft.body,256)),source||null,now);
 }
 export function contentSafetyStats(ownerId:string){const cfg=contentSafetyConfig(),cutoff=new Date(Date.now()-cfg.windowHours*3600000).toISOString(),recent=Number(all<{n:number}>('SELECT COUNT(*) AS n FROM publish_content_fingerprints WHERE owner_id=? AND created_at>=?',ownerId,cutoff)[0]?.n||0);return{config:cfg,recentFingerprints:recent}}

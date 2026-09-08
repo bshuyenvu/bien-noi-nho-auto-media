@@ -1,5 +1,6 @@
 import { all, run } from '../storage/db.js';
-import { productionPublishGuard } from './activation-state.js';
+import { envYouTubePrivacy,productionPublishGuard,type ActivationPrivacy } from './activation-state.js';
+import { assertPublicRampAllowed } from './public-ramp.js';
 
 export type PublishPlatform='youtube'|'facebook'|'tiktok';
 export type PublishStatus='pending'|'scheduled'|'publishing'|'needs_reconcile'|'published'|'failed'|'cancelled';
@@ -8,11 +9,11 @@ export type ReconcileResolution='retry'|'cancel'|'published'|'failed';
 export interface PublishJob{
   id:string; ownerId:string; renderJobId:string; draftId:string; platform:PublishPlatform; status:PublishStatus;
   title:string; description?:string; scheduledAt?:string; publishedAt?:string; remoteId?:string; remoteUrl?:string;
-  error?:string; attempts:number; maxAttempts:number; dryRun:boolean; deploymentTest:boolean; publicCanary?:boolean; createdAt:string; updatedAt:string;
+  error?:string; attempts:number; maxAttempts:number; dryRun:boolean; deploymentTest:boolean; publicCanary?:boolean; publishPrivacy?:ActivationPrivacy; createdAt:string; updatedAt:string;
   reconcileReason?:string; reconcileAt?:string; reconciledAt?:string; reconciledBy?:string; reconcileNote?:string;
 }
 
-type Row={id:string;owner_id:string;render_job_id:string;draft_id:string;platform:PublishPlatform;status:PublishStatus;title:string;description?:string;scheduled_at?:string;published_at?:string;remote_id?:string;remote_url?:string;error?:string;attempts:number;max_attempts:number;dry_run:number;deployment_test?:number;public_canary?:number;created_at:string;updated_at:string;reconcile_reason?:string;reconcile_at?:string;reconciled_at?:string;reconciled_by?:string;reconcile_note?:string};
+type Row={id:string;owner_id:string;render_job_id:string;draft_id:string;platform:PublishPlatform;status:PublishStatus;title:string;description?:string;scheduled_at?:string;published_at?:string;remote_id?:string;remote_url?:string;error?:string;attempts:number;max_attempts:number;dry_run:number;deployment_test?:number;public_canary?:number;publish_privacy?:ActivationPrivacy;created_at:string;updated_at:string;reconcile_reason?:string;reconcile_at?:string;reconciled_at?:string;reconciled_by?:string;reconcile_note?:string};
 
 for(const sql of[
   'ALTER TABLE publish_jobs ADD COLUMN reconcile_reason TEXT',
@@ -20,29 +21,32 @@ for(const sql of[
   'ALTER TABLE publish_jobs ADD COLUMN reconciled_at TEXT',
   'ALTER TABLE publish_jobs ADD COLUMN reconciled_by TEXT',
   'ALTER TABLE publish_jobs ADD COLUMN reconcile_note TEXT',
-  'ALTER TABLE publish_jobs ADD COLUMN public_canary INTEGER NOT NULL DEFAULT 0'
+  'ALTER TABLE publish_jobs ADD COLUMN public_canary INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE publish_jobs ADD COLUMN publish_privacy TEXT'
 ]){try{run(sql)}catch{}}
 try{run('CREATE INDEX IF NOT EXISTS idx_publish_jobs_reconcile ON publish_jobs(status,reconcile_at)')}catch{}
 try{run('CREATE INDEX IF NOT EXISTS idx_publish_jobs_public_canary ON publish_jobs(owner_id,public_canary,status)')}catch{}
+try{run('CREATE INDEX IF NOT EXISTS idx_publish_jobs_privacy ON publish_jobs(owner_id,platform,publish_privacy,status,published_at,scheduled_at)')}catch{}
 
-function fromRow(r:Row):PublishJob{return{id:r.id,ownerId:r.owner_id,renderJobId:r.render_job_id,draftId:r.draft_id,platform:r.platform,status:r.status,title:r.title,description:r.description||undefined,scheduledAt:r.scheduled_at||undefined,publishedAt:r.published_at||undefined,remoteId:r.remote_id||undefined,remoteUrl:r.remote_url||undefined,error:r.error||undefined,attempts:Number(r.attempts||0),maxAttempts:Number(r.max_attempts||3),dryRun:Boolean(r.dry_run),deploymentTest:Boolean(r.deployment_test),publicCanary:Boolean(r.public_canary),createdAt:r.created_at,updatedAt:r.updated_at,reconcileReason:r.reconcile_reason||undefined,reconcileAt:r.reconcile_at||undefined,reconciledAt:r.reconciled_at||undefined,reconciledBy:r.reconciled_by||undefined,reconcileNote:r.reconcile_note||undefined}}
+function fromRow(r:Row):PublishJob{return{id:r.id,ownerId:r.owner_id,renderJobId:r.render_job_id,draftId:r.draft_id,platform:r.platform,status:r.status,title:r.title,description:r.description||undefined,scheduledAt:r.scheduled_at||undefined,publishedAt:r.published_at||undefined,remoteId:r.remote_id||undefined,remoteUrl:r.remote_url||undefined,error:r.error||undefined,attempts:Number(r.attempts||0),maxAttempts:Number(r.max_attempts||3),dryRun:Boolean(r.dry_run),deploymentTest:Boolean(r.deployment_test),publicCanary:Boolean(r.public_canary),publishPrivacy:r.publish_privacy||undefined,createdAt:r.created_at,updatedAt:r.updated_at,reconcileReason:r.reconcile_reason||undefined,reconcileAt:r.reconcile_at||undefined,reconciledAt:r.reconciled_at||undefined,reconciledBy:r.reconciled_by||undefined,reconcileNote:r.reconcile_note||undefined}}
 
 export function listPublishJobs(ownerId:string){return all<Row>('SELECT * FROM publish_jobs WHERE owner_id=? ORDER BY created_at DESC LIMIT 200',ownerId).map(fromRow)}
 export function getPublishJob(id:string,ownerId:string){const row=all<Row>('SELECT * FROM publish_jobs WHERE id=? AND owner_id=? LIMIT 1',id,ownerId)[0];return row?fromRow(row):undefined}
 
 export function enqueuePublish(input:{ownerId:string;renderJobId:string;draftId:string;platform:PublishPlatform;title:string;description?:string;scheduledAt?:string;dryRun?:boolean;maxAttempts?:number;deploymentTest?:boolean;publicCanary?:boolean}){
-  const dryRun=input.dryRun!==false,deploymentTest=Boolean(input.deploymentTest),publicCanary=Boolean(input.publicCanary);
+  const dryRun=input.dryRun!==false,deploymentTest=Boolean(input.deploymentTest),publicCanary=Boolean(input.publicCanary),publishPrivacy:ActivationPrivacy|undefined=!dryRun&&input.platform==='youtube'?envYouTubePrivacy():undefined;
   if(publicCanary&&(dryRun||input.platform!=='youtube'||deploymentTest))throw new Error('publicCanary chỉ hợp lệ cho YouTube LIVE production job');
   if(!dryRun&&input.platform==='youtube'){
-    const guard=productionPublishGuard(input.ownerId,{deploymentTest,publicCanary});
+    const guard=productionPublishGuard(input.ownerId,{deploymentTest,publicCanary,privacy:publishPrivacy});
     if(!guard.allowed)throw new Error(`Production Activation chặn publish: ${guard.reason}`);
+    if(publishPrivacy==='public'&&!publicCanary)assertPublicRampAllowed(input.ownerId,{targetAt:input.scheduledAt});
   }
   const duplicate=all<Row>("SELECT * FROM publish_jobs WHERE owner_id=? AND render_job_id=? AND platform=? AND status IN ('pending','scheduled','publishing','needs_reconcile') LIMIT 1",input.ownerId,input.renderJobId,input.platform)[0];
   if(duplicate)throw new Error(duplicate.status==='needs_reconcile'?'Video đang có publish job cần Reconcile trước khi tạo job mới':'Video đã có tác vụ xuất bản đang hoạt động trên nền tảng này');
   const now=new Date().toISOString();
   const status:PublishStatus=input.scheduledAt&&new Date(input.scheduledAt).getTime()>Date.now()?'scheduled':'pending';
-  const job:PublishJob={id:crypto.randomUUID(),ownerId:input.ownerId,renderJobId:input.renderJobId,draftId:input.draftId,platform:input.platform,status,title:input.title.trim(),description:input.description?.trim()||undefined,scheduledAt:input.scheduledAt,dryRun,deploymentTest,publicCanary,attempts:0,maxAttempts:Math.max(1,input.maxAttempts||3),createdAt:now,updatedAt:now};
-  run('INSERT INTO publish_jobs(id,owner_id,render_job_id,draft_id,platform,status,title,description,scheduled_at,attempts,max_attempts,dry_run,deployment_test,public_canary,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',job.id,job.ownerId,job.renderJobId,job.draftId,job.platform,job.status,job.title,job.description||null,job.scheduledAt||null,job.attempts,job.maxAttempts,job.dryRun?1:0,job.deploymentTest?1:0,job.publicCanary?1:0,job.createdAt,job.updatedAt);
+  const job:PublishJob={id:crypto.randomUUID(),ownerId:input.ownerId,renderJobId:input.renderJobId,draftId:input.draftId,platform:input.platform,status,title:input.title.trim(),description:input.description?.trim()||undefined,scheduledAt:input.scheduledAt,dryRun,deploymentTest,publicCanary,publishPrivacy,attempts:0,maxAttempts:Math.max(1,input.maxAttempts||3),createdAt:now,updatedAt:now};
+  run('INSERT INTO publish_jobs(id,owner_id,render_job_id,draft_id,platform,status,title,description,scheduled_at,attempts,max_attempts,dry_run,deployment_test,public_canary,publish_privacy,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',job.id,job.ownerId,job.renderJobId,job.draftId,job.platform,job.status,job.title,job.description||null,job.scheduledAt||null,job.attempts,job.maxAttempts,job.dryRun?1:0,job.deploymentTest?1:0,job.publicCanary?1:0,job.publishPrivacy||null,job.createdAt,job.updatedAt);
   return job;
 }
 

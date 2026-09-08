@@ -1,5 +1,6 @@
 import { all } from '../storage/db.js';
 import '../queue/production.js';
+import './audit.js';
 import { publisherDeploymentReadiness } from '../publish/deployment-readiness.js';
 import { productionMonitorSnapshot } from './monitor.js';
 import { runtimeReleaseMetadata } from './version.js';

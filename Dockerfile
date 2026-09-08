@@ -20,6 +20,7 @@ COPY --from=builder /app/dist ./dist
 COPY public ./public
 COPY scripts/production-check.mjs ./scripts/production-check.mjs
 COPY scripts/sqlite-backup.mjs ./scripts/sqlite-backup.mjs
+COPY scripts/cutover-client.mjs ./scripts/cutover-client.mjs
 RUN mkdir -p /app/data /app/output \
   && chown -R node:node /app
 USER node

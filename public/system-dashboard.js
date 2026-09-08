@@ -1,1 +1,1 @@
-(()=>{for(const src of ['/system-dashboard-core.js','/channel-connections.js','/publish-scheduler.js']){const s=document.createElement('script');s.src=src;s.defer=true;document.head.appendChild(s)}})();
+(()=>{for(const src of ['/system-dashboard-core.js','/production-monitor.js','/channel-connections.js','/publish-scheduler.js']){const s=document.createElement('script');s.src=src;s.defer=true;document.head.appendChild(s)}})();

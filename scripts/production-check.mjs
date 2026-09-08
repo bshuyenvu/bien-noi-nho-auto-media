@@ -22,10 +22,19 @@ try{
   line('Service health',true,`${health.service||'auto-media'} / ${health.storage||'storage unknown'}`);
 
   if(!apiKey){
-    line('Publisher readiness',false,'skipped because RENDER_API_KEY is not set locally');
+    line('Authenticated production checks',false,'skipped because RENDER_API_KEY is not set locally');
     if(strict)throw new Error('PROD_CHECK_STRICT=true requires RENDER_API_KEY');
     process.exit(0);
   }
+
+  const monitoring=await request('/api/admin/monitoring',true),overall=String(monitoring.snapshot?.overall||'unknown');
+  line('Production monitor',overall!=='red',overall.toUpperCase());
+  const components=monitoring.snapshot?.components||{};
+  for(const name of ['memory','cpu','disk','render','publish','youtube']){
+    const c=components[name];if(c?.severity&&c.severity!=='green')console.log(`  ${name}: ${String(c.severity).toUpperCase()} • ${c.message||''}`);
+  }
+  const activeIncidents=Array.isArray(monitoring.incidents)?monitoring.incidents.filter(x=>x.active):[];
+  if(activeIncidents.length)console.log(`  Active incidents: ${activeIncidents.length}`);
 
   const deployment=await request('/api/publish-deployment-readiness',true);
   line('Publisher configuration',Boolean(deployment.configurationReady),deployment.configurationReady?'configured':'not complete');
@@ -37,6 +46,7 @@ try{
   if(deployment.privateTest?.passed)console.log(`  Private test: PASS (${deployment.privateTest.videoId||'video id recorded'})`);
 
   if(strict){
+    if(overall==='red')throw new Error('Production monitor reports RED');
     if(!deployment.configurationReady)throw new Error('Publisher configuration is not ready');
     if(process.env.PUBLISH_LIVE_ENABLED==='true'&&!deployment.youtubeLiveReady)throw new Error('LIVE requested but YouTube production gate is locked');
   }

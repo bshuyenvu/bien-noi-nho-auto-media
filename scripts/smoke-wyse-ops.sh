@@ -7,6 +7,7 @@ cd "$ROOT"
 bash -n scripts/backup-wyse.sh
 bash -n scripts/deploy-wyse.sh
 bash -n scripts/rollback-wyse.sh
+bash -n scripts/audit-deployment.sh
 node --check scripts/sqlite-backup.mjs
 
 grep -q 'bash scripts/backup-wyse.sh' scripts/deploy-wyse.sh
@@ -14,6 +15,9 @@ grep -q 'bash scripts/rollback-wyse.sh --auto' scripts/deploy-wyse.sh
 grep -q 'maintenance_api start' scripts/deploy-wyse.sh
 grep -q 'maintenance_api end' scripts/deploy-wyse.sh
 grep -q 'Maintenance auto-expires' scripts/deploy-wyse.sh
+grep -q 'audit-deployment.sh success' scripts/deploy-wyse.sh
+grep -q 'audit-deployment.sh rollback' scripts/rollback-wyse.sh
+grep -q '/api/admin/audit/deploy' scripts/audit-deployment.sh
 grep -q 'image: bien-noi-nho-auto-media:${APP_IMAGE_TAG:-current}' docker-compose.yml
 grep -q 'org.opencontainers.image.revision' Dockerfile
 grep -q 'Database was NOT restored automatically' scripts/rollback-wyse.sh

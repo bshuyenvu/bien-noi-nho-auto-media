@@ -4,6 +4,7 @@ import { getCredential,saveCredential } from './vault.js';
 import type { PublishJob,PublishPlatform,PublishStatus } from './queue.js';
 import { getYouTubeUploadSession } from './upload-session.js';
 import { YouTubeUploadNeedsReconcileError } from './youtube-resumable.js';
+import { productionPublishGuard } from './activation-state.js';
 
 type Row={id:string;owner_id:string;render_job_id:string;draft_id:string;platform:PublishPlatform;status:PublishStatus;title:string;description?:string;scheduled_at?:string;published_at?:string;remote_id?:string;remote_url?:string;error?:string;attempts:number;max_attempts:number;dry_run:number;deployment_test?:number;created_at:string;updated_at:string};
 type RenderRow={id:string;output?:string};
@@ -38,6 +39,10 @@ export async function processPublishJob(job:PublishJob){
   const render=all<RenderRow>('SELECT id,output FROM render_jobs WHERE id=? AND owner_id=? LIMIT 1',job.renderJobId,job.ownerId)[0];
   if(!render?.output)throw new Error('Không tìm thấy file video render để xuất bản');
   if(!job.dryRun&&process.env.PUBLISH_LIVE_ENABLED!=='true')throw new Error('Live publishing đang bị khóa bởi PUBLISH_LIVE_ENABLED');
+  if(!job.dryRun&&job.platform==='youtube'){
+    const activation=productionPublishGuard(job.ownerId,{deploymentTest:job.deploymentTest});
+    if(!activation.allowed)throw new Error(`Production Activation chặn publish: ${activation.reason}`);
+  }
   const credential=job.dryRun?undefined:getCredential(job.ownerId,job.platform),provider=publisherFor(job.platform);
   const startedAt=new Date().toISOString();
   run("UPDATE publish_jobs SET status='publishing',attempts=attempts+1,error=NULL,updated_at=? WHERE id=? AND status IN ('pending','scheduled')",startedAt,job.id);

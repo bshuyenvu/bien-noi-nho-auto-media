@@ -3,7 +3,7 @@ import { accessOf } from '../auth/access.js';
 import { monitorIncidents, productionMonitorSnapshot, runProductionMonitorCycle, startProductionMonitor } from './monitor.js';
 
 export const productionMonitorRouter=Router();
-startProductionMonitor();
+queueMicrotask(startProductionMonitor);
 
 productionMonitorRouter.get('/admin/monitoring',async(_req,res)=>{
   const ownerId=accessOf(res).accountId;

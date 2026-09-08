@@ -25,3 +25,5 @@ jobs:
         run: npm run smoke:recovery
       - name: Publish queue and credential vault smoke test
         run: npm run smoke:publish
+      - name: YouTube OAuth and resumable upload smoke test
+        run: npm run smoke:youtube-oauth

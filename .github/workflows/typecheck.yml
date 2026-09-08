@@ -43,6 +43,8 @@ jobs:
         run: npm run smoke:durable-queue
       - name: YouTube resumable upload retry and restart smoke test
         run: npm run smoke:youtube-resumable
+      - name: Release candidate GO NO-GO and backup restore smoke test
+        run: npm run smoke:release-candidate
       - name: Production operator check syntax
         run: node --check scripts/production-check.mjs
       - name: Persistent render recovery smoke test

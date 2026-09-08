@@ -17,6 +17,7 @@ try{
   const {saveCredential}=await import('../src/publish/vault.js');
   const {YOUTUBE_REQUIRED_SCOPES}=await import('../src/publish/youtube.js');
   const {enqueuePublish}=await import('../src/publish/queue.js');
+  const {publicRampSnapshot}=await import('../src/publish/public-ramp.js');
   const {updateProductionActivation,productionPublishGuard,productionKillSwitch,clearProductionKillSwitch}=await import('../src/publish/activation-state.js');
   const {markPublicCanaryQueued,verifyPublicCanaryAndStartWatch,evaluatePublicRollout}=await import('../src/publish/public-rollout.js');
   const owner='rollout-owner',now=new Date().toISOString();
@@ -31,8 +32,8 @@ try{
   const watching=await verifyPublicCanaryAndStartWatch(owner,'smoke');if(watching.state.publicRolloutStatus!=='watching'||!watching.state.publicWatchEndsAt)throw new Error('Public Canary verification did not start watch window');
   if(productionPublishGuard(owner).allowed)throw new Error('normal PUBLIC opened before watch completion');
   updateProductionActivation(owner,{publicWatchEndsAt:new Date(Date.now()-1000).toISOString()},'smoke');
-  const done=await evaluatePublicRollout(owner,'smoke');if(done.status!=='completed')throw new Error(`Public rollout did not complete: ${JSON.stringify(done)}`);if(!productionPublishGuard(owner).allowed)throw new Error('normal PUBLIC did not open after completed watch');
-  enqueuePublish(base('normal-after'));
+  const done=await evaluatePublicRollout(owner,'smoke');if(done.status!=='completed')throw new Error(`Public rollout did not complete: ${JSON.stringify(done)}`);if(!productionPublishGuard(owner).allowed)throw new Error('Activation Guard did not open after completed watch');
+  const rampAfter=publicRampSnapshot(owner);if(rampAfter.allowed)throw new Error('Stage 1 should still space normal PUBLIC after the fresh Public Canary exposure');
   if(videoCalls<2)throw new Error('Public Canary was not verified both before and after watch window');
 
   const owner2='rollout-fail-owner';run('INSERT INTO accounts(id,clerk_user_id,email,role,plan,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)',owner2,'clerk-rollout-fail','rollout-fail@example.test','admin','pro','active',now,now);saveCredential(owner2,'youtube','Rollout Fail',{refreshToken:'refresh',scope:YOUTUBE_REQUIRED_SCOPES.join(' '),channelId:'UC_ROLLOUT',channelTitle:'Rollout Smoke',verifiedAt:now,privateTestPassedAt:now,privateTestVideoId:'private-test-video'});updateProductionActivation(owner2,{status:'armed',armed:true,maxPrivacy:'public',publicApprovedAt:now,publicRolloutStatus:'watching',publicCanaryJobId:'fail-job',publicWatchStartedAt:now,publicWatchEndsAt:new Date(Date.now()+60000).toISOString()},'smoke');

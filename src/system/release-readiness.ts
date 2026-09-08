@@ -41,7 +41,7 @@ export async function releaseCandidateSnapshot(ownerId:string){
     check('publisher-config','Publisher configuration',deployment.configurationReady?'pass':'fail',deployment.configurationReady?'Configured':deployment.blockers.filter(x=>!x.includes('PUBLISH_LIVE_ENABLED')).join(' | ')||'Incomplete'),
     check('youtube-credential','YouTube cached readiness',credentialReady?'pass':'fail',credentialReady?String(deployment.credential?.channelTitle||deployment.credential?.channelId||'Verified'):'Cần OAuth + TEST KẾT NỐI gần đây'),
     check('private-test','Private Live Test',privateTestReady?'pass':'fail',deployment.productionPrivacyNeedsPrivateTest?(deployment.privateTest?.passed?`PASS • ${deployment.privateTest.videoId||'video recorded'}`:'Bắt buộc trước Public/Unlisted'):'Không bắt buộc khi privacy=private'),
-    check('resumable','Durable resumable upload',deployment.config.upload?.durableResumableSessions?'pass':'fail',deployment.config.upload?.durableResumableSessions?`${deployment.config.upload.chunkEffectiveBytes} bytes/chunk • retry ${deployment.config.upload.maxRetries}`:'Unavailable'),
+    check('resumable','Durable resumable upload',deployment.config.durableResumableSessions?'pass':'fail',deployment.config.durableResumableSessions?`${deployment.config.uploadChunk.bytes} bytes/chunk • retry ${deployment.config.uploadRetry.maxRetries}`:'Unavailable'),
   ];
   const failChecks=checks.filter(x=>x.status==='fail'),warnings=checks.filter(x=>x.status==='warn');
   const candidateReady=failChecks.length===0;

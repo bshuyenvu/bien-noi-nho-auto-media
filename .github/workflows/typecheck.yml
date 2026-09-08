@@ -31,6 +31,8 @@ jobs:
         run: npm run smoke:monitoring
       - name: Safe self-heal and external alert smoke test
         run: npm run smoke:self-heal-alerts
+      - name: Maintenance ACK silence smoke test
+        run: npm run smoke:maintenance
       - name: Production operator check syntax
         run: node --check scripts/production-check.mjs
       - name: Persistent render recovery smoke test

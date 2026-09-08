@@ -24,6 +24,9 @@ CREATE INDEX IF NOT EXISTS idx_publish_jobs_status_schedule ON publish_jobs(stat
 CREATE UNIQUE INDEX IF NOT EXISTS idx_publish_jobs_unique_target ON publish_jobs(owner_id,render_job_id,platform) WHERE status NOT IN ('cancelled','failed');
 CREATE TABLE IF NOT EXISTS publish_credentials (id TEXT PRIMARY KEY,owner_id TEXT NOT NULL,platform TEXT NOT NULL,account_label TEXT NOT NULL,secret_encrypted TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,UNIQUE(owner_id,platform));
 CREATE INDEX IF NOT EXISTS idx_publish_credentials_owner ON publish_credentials(owner_id);
+CREATE TABLE IF NOT EXISTS system_incidents (id TEXT PRIMARY KEY,owner_id TEXT NOT NULL,incident_key TEXT NOT NULL,component TEXT NOT NULL,severity TEXT NOT NULL,message TEXT NOT NULL,metadata_json TEXT,opened_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,resolved_at TEXT);
+CREATE INDEX IF NOT EXISTS idx_system_incidents_owner_seen ON system_incidents(owner_id,last_seen_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_system_incidents_active_key ON system_incidents(owner_id,incident_key) WHERE resolved_at IS NULL;
 `);
 try{db.exec('ALTER TABLE rss_sources ADD COLUMN locked INTEGER NOT NULL DEFAULT 0')}catch{}
 try{db.exec('ALTER TABLE rss_sources ADD COLUMN managed INTEGER NOT NULL DEFAULT 0')}catch{}

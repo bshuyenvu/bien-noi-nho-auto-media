@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { readdir, rm } from 'node:fs/promises';
 import { canRender, deleteReview } from '../review/store.js';
 import { deleteQueueItem, ensureQueueItem, setQueueStatus, syncRenderJobs } from '../queue/production.js';
-import { renderJobs, type RenderJob } from '../video/job.js';
+import { pauseRenderQueue, renderJobs, renderWorkerStatus, resumeRenderQueue, type RenderJob } from '../video/job.js';
 import { run } from '../storage/db.js';
 import { accessOf } from '../auth/access.js';
 
@@ -42,8 +42,12 @@ export function createAdminRouter<T extends AdminDraft>(drafts:T[]){
   router.get('/admin/state',(_req,res)=>{
     syncDraftStatuses(drafts);
     const ownerId=accessOf(res).accountId,ownDrafts=drafts.filter(x=>x.ownerId===ownerId),ownJobs=renderJobs.filter(x=>x.ownerId===ownerId),active=ownJobs.filter(x=>x.status==='queued'||x.status==='rendering').length;
-    return res.json({drafts:ownDrafts.length,renders:ownJobs.length,active,ready:ownJobs.filter(x=>x.status==='ready').length,failed:ownJobs.filter(x=>x.status==='failed').length});
+    return res.json({drafts:ownDrafts.length,renders:ownJobs.length,active,ready:ownJobs.filter(x=>x.status==='ready').length,failed:ownJobs.filter(x=>x.status==='failed').length,stableControl:renderWorkerStatus()});
   });
+
+  router.get('/admin/stable-control',(_req,res)=>res.json(renderWorkerStatus()));
+  router.post('/admin/stable-control/pause',(_req,res)=>res.json({ok:true,...pauseRenderQueue()}));
+  router.post('/admin/stable-control/resume',(_req,res)=>res.json({ok:true,...resumeRenderQueue()}));
 
   router.delete('/drafts/:id',async(req,res)=>{
     const ownerId=accessOf(res).accountId,i=drafts.findIndex(x=>x.id===req.params.id&&x.ownerId===ownerId);if(i<0)return res.status(404).json({error:'Không tìm thấy bản tin'});

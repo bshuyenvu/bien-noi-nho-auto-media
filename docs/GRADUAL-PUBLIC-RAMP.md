@@ -21,7 +21,7 @@ Sau khi Controlled Public Rollout đã `COMPLETED`, hệ thống không mở cô
 - Rate Guard được kiểm tra hai lần: lúc enqueue và ngay trước Publish Worker upload.
 - Nếu job đã xếp hàng nhưng tới giờ chạy vi phạm spacing/rate, Worker chuyển job sang `scheduled` ở thời điểm an toàn tiếp theo; không tiêu hao retry.
 - Nếu Circuit đang OPEN, normal PUBLIC bị chặn.
-- Private Test và Public Canary của Phase 5.4 không bị tính như normal PUBLIC ramp; Public Canary vẫn do Controlled Public Rollout quản lý.
+- Private Test không tham gia Public Ramp. Public Canary của Phase 5.4 được tính như một lần PUBLIC exposure cho giới hạn 60 phút/ngày và khoảng cách tối thiểu, để lần PUBLIC đầu tiên sau rollout không bám sát Canary.
 - `publish_privacy` được lưu trên từng publish job để lịch sử không phụ thuộc `.env` hiện tại.
 
 ## Circuit Breaker

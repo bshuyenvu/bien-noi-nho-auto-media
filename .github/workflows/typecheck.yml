@@ -45,6 +45,8 @@ jobs:
         run: npm run smoke:youtube-resumable
       - name: Release candidate GO NO-GO and backup restore smoke test
         run: npm run smoke:release-candidate
+      - name: Production activation wizard safety smoke test
+        run: npm run smoke:activation-wizard
       - name: Production operator check syntax
         run: node --check scripts/production-check.mjs
       - name: Persistent render recovery smoke test

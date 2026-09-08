@@ -6,9 +6,9 @@ import { getYouTubeUploadSession } from './upload-session.js';
 import { YouTubeUploadNeedsReconcileError } from './youtube-resumable.js';
 import { productionPublishGuard } from './activation-state.js';
 
-type Row={id:string;owner_id:string;render_job_id:string;draft_id:string;platform:PublishPlatform;status:PublishStatus;title:string;description?:string;scheduled_at?:string;published_at?:string;remote_id?:string;remote_url?:string;error?:string;attempts:number;max_attempts:number;dry_run:number;deployment_test?:number;created_at:string;updated_at:string};
+type Row={id:string;owner_id:string;render_job_id:string;draft_id:string;platform:PublishPlatform;status:PublishStatus;title:string;description?:string;scheduled_at?:string;published_at?:string;remote_id?:string;remote_url?:string;error?:string;attempts:number;max_attempts:number;dry_run:number;deployment_test?:number;public_canary?:number;created_at:string;updated_at:string};
 type RenderRow={id:string;output?:string};
-function fromRow(r:Row):PublishJob{return{id:r.id,ownerId:r.owner_id,renderJobId:r.render_job_id,draftId:r.draft_id,platform:r.platform,status:r.status,title:r.title,description:r.description||undefined,scheduledAt:r.scheduled_at||undefined,publishedAt:r.published_at||undefined,remoteId:r.remote_id||undefined,remoteUrl:r.remote_url||undefined,error:r.error||undefined,attempts:Number(r.attempts||0),maxAttempts:Number(r.max_attempts||3),dryRun:Boolean(r.dry_run),deploymentTest:Boolean(r.deployment_test),createdAt:r.created_at,updatedAt:r.updated_at}}
+function fromRow(r:Row):PublishJob{return{id:r.id,ownerId:r.owner_id,renderJobId:r.render_job_id,draftId:r.draft_id,platform:r.platform,status:r.status,title:r.title,description:r.description||undefined,scheduledAt:r.scheduled_at||undefined,publishedAt:r.published_at||undefined,remoteId:r.remote_id||undefined,remoteUrl:r.remote_url||undefined,error:r.error||undefined,attempts:Number(r.attempts||0),maxAttempts:Number(r.max_attempts||3),dryRun:Boolean(r.dry_run),deploymentTest:Boolean(r.deployment_test),publicCanary:Boolean(r.public_canary),createdAt:r.created_at,updatedAt:r.updated_at}}
 
 let running=false,timer:NodeJS.Timeout|undefined,lastRunAt:string|undefined,lastError:string|undefined,lastErrorAt:string|undefined,lastSuccessAt:string|undefined,processed=0,recoveredForReconcile=0,recoveredResumable=0,recoveryChecked=false;
 const intervalMs=Math.max(5000,Number(process.env.PUBLISH_WORKER_INTERVAL_MS||15000));
@@ -40,7 +40,7 @@ export async function processPublishJob(job:PublishJob){
   if(!render?.output)throw new Error('Không tìm thấy file video render để xuất bản');
   if(!job.dryRun&&process.env.PUBLISH_LIVE_ENABLED!=='true')throw new Error('Live publishing đang bị khóa bởi PUBLISH_LIVE_ENABLED');
   if(!job.dryRun&&job.platform==='youtube'){
-    const activation=productionPublishGuard(job.ownerId,{deploymentTest:job.deploymentTest});
+    const activation=productionPublishGuard(job.ownerId,{deploymentTest:job.deploymentTest,publicCanary:job.publicCanary});
     if(!activation.allowed)throw new Error(`Production Activation chặn publish: ${activation.reason}`);
   }
   const credential=job.dryRun?undefined:getCredential(job.ownerId,job.platform),provider=publisherFor(job.platform);

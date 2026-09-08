@@ -21,12 +21,13 @@ const CATALOG=[
 const TARGET=15,MAX=20;
 export function curateTrustedRss(){
  let removed=0,added=0;
- const unsafe=rssSources.filter(x=>x.managed&&!x.locked&&(Boolean(x.lastError)||x.url.includes('news.google.com/rss/')));
+ const managedSources=()=>rssSources.filter(x=>x.ownerId==='legacy-admin');
+ const unsafe=managedSources().filter(x=>x.managed&&!x.locked&&(Boolean(x.lastError)||x.url.includes('news.google.com/rss/')));
  for(const x of unsafe){deleteRssSource(x.id,true);removed++}
- const excess=Math.max(0,rssSources.length-MAX);
- for(const x of rssSources.filter(x=>!x.locked).sort((a,b)=>(a.managed===b.managed?0:a.managed?1:-1)).slice(0,excess)){deleteRssSource(x.id,true);removed++}
- const existing=new Set(rssSources.map(x=>x.url));
- for(const[name,url]of CATALOG){if(rssSources.length>=TARGET)break;if(existing.has(url))continue;addRssSource({name,url,managed:true});existing.add(url);added++}
- return{added,removed,total:rssSources.length,locked:rssSources.filter(x=>x.locked).length,managed:rssSources.filter(x=>x.managed).length,target:TARGET,max:MAX}
+ const excess=Math.max(0,managedSources().length-MAX);
+ for(const x of managedSources().filter(x=>!x.locked).sort((a,b)=>(a.managed===b.managed?0:a.managed?1:-1)).slice(0,excess)){deleteRssSource(x.id,true);removed++}
+ const existing=new Set(managedSources().map(x=>x.url));
+ for(const[name,url]of CATALOG){if(managedSources().length>=TARGET)break;if(existing.has(url))continue;addRssSource({ownerId:'legacy-admin',name,url,managed:true});existing.add(url);added++}
+ const current=managedSources();return{added,removed,total:current.length,locked:current.filter(x=>x.locked).length,managed:current.filter(x=>x.managed).length,target:TARGET,max:MAX}
 }
 export const trustedRssCatalog=CATALOG.map(([name,url])=>({name,url}));

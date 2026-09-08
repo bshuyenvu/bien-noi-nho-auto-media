@@ -47,8 +47,8 @@ function publishQueueSnapshot(){
   const rows=all<QueueCountRow>('SELECT status,COUNT(*) AS count FROM publish_jobs GROUP BY status'),counts:Record<string,number>={};
   for(const row of rows)counts[row.status]=Number(row.count||0);
   const oldest=all<PublishingRow>("SELECT id,updated_at FROM publish_jobs WHERE status='publishing' ORDER BY updated_at ASC LIMIT 1")[0];
-  const queued=(counts.pending||0)+(counts.scheduled||0),publishing=counts.publishing||0;
-  return{counts,queued,publishing,oldestPublishingId:oldest?.id,oldestPublishingAt:oldest?.updated_at,oldestPublishingAgeMs:oldest?ageMs(oldest.updated_at):0};
+  const queued=(counts.pending||0)+(counts.scheduled||0),publishing=counts.publishing||0,needsReconcile=counts.needs_reconcile||0;
+  return{counts,queued,publishing,needsReconcile,oldestPublishingId:oldest?.id,oldestPublishingAt:oldest?.updated_at,oldestPublishingAgeMs:oldest?ageMs(oldest.updated_at):0};
 }
 
 export async function productionMonitorSnapshot(ownerId?:string){
@@ -63,7 +63,7 @@ export async function productionMonitorSnapshot(ownerId?:string){
   const renderBacklogWarn=envNumber('MONITOR_WARN_RENDER_BACKLOG',5),renderSeverity:MonitorSeverity=render.watchdog?.stalled?'red':render.shuttingDown||render.paused||render.pending>=renderBacklogWarn?'yellow':'green';
   const publishErrorAge=ageMs(publish.lastErrorAt),warnPublishBacklog=envNumber('MONITOR_WARN_PUBLISH_BACKLOG',20),publishStuckMs=envNumber('MONITOR_PUBLISH_STUCK_MS',15*60_000);
   const publishWorkerSeverity:MonitorSeverity=!publish.started?'yellow':publish.lastError&&publishErrorAge<10*60_000?'red':publish.lastError&&publishErrorAge<60*60_000?'yellow':'green';
-  const publishQueueSeverity:MonitorSeverity=publishQueue.publishing>0&&publishQueue.oldestPublishingAgeMs>publishStuckMs?'red':publishQueue.queued>=warnPublishBacklog?'yellow':'green',publishSeverity=worst(publishWorkerSeverity,publishQueueSeverity);
+  const publishQueueSeverity:MonitorSeverity=publishQueue.publishing>0&&publishQueue.oldestPublishingAgeMs>publishStuckMs?'red':publishQueue.needsReconcile>0||publishQueue.queued>=warnPublishBacklog?'yellow':'green',publishSeverity=worst(publishWorkerSeverity,publishQueueSeverity);
   const deployment=ownerId?publisherDeploymentReadiness(ownerId):undefined;
   const youtubeSeverity:MonitorSeverity=!deployment?'green':deployment.config.liveEnabled&&!deployment.youtubeLiveReady?'red':!deployment.configurationReady?'yellow':'green';
   const cgroupDetail=resources.cgroupMemoryUsagePct!=null?` • container ${resources.cgroupMemoryUsagePct}% (${resources.cgroupMemoryCurrentMb}/${resources.cgroupMemoryLimitMb} MB)`:'';
@@ -72,7 +72,7 @@ export async function productionMonitorSnapshot(ownerId?:string){
     cpu:{severity:cpuSeverity,message:cpuSeverity==='green'?'CPU ổn định':`CPU load ${resources.cpuLoad1m.toFixed(2)} / ${resources.cpuCount} core`,load1m:resources.cpuLoad1m,loadPerCpu,cpuCount:resources.cpuCount},
     disk:{severity:diskSeverity,message:!storage?'Không đọc được trạng thái ổ đĩa':diskSeverity==='green'?'Dung lượng ổ đĩa ổn định':`Còn ${storage.freeMb} MB, output ${storage.outputMb} MB`,...(storage||{})},
     render:{severity:renderSeverity,message:render.watchdog?.stalled?`Render worker STALLED tại ${render.watchdog.stage}`:render.paused?'Render queue đang PAUSED':render.pending>=renderBacklogWarn?`Render backlog ${render.pending} job`:'Render worker hoạt động',busy:render.busy,pending:render.pending,currentJobId:render.currentJobId,watchdog:render.watchdog,lastActivityAt:render.lastActivityAt,warnBacklog:renderBacklogWarn},
-    publish:{severity:publishSeverity,message:publishQueueSeverity==='red'?`Publish job bị kẹt ${Math.round(publishQueue.oldestPublishingAgeMs/60000)} phút`:publishQueueSeverity==='yellow'?`Publish backlog ${publishQueue.queued} job`:publishWorkerSeverity!=='green'?publish.lastError||'Publish worker chưa khởi động':'Publish worker hoạt động',...publish,queue:publishQueue,warnBacklog:warnPublishBacklog,stuckMs:publishStuckMs},
+    publish:{severity:publishSeverity,message:publishQueueSeverity==='red'?`Publish job bị kẹt ${Math.round(publishQueue.oldestPublishingAgeMs/60000)} phút`:publishQueue.needsReconcile>0?`${publishQueue.needsReconcile} publish job cần Reconcile`:publishQueueSeverity==='yellow'?`Publish backlog ${publishQueue.queued} job`:publishWorkerSeverity!=='green'?publish.lastError||'Publish worker chưa khởi động':'Publish worker hoạt động',...publish,queue:publishQueue,warnBacklog:warnPublishBacklog,stuckMs:publishStuckMs},
     youtube:{severity:youtubeSeverity,message:!deployment?'Chưa nạp owner readiness':youtubeSeverity==='green'?'YouTube gate phù hợp trạng thái hiện tại':deployment.blockers.join(' | '),ready:deployment?.youtubeLiveReady,configurationReady:deployment?.configurationReady,liveEnabled:deployment?.config.liveEnabled,privacyStatus:deployment?.config.privacyStatus},
   };
   const overall=worst(memorySeverity,cpuSeverity,diskSeverity,renderSeverity,publishSeverity,youtubeSeverity);

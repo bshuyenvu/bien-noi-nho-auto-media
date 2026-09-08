@@ -25,6 +25,8 @@ jobs:
         run: npm run smoke:production
       - name: Docker Compose production config validation
         run: docker compose config -q
+      - name: Wyse deploy backup rollback smoke test
+        run: npm run smoke:wyse-ops
       - name: Production operator check syntax
         run: node --check scripts/production-check.mjs
       - name: Persistent render recovery smoke test

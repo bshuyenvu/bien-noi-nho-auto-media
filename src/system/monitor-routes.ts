@@ -5,6 +5,7 @@ import { sendExternalAlertTest } from './alerts.js';
 import { acknowledgeIncident, endMaintenance, maintenanceStatus, silenceIncident, startMaintenance, unsilenceIncident } from './maintenance.js';
 import { monitorIncidents, productionMonitorSnapshot, runProductionMonitorCycle, startProductionMonitor } from './monitor.js';
 import { auditActor, recordAuditEvent } from './audit.js';
+import { answerOpsQuestion, opsAssistantStatus } from './ops-assistant.js';
 
 export const productionMonitorRouter=Router();
 queueMicrotask(startProductionMonitor);
@@ -16,6 +17,16 @@ productionMonitorRouter.get('/admin/analytics',(req,res)=>{
   const ownerId=accessOf(res).accountId,days=Number(String(req.query.days||'7'))===30?30:7;
   try{return res.json(productionAnalyticsSnapshot(ownerId,days))}
   catch(e){return res.status(500).json({error:e instanceof Error?e.message:String(e)})}
+});
+
+productionMonitorRouter.get('/admin/ops-assistant/status',requireAdmin,(_req,res)=>res.json(opsAssistantStatus()));
+productionMonitorRouter.post('/admin/ops-assistant/ask',requireAdmin,async(req,res)=>{
+  const ownerId=accessOf(res).accountId;
+  try{
+    const answer=await answerOpsQuestion(ownerId,req.body?.question);
+    audit(res,ownerId,'ops.ask','ops-assistant',undefined,'Phân tích vận hành bằng AI Operations Assistant',{intent:answer.intent,severity:answer.severity,mode:answer.mode,provider:answer.provider||null,questionLength:String(req.body?.question||'').length});
+    return res.json(answer);
+  }catch(e){return res.status(400).json({error:e instanceof Error?e.message:String(e)})}
 });
 
 productionMonitorRouter.get('/admin/monitoring',async(_req,res)=>{

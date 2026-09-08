@@ -12,6 +12,7 @@ node --check scripts/sqlite-backup.mjs
 grep -q 'bash scripts/backup-wyse.sh' scripts/deploy-wyse.sh
 grep -q 'bash scripts/rollback-wyse.sh --auto' scripts/deploy-wyse.sh
 grep -q 'image: bien-noi-nho-auto-media:${APP_IMAGE_TAG:-current}' docker-compose.yml
+grep -q 'org.opencontainers.image.revision' Dockerfile
 grep -q 'Database was NOT restored automatically' scripts/rollback-wyse.sh
 
 tmp="$(mktemp -d)"
@@ -22,7 +23,8 @@ snapshot_db="$tmp/snapshot.sqlite"
 DB_PATH="$source_db" node --input-type=module -e '
   import { DatabaseSync } from "node:sqlite";
   const db=new DatabaseSync(process.env.DB_PATH);
-  db.exec("CREATE TABLE smoke(id INTEGER PRIMARY KEY,value TEXT); INSERT INTO smoke(value) VALUES (\"ok\")");
+  db.exec("CREATE TABLE smoke(id INTEGER PRIMARY KEY,value TEXT)");
+  db.prepare("INSERT INTO smoke(value) VALUES (?)").run("ok");
   db.close();
 '
 DB_PATH="$source_db" node scripts/sqlite-backup.mjs "$snapshot_db" >/dev/null

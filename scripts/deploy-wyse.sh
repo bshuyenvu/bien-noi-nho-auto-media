@@ -9,11 +9,13 @@ HEALTH_RETRIES="${DEPLOY_HEALTH_RETRIES:-40}"
 HEALTH_SLEEP_SECONDS="${DEPLOY_HEALTH_SLEEP_SECONDS:-3}"
 ROLLBACK_KEEP="${DEPLOY_KEEP_ROLLBACK_IMAGES:-3}"
 STRICT_CHECK="${DEPLOY_STRICT_CHECK:-false}"
+MAINTENANCE_MINUTES="${DEPLOY_MAINTENANCE_MINUTES:-30}"
 STATE_DIR="$ROOT/data/deployments"
 STATE_FILE="${DEPLOY_STATE_FILE:-$STATE_DIR/latest.env}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 NEW_SERVICE_STARTED=false
 ROLLBACK_AVAILABLE=false
+MAINTENANCE_STARTED=false
 
 mkdir -p "$STATE_DIR" "$ROOT/data" "$ROOT/output" "$ROOT/backups"
 
@@ -26,6 +28,40 @@ docker compose version >/dev/null 2>&1 || { echo "[deploy] ERROR: Docker Compose
 if ! git diff --quiet || ! git diff --cached --quiet; then
   echo "[deploy] ERROR: tracked working-tree changes detected; commit/stash them before production deploy." >&2
   exit 1
+fi
+
+maintenance_api(){
+  local action="$1"
+  docker compose ps --status running --services 2>/dev/null | grep -qx 'auto-media' || return 5
+  docker compose exec -T \
+    -e MAINT_ACTION="$action" \
+    -e DEPLOY_MAINTENANCE_MINUTES="$MAINTENANCE_MINUTES" \
+    -e DEPLOY_MAINTENANCE_REASON="Automated production deploy" \
+    auto-media node --input-type=module -e '
+      const key=String(process.env.RENDER_API_KEY||"");
+      if(!key)process.exit(4);
+      const start=process.env.MAINT_ACTION==="start";
+      const r=await fetch("http://127.0.0.1:8787/api/admin/monitoring/maintenance",{
+        method:start?"POST":"DELETE",
+        headers:{authorization:`Bearer ${key}`,...(start?{"content-type":"application/json"}:{})},
+        ...(start?{body:JSON.stringify({minutes:Number(process.env.DEPLOY_MAINTENANCE_MINUTES||30),reason:process.env.DEPLOY_MAINTENANCE_REASON||"Automated production deploy"})}:{})
+      });
+      if(r.status===404)process.exit(3);
+      if(!r.ok)process.exit(1);
+    '
+}
+
+if maintenance_api start; then
+  MAINTENANCE_STARTED=true
+  echo "[deploy] Maintenance window enabled for up to ${MAINTENANCE_MINUTES} minutes."
+else
+  maint_code=$?
+  case "$maint_code" in
+    3) echo "[deploy] Maintenance API not available on current version; continuing without deploy silence." ;;
+    4) echo "[deploy] RENDER_API_KEY unavailable in running container; continuing without deploy silence." ;;
+    5) echo "[deploy] No running auto-media container; maintenance window not required." ;;
+    *) echo "[deploy] WARNING: could not enable maintenance window; continuing deploy." >&2 ;;
+  esac
 fi
 
 CHECKOUT_COMMIT="$(git rev-parse HEAD)"
@@ -83,6 +119,7 @@ rollback_on_error(){
     set -e
     if [[ $rollback_code -eq 0 ]]; then
       echo "[deploy] Automatic rollback completed." >&2
+      if [[ "$MAINTENANCE_STARTED" == "true" ]]; then maintenance_api end >/dev/null 2>&1 || true; fi
     else
       echo "[deploy] CRITICAL: automatic rollback also failed. Inspect docker compose logs immediately." >&2
     fi
@@ -90,6 +127,7 @@ rollback_on_error(){
     echo "[deploy] Deployment failed and no previous image is available for automatic rollback." >&2
   fi
   echo "[deploy] Pre-deploy database backup: $BACKUP_DIR" >&2
+  if [[ "$MAINTENANCE_STARTED" == "true" ]]; then echo "[deploy] Maintenance auto-expires after ${MAINTENANCE_MINUTES} minutes if it could not be cleared." >&2; fi
   exit "$code"
 }
 trap 'rollback_on_error $?' ERR
@@ -114,6 +152,10 @@ done
 
 echo "[deploy] Running in-container production readiness check..."
 docker compose exec -T -e PROD_CHECK_STRICT="$STRICT_CHECK" auto-media npm run prod:check
+
+if [[ "$MAINTENANCE_STARTED" == "true" ]]; then
+  if maintenance_api end; then echo "[deploy] Maintenance window ended.";else echo "[deploy] WARNING: maintenance window could not be cleared; it will auto-expire." >&2; fi
+fi
 
 cat > "$STATE_DIR/last-success.env" <<EOF
 DEPLOYED_AT=$STAMP

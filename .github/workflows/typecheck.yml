@@ -39,6 +39,8 @@ jobs:
         run: npm run smoke:analytics
       - name: AI operations assistant read-only smoke test
         run: npm run smoke:ops-assistant
+      - name: Durable production queue and publish reconcile smoke test
+        run: npm run smoke:durable-queue
       - name: Production operator check syntax
         run: node --check scripts/production-check.mjs
       - name: Persistent render recovery smoke test

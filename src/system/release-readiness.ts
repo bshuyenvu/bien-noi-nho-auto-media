@@ -2,6 +2,7 @@ import { all } from '../storage/db.js';
 import '../queue/production.js';
 import './audit.js';
 import { publisherDeploymentReadiness } from '../publish/deployment-readiness.js';
+import { publicRampState } from '../publish/public-ramp.js';
 import { productionMonitorSnapshot } from './monitor.js';
 import { runtimeReleaseMetadata } from './version.js';
 
@@ -22,7 +23,7 @@ function sqliteChecks(){
 }
 
 export async function releaseCandidateSnapshot(ownerId:string){
-  const release=runtimeReleaseMetadata(),database=sqliteChecks(),monitor=await productionMonitorSnapshot(ownerId),deployment=publisherDeploymentReadiness(ownerId);
+  const release=runtimeReleaseMetadata(),database=sqliteChecks(),monitor=await productionMonitorSnapshot(ownerId),deployment=publisherDeploymentReadiness(ownerId),ramp=publicRampState(ownerId);
   const needsReconcile=count("SELECT COUNT(*) AS n FROM publish_jobs WHERE owner_id=? AND status='needs_reconcile'",ownerId);
   const uncertainSessions=count("SELECT COUNT(*) AS n FROM youtube_upload_sessions WHERE owner_id=? AND state='needs_reconcile'",ownerId);
   const activeUploads=count("SELECT COUNT(*) AS n FROM youtube_upload_sessions WHERE owner_id=? AND state='active'",ownerId);
@@ -39,6 +40,7 @@ export async function releaseCandidateSnapshot(ownerId:string){
     check('monitor','Production Monitor',monitor.overall==='red'?'fail':monitor.overall==='yellow'?'warn':'pass',String(monitor.overall).toUpperCase()),
     check('maintenance','Maintenance Mode',maintenanceActive?'fail':'pass',maintenanceActive?`ACTIVE đến ${monitor.maintenance?.endsAt||'?'}`:'OFF'),
     check('reconcile','Ambiguous publish jobs',needsReconcile||uncertainSessions?'fail':'pass',`${needsReconcile} job • ${uncertainSessions} upload session`),
+    check('public-ramp','Public Ramp Circuit',ramp.circuitOpen?'fail':'pass',ramp.circuitOpen?`OPEN • ${ramp.circuitReason||'operator review required'}`:`CLOSED • Stage ${ramp.stage}`),
     check('publisher-config','Publisher configuration',deployment.configurationReady?'pass':'fail',deployment.configurationReady?'Configured':deployment.blockers.filter(x=>!x.includes('PUBLISH_LIVE_ENABLED')).join(' | ')||'Incomplete'),
     check('youtube-credential','YouTube cached readiness',credentialReady?'pass':'fail',credentialReady?String(deployment.credential?.channelTitle||deployment.credential?.channelId||'Verified'):'Cần OAuth + TEST KẾT NỐI gần đây'),
     check('private-test','Private Live Test',privateTestReady?'pass':'fail',deployment.productionPrivacyNeedsPrivateTest?(deployment.privateTest?.passed?`PASS • ${deployment.privateTest.videoId||'video recorded'}`:'Bắt buộc trước Public/Unlisted'):'Không bắt buộc khi privacy=private'),
@@ -63,5 +65,6 @@ export async function releaseCandidateSnapshot(ownerId:string){
     queues:{needsReconcile,uncertainSessions,activeUploads},
     deployment,
     monitor:{overall:monitor.overall,maintenance:monitor.maintenance},
+    publicRamp:{stage:ramp.stage,circuitOpen:ramp.circuitOpen,circuitReason:ramp.circuitReason,cooldownUntil:ramp.cooldownUntil},
   };
 }

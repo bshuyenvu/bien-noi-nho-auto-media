@@ -121,22 +121,59 @@ export interface EnqueueRenderInput {
 type PendingRender = { job: RenderJob; input: EnqueueRenderInput };
 const pendingRenders: PendingRender[] = [];
 let workerBusy = false;
+let workerPaused = process.env.RENDER_QUEUE_PAUSED === 'true';
+let currentJobId: string | null = null;
+let lastActivityAt = new Date().toISOString();
+let completedSinceStart = 0;
+let failedSinceStart = 0;
+
+function touchActivity() {
+  lastActivityAt = new Date().toISOString();
+}
 
 export function renderWorkerStatus() {
   return {
     singleWorker: true,
+    lowMemoryMode: true,
+    paused: workerPaused,
     busy: workerBusy,
+    currentJobId,
     pending: pendingRenders.length,
+    completedSinceStart,
+    failedSinceStart,
+    lastActivityAt,
     resources: resourceSnapshot(),
   };
 }
 
+export function pauseRenderQueue() {
+  workerPaused = true;
+  touchActivity();
+  return renderWorkerStatus();
+}
+
+export function resumeRenderQueue() {
+  workerPaused = false;
+  touchActivity();
+  void pumpRenderQueue();
+  return renderWorkerStatus();
+}
+
+async function waitWhilePaused() {
+  while (workerPaused) {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+}
+
 async function processRender(job: RenderJob, input: EnqueueRenderInput) {
   try {
+    await waitWhilePaused();
     await waitForRenderResources();
+    currentJobId = job.id;
     job.status = 'rendering';
     job.progress = 10;
     job.error = undefined;
+    touchActivity();
     save(job);
 
     const base = `output/${job.id}`;
@@ -149,6 +186,7 @@ async function processRender(job: RenderJob, input: EnqueueRenderInput) {
         discovered = article.imageUrls || [];
         publishedAt = publishedAt || article.publishedAt;
         job.progress = 18;
+        touchActivity();
         save(job);
       } catch (e) {
         console.warn('Auto image collection skipped:', e);
@@ -158,10 +196,11 @@ async function processRender(job: RenderJob, input: EnqueueRenderInput) {
     const manualUrls = [input.imageUrl, ...(input.imageUrls || [])].filter((x): x is string => Boolean(x));
     const urls = [...manualUrls, ...discovered.filter(x => !manualUrls.includes(x))]
       .filter((x, i, a) => a.indexOf(x) === i)
-      .slice(0, 14);
+      .slice(0, process.env.LOW_MEMORY_MODE === 'false' ? 14 : 10);
     const downloaded: { path: string; url: string; manual: boolean }[] = [];
 
     for (let i = 0; i < urls.length; i++) {
+      await waitWhilePaused();
       const url = urls[i];
       try {
         downloaded.push({
@@ -173,10 +212,11 @@ async function processRender(job: RenderJob, input: EnqueueRenderInput) {
         console.warn(`Image ${i + 1} download skipped:`, e);
       }
       job.progress = Math.min(36, 20 + Math.round(((i + 1) / Math.max(1, urls.length)) * 16));
+      touchActivity();
       save(job);
     }
 
-    const media = await selectBestMedia(downloaded, 10);
+    const media = await selectBestMedia(downloaded, process.env.LOW_MEMORY_MODE === 'false' ? 10 : 8);
     for (const r of media.rejected) {
       console.warn(`Smart Media rejected ${r.url || r.path}: ${r.width}x${r.height} — ${r.reason}`);
     }
@@ -203,8 +243,10 @@ async function processRender(job: RenderJob, input: EnqueueRenderInput) {
     }
 
     job.progress = 42;
+    touchActivity();
     save(job);
 
+    await waitWhilePaused();
     await generateSpeech({
       text: input.text,
       voice: input.voice ?? 'vi-male',
@@ -215,8 +257,10 @@ async function processRender(job: RenderJob, input: EnqueueRenderInput) {
     });
 
     job.progress = 60;
+    touchActivity();
     save(job);
 
+    await waitWhilePaused();
     await waitForRenderResources();
     job.output = await renderNewsVideo({
       audioPath: `${base}.mp3`,
@@ -238,26 +282,36 @@ async function processRender(job: RenderJob, input: EnqueueRenderInput) {
 
     job.progress = 100;
     job.status = 'ready';
+    completedSinceStart++;
+    touchActivity();
     save(job);
   } catch (e) {
     job.status = 'failed';
     job.error = e instanceof Error ? e.message : String(e);
+    failedSinceStart++;
+    touchActivity();
     save(job);
+  } finally {
+    currentJobId = null;
   }
 }
 
 async function pumpRenderQueue() {
-  if (workerBusy) return;
+  if (workerBusy || workerPaused) return;
   workerBusy = true;
+  touchActivity();
   try {
     while (pendingRenders.length) {
+      if (workerPaused) break;
       const next = pendingRenders.shift();
       if (!next) break;
       await processRender(next.job, next.input);
     }
   } finally {
     workerBusy = false;
-    if (pendingRenders.length) void pumpRenderQueue();
+    currentJobId = null;
+    touchActivity();
+    if (pendingRenders.length && !workerPaused) void pumpRenderQueue();
   }
 }
 
@@ -273,6 +327,7 @@ export function enqueueRender(input: EnqueueRenderInput) {
   renderJobs.unshift(job);
   save(job);
   pendingRenders.push({ job, input });
+  touchActivity();
   void pumpRenderQueue();
   return job;
 }

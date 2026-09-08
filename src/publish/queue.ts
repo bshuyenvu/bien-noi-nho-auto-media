@@ -1,4 +1,5 @@
 import { all, run } from '../storage/db.js';
+import { productionPublishGuard } from './activation-state.js';
 
 export type PublishPlatform='youtube'|'facebook'|'tiktok';
 export type PublishStatus='pending'|'scheduled'|'publishing'|'needs_reconcile'|'published'|'failed'|'cancelled';
@@ -28,11 +29,16 @@ export function listPublishJobs(ownerId:string){return all<Row>('SELECT * FROM p
 export function getPublishJob(id:string,ownerId:string){const row=all<Row>('SELECT * FROM publish_jobs WHERE id=? AND owner_id=? LIMIT 1',id,ownerId)[0];return row?fromRow(row):undefined}
 
 export function enqueuePublish(input:{ownerId:string;renderJobId:string;draftId:string;platform:PublishPlatform;title:string;description?:string;scheduledAt?:string;dryRun?:boolean;maxAttempts?:number;deploymentTest?:boolean}){
+  const dryRun=input.dryRun!==false,deploymentTest=Boolean(input.deploymentTest);
+  if(!dryRun&&input.platform==='youtube'){
+    const guard=productionPublishGuard(input.ownerId,{deploymentTest});
+    if(!guard.allowed)throw new Error(`Production Activation chặn publish: ${guard.reason}`);
+  }
   const duplicate=all<Row>("SELECT * FROM publish_jobs WHERE owner_id=? AND render_job_id=? AND platform=? AND status IN ('pending','scheduled','publishing','needs_reconcile') LIMIT 1",input.ownerId,input.renderJobId,input.platform)[0];
   if(duplicate)throw new Error(duplicate.status==='needs_reconcile'?'Video đang có publish job cần Reconcile trước khi tạo job mới':'Video đã có tác vụ xuất bản đang hoạt động trên nền tảng này');
   const now=new Date().toISOString();
   const status:PublishStatus=input.scheduledAt&&new Date(input.scheduledAt).getTime()>Date.now()?'scheduled':'pending';
-  const job:PublishJob={id:crypto.randomUUID(),ownerId:input.ownerId,renderJobId:input.renderJobId,draftId:input.draftId,platform:input.platform,status,title:input.title.trim(),description:input.description?.trim()||undefined,scheduledAt:input.scheduledAt,dryRun:input.dryRun!==false,deploymentTest:Boolean(input.deploymentTest),attempts:0,maxAttempts:Math.max(1,input.maxAttempts||3),createdAt:now,updatedAt:now};
+  const job:PublishJob={id:crypto.randomUUID(),ownerId:input.ownerId,renderJobId:input.renderJobId,draftId:input.draftId,platform:input.platform,status,title:input.title.trim(),description:input.description?.trim()||undefined,scheduledAt:input.scheduledAt,dryRun,deploymentTest,attempts:0,maxAttempts:Math.max(1,input.maxAttempts||3),createdAt:now,updatedAt:now};
   run('INSERT INTO publish_jobs(id,owner_id,render_job_id,draft_id,platform,status,title,description,scheduled_at,attempts,max_attempts,dry_run,deployment_test,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',job.id,job.ownerId,job.renderJobId,job.draftId,job.platform,job.status,job.title,job.description||null,job.scheduledAt||null,job.attempts,job.maxAttempts,job.dryRun?1:0,job.deploymentTest?1:0,job.createdAt,job.updatedAt);
   return job;
 }

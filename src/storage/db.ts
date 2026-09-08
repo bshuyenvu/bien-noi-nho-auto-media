@@ -87,6 +87,29 @@ CREATE TABLE IF NOT EXISTS autopilot_items (
  error TEXT,
  updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS publish_jobs (
+ id TEXT PRIMARY KEY,
+ owner_id TEXT NOT NULL,
+ render_job_id TEXT NOT NULL,
+ draft_id TEXT NOT NULL,
+ platform TEXT NOT NULL,
+ status TEXT NOT NULL,
+ title TEXT NOT NULL,
+ description TEXT,
+ scheduled_at TEXT,
+ published_at TEXT,
+ remote_id TEXT,
+ remote_url TEXT,
+ error TEXT,
+ attempts INTEGER NOT NULL DEFAULT 0,
+ max_attempts INTEGER NOT NULL DEFAULT 3,
+ dry_run INTEGER NOT NULL DEFAULT 1,
+ created_at TEXT NOT NULL,
+ updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_publish_jobs_owner ON publish_jobs(owner_id);
+CREATE INDEX IF NOT EXISTS idx_publish_jobs_status_schedule ON publish_jobs(status,scheduled_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_publish_jobs_unique_target ON publish_jobs(owner_id,render_job_id,platform) WHERE status NOT IN ('cancelled','failed');
 `);
 
 try{db.exec('ALTER TABLE rss_sources ADD COLUMN locked INTEGER NOT NULL DEFAULT 0')}catch{}

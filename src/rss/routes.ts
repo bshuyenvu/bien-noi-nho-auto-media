@@ -6,7 +6,7 @@ import { deleteRenderJob,deleteRenderJobs,deleteRenderJobsForDraft,renderJobs } 
 import { deleteReview } from '../review/store.js';
 import { deleteQueueItem } from '../queue/production.js';
 import { curateTrustedRss,trustedRssCatalog } from './curator.js';
-import { accessOf,requireAdmin } from '../auth/access.js';
+import { accessOf } from '../auth/access.js';
 
 export const rssAdminRouter=Router();
 
@@ -19,7 +19,7 @@ rssAdminRouter.put('/rss-sources/:id',(req,res)=>{
 });
 
 rssAdminRouter.put('/rss-sources/:id/lock',(req,res)=>{const p=z.object({locked:z.boolean()}).safeParse(req.body||{});if(!p.success)return res.status(400).json({error:'Trạng thái khóa không hợp lệ'});if(!rssSources.some(x=>x.id===req.params.id&&x.ownerId===accessOf(res).accountId))return res.status(404).json({error:'Không tìm thấy nguồn RSS'});const source=setRssSourceLock(req.params.id,p.data.locked);if(!source)return res.status(404).json({error:'Không tìm thấy nguồn RSS'});return res.json(source)});
-rssAdminRouter.post('/rss-sources/curate',requireAdmin,(_req,res)=>res.json({...curateTrustedRss(accessOf(res).accountId),catalog:trustedRssCatalog.length}));
+rssAdminRouter.post('/rss-sources/curate',(_req,res)=>res.json({...curateTrustedRss(accessOf(res).accountId),catalog:trustedRssCatalog.length}));
 
 rssAdminRouter.delete('/rss-sources/:id',(req,res)=>{
  const source=rssSources.find(x=>x.id===req.params.id&&x.ownerId===accessOf(res).accountId);if(!source)return res.status(404).json({error:'Không tìm thấy nguồn RSS'});

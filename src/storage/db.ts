@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS api_keys (id TEXT PRIMARY KEY,owner_id TEXT NOT NULL,
 CREATE INDEX IF NOT EXISTS idx_channels_owner ON channels(owner_id);
 CREATE INDEX IF NOT EXISTS idx_api_keys_owner ON api_keys(owner_id);
 CREATE TABLE IF NOT EXISTS autopilot_items (source_url TEXT PRIMARY KEY,status TEXT NOT NULL,draft_id TEXT,job_id TEXT,error TEXT,updated_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS publish_jobs (id TEXT PRIMARY KEY,owner_id TEXT NOT NULL,render_job_id TEXT NOT NULL,draft_id TEXT NOT NULL,platform TEXT NOT NULL,status TEXT NOT NULL,title TEXT NOT NULL,description TEXT,scheduled_at TEXT,published_at TEXT,remote_id TEXT,remote_url TEXT,error TEXT,attempts INTEGER NOT NULL DEFAULT 0,max_attempts INTEGER NOT NULL DEFAULT 3,dry_run INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS publish_jobs (id TEXT PRIMARY KEY,owner_id TEXT NOT NULL,render_job_id TEXT NOT NULL,draft_id TEXT NOT NULL,platform TEXT NOT NULL,status TEXT NOT NULL,title TEXT NOT NULL,description TEXT,scheduled_at TEXT,published_at TEXT,remote_id TEXT,remote_url TEXT,error TEXT,attempts INTEGER NOT NULL DEFAULT 0,max_attempts INTEGER NOT NULL DEFAULT 3,dry_run INTEGER NOT NULL DEFAULT 1,deployment_test INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_publish_jobs_owner ON publish_jobs(owner_id);
 CREATE INDEX IF NOT EXISTS idx_publish_jobs_status_schedule ON publish_jobs(status,scheduled_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_publish_jobs_unique_target ON publish_jobs(owner_id,render_job_id,platform) WHERE status NOT IN ('cancelled','failed');
@@ -38,6 +38,7 @@ try{db.exec('ALTER TABLE render_jobs ADD COLUMN next_attempt_at TEXT')}catch{}
 try{db.exec('ALTER TABLE render_jobs ADD COLUMN updated_at TEXT')}catch{}
 try{db.exec('ALTER TABLE render_jobs ADD COLUMN checkpoint_stage TEXT')}catch{}
 try{db.exec('ALTER TABLE render_jobs ADD COLUMN interrupted_at TEXT')}catch{}
+try{db.exec('ALTER TABLE publish_jobs ADD COLUMN deployment_test INTEGER NOT NULL DEFAULT 0')}catch{}
 try{db.exec('ALTER TABLE rss_sources ADD COLUMN owner_id TEXT')}catch{}
 try{db.exec('ALTER TABLE rss_items ADD COLUMN owner_id TEXT')}catch{}
 try{db.exec('ALTER TABLE accounts ADD COLUMN daily_limit INTEGER')}catch{}

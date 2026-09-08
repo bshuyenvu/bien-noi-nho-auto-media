@@ -2,7 +2,7 @@ name: Typecheck
 
 on:
   push:
-    branches: ["wyse-4gb-resource-guard", "main"]
+    branches: ["main"]
   pull_request:
     branches: ["main"]
 
@@ -15,11 +15,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: package.json
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: TypeScript typecheck
         run: npm run typecheck
-      - name: Persistent queue recovery smoke test
+      - name: TypeScript build
+        run: npm run build
+      - name: Persistent render recovery smoke test
         run: npm run smoke:recovery
+      - name: Publish queue and credential vault smoke test
+        run: npm run smoke:publish

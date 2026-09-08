@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { accessOf } from '../auth/access.js';
 import { auditActor,recordAuditEvent } from '../system/audit.js';
 import { getPublishJob,reconcilePublishJob } from './queue.js';
+import { markYouTubeUploadCompleted,markYouTubeUploadFailed,resetYouTubeUploadSession,youtubeUploadSessionPublicStatus } from './upload-session.js';
 
 const ReconcilePayload=z.object({
   resolution:z.enum(['retry','cancel','published','failed']),
@@ -15,15 +16,21 @@ export const publishReconcileRouter=Router();
 publishReconcileRouter.get('/publish-jobs/:id/reconcile',(req,res)=>{
   const ownerId=accessOf(res).accountId,id=String(req.params.id),job=getPublishJob(id,ownerId);
   if(!job)return res.status(404).json({error:'Không tìm thấy publish job'});
-  return res.json({job,required:job.status==='needs_reconcile',warning:job.status==='needs_reconcile'?'Hãy kiểm tra nền tảng từ xa trước khi Retry. Upload có thể đã hoàn tất trước khi server dừng.':undefined});
+  return res.json({job,upload:job.platform==='youtube'?youtubeUploadSessionPublicStatus(id,ownerId):undefined,required:job.status==='needs_reconcile',warning:job.status==='needs_reconcile'?'Hãy kiểm tra nền tảng từ xa trước khi Retry. Upload có thể đã hoàn tất trước khi server dừng.':undefined});
 });
 publishReconcileRouter.post('/publish-jobs/:id/reconcile',(req,res)=>{
   const ownerId=accessOf(res).accountId,id=String(req.params.id),parsed=ReconcilePayload.safeParse(req.body||{});
   if(!parsed.success)return res.status(400).json({error:'Dữ liệu Reconcile không hợp lệ'});
   try{
+    const before=getPublishJob(id,ownerId);if(!before)return res.status(404).json({error:'Không tìm thấy publish job'});
     const access=accessOf(res),job=reconcilePublishJob(id,ownerId,parsed.data.resolution,{actor:access.accountId,note:parsed.data.note,remoteId:parsed.data.remoteId,remoteUrl:parsed.data.remoteUrl});
     if(!job)return res.status(404).json({error:'Không tìm thấy publish job'});
-    recordAuditEvent({ownerId,actor:auditActor(access),action:`publish.reconcile.${parsed.data.resolution}`,targetType:'publish-job',targetId:id,summary:`Reconcile publish job → ${parsed.data.resolution}`,metadata:{platform:job.platform,status:job.status,renderJobId:job.renderJobId,remoteId:job.remoteId,noteLength:parsed.data.note?.length||0}});
-    return res.json(job);
+    if(before.platform==='youtube'){
+      if(parsed.data.resolution==='retry')resetYouTubeUploadSession(id,ownerId);
+      else if(parsed.data.resolution==='published'&&job.remoteId)markYouTubeUploadCompleted(id,ownerId,job.remoteId,job.remoteUrl);
+      else markYouTubeUploadFailed(id,ownerId);
+    }
+    recordAuditEvent({ownerId,actor:auditActor(access),action:`publish.reconcile.${parsed.data.resolution}`,targetType:'publish-job',targetId:id,summary:`Reconcile publish job → ${parsed.data.resolution}`,metadata:{platform:job.platform,status:job.status,renderJobId:job.renderJobId,remoteId:job.remoteId,noteLength:parsed.data.note?.length||0,uploadSessionReset:before.platform==='youtube'&&parsed.data.resolution==='retry'}});
+    return res.json({...job,upload:before.platform==='youtube'?youtubeUploadSessionPublicStatus(id,ownerId):undefined});
   }catch(e){return res.status(409).json({error:e instanceof Error?e.message:String(e)})}
 });

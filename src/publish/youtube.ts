@@ -1,12 +1,11 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { open, stat } from 'node:fs/promises';
 import type { PublishCredential, PublishResult } from './providers.js';
 import type { PublishJob } from './queue.js';
+import { uploadYouTubeResumable } from './youtube-resumable.js';
 
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const CHANNELS_URL = 'https://www.googleapis.com/youtube/v3/channels';
-const UPLOAD_URL = 'https://www.googleapis.com/upload/youtube/v3/videos';
 export const YOUTUBE_UPLOAD_SCOPE = 'https://www.googleapis.com/auth/youtube.upload';
 export const YOUTUBE_READ_SCOPE = 'https://www.googleapis.com/auth/youtube.readonly';
 export const YOUTUBE_REQUIRED_SCOPES = [YOUTUBE_UPLOAD_SCOPE, YOUTUBE_READ_SCOPE] as const;
@@ -78,8 +77,8 @@ async function postToken(params: URLSearchParams) {
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: params,
   });
-  const data = await r.json() as Record<string, unknown>;
-  if (!r.ok) throw new Error(`YouTube OAuth token error ${r.status}: ${String(data.error_description || data.error || 'unknown')}`);
+  const text=await r.text();let data:Record<string,unknown>={};try{data=text?JSON.parse(text) as Record<string,unknown>:{};}catch{}
+  if (!r.ok) throw new Error(`YouTube OAuth token error ${r.status}: ${String(data.error_description || data.error || text || 'unknown').slice(0,500)}`);
   return data;
 }
 
@@ -185,7 +184,7 @@ export function youtubePrivacyFor(job: PublishJob) {
 }
 
 export async function uploadYouTubeVideo(job: PublishJob, videoPath: string, credential?: PublishCredential): Promise<PublishResult> {
-  const accessToken = await youtubeAccessTokenFor(credential), info = await stat(videoPath), privacyStatus = youtubePrivacyFor(job);
+  const privacyStatus = youtubePrivacyFor(job);
   const status: Record<string, unknown> = { privacyStatus, selfDeclaredMadeForKids: false };
   if (job.scheduledAt && new Date(job.scheduledAt).getTime() > Date.now()) status.publishAt = new Date(job.scheduledAt).toISOString();
   if (process.env.YOUTUBE_CONTAINS_SYNTHETIC_MEDIA !== 'false') status.containsSyntheticMedia = true;
@@ -197,51 +196,10 @@ export async function uploadYouTubeVideo(job: PublishJob, videoPath: string, cre
     },
     status,
   };
-  const initUrl = new URL(UPLOAD_URL);
-  initUrl.searchParams.set('uploadType', 'resumable');
-  initUrl.searchParams.set('part', 'snippet,status');
-  const init = await fetch(initUrl, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${accessToken}`,
-      'content-type': 'application/json; charset=UTF-8',
-      'x-upload-content-length': String(info.size),
-      'x-upload-content-type': 'video/mp4',
-    },
-    body: JSON.stringify(metadata),
-  });
-  if (!init.ok) throw new Error(`YouTube upload init thất bại ${init.status}: ${(await init.text()).slice(0, 500)}`);
-  const session = init.headers.get('location');
-  if (!session) throw new Error('YouTube không trả resumable upload URL');
-
-  const fh = await open(videoPath, 'r');
-  try {
-    const chunkSize = Math.max(256 * 1024, Number(process.env.YOUTUBE_UPLOAD_CHUNK_BYTES || 8 * 1024 * 1024));
-    let offset = 0, last: Record<string, unknown> | undefined;
-    while (offset < info.size) {
-      const len = Math.min(chunkSize, info.size - offset), buf = Buffer.allocUnsafe(len), read = await fh.read(buf, 0, len, offset);
-      if (read.bytesRead <= 0) throw new Error('Không đọc được dữ liệu video');
-      const end = offset + read.bytesRead - 1;
-      const r = await fetch(session, {
-        method: 'PUT',
-        headers: {
-          authorization: `Bearer ${accessToken}`,
-          'content-type': 'video/mp4',
-          'content-length': String(read.bytesRead),
-          'content-range': `bytes ${offset}-${end}/${info.size}`,
-        },
-        body: buf.subarray(0, read.bytesRead),
-      });
-      if (r.status === 308) { offset = end + 1; continue; }
-      const text = await r.text();
-      if (!r.ok) throw new Error(`YouTube upload thất bại ${r.status}: ${text.slice(0, 500)}`);
-      last = text ? JSON.parse(text) as Record<string, unknown> : {};
-      offset = end + 1;
-    }
-    const id = String(last?.id || '');
-    if (!id) throw new Error('YouTube upload hoàn tất nhưng thiếu video id');
-    return { remoteId: id, remoteUrl: `https://www.youtube.com/watch?v=${id}`, publishedAt: new Date().toISOString(), dryRun: false };
-  } finally {
-    await fh.close();
-  }
+  let cachedToken=await youtubeAccessTokenFor(credential),tokenAt=Date.now();
+  const getAccessToken=async()=>{
+    if(Date.now()-tokenAt>45*60_000){cachedToken=await youtubeAccessTokenFor(credential);tokenAt=Date.now()}
+    return cachedToken;
+  };
+  return uploadYouTubeResumable({job,videoPath,metadata,getAccessToken});
 }

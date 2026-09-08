@@ -41,6 +41,8 @@ jobs:
         run: npm run smoke:ops-assistant
       - name: Durable production queue and publish reconcile smoke test
         run: npm run smoke:durable-queue
+      - name: YouTube resumable upload retry and restart smoke test
+        run: npm run smoke:youtube-resumable
       - name: Production operator check syntax
         run: node --check scripts/production-check.mjs
       - name: Persistent render recovery smoke test

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp,rm,mkdir } from 'node:fs/promises';
+import { mkdtemp,rm,mkdir,readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
@@ -7,7 +7,8 @@ import { once } from 'node:events';
 const dir=await mkdtemp(join(tmpdir(),'auto-media-prod-smoke-'));
 const output=join(dir,'output');
 await mkdir(output,{recursive:true});
-const port=18000+(process.pid%1000);
+const pkg=JSON.parse(await readFile('package.json','utf8'));
+const port=18000+(process.pid%1000),revision='smoke-production-revision';
 let logs='';
 const child=spawn(process.execPath,['dist/server.js'],{
   env:{
@@ -15,6 +16,8 @@ const child=spawn(process.execPath,['dist/server.js'],{
     PORT:String(port),
     DB_PATH:join(dir,'smoke.sqlite'),
     RENDER_OUTPUT_DIR:output,
+    APP_REVISION:revision,
+    RELEASE_CHANNEL:'stable',
     AUTOPILOT_ENABLED:'false',
     RENDER_QUEUE_PAUSED:'true',
     PUBLISH_LIVE_ENABLED:'false',
@@ -39,7 +42,10 @@ try{
   }
   if(!health?.ok)throw new Error(`compiled server did not become healthy: ${logs}`);
   if(health.storage!=='sqlite')throw new Error(`unexpected health storage: ${JSON.stringify(health)}`);
-  console.log('compiled production server smoke OK');
+  if(health.version!==pkg.version)throw new Error(`health version drift: expected ${pkg.version}, got ${health.version}`);
+  if(health.revision!==revision)throw new Error(`health revision drift: expected ${revision}, got ${health.revision}`);
+  if(health.releaseChannel!=='stable')throw new Error(`health release channel drift: ${health.releaseChannel}`);
+  console.log(`compiled production server smoke OK • health v${health.version} • ${health.revision}`);
 }finally{
   if(child.exitCode===null){
     child.kill('SIGTERM');

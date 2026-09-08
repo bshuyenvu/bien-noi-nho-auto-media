@@ -14,6 +14,13 @@ export interface ProductionActivationState{
   unlistedAuthorizedAt?:string;
   unlistedVerifiedAt?:string;
   unlistedTestVideoId?:string;
+  remoteCanaryVerifiedAt?:string;
+  remoteCanaryVideoId?:string;
+  remoteCanaryChannelId?:string;
+  remoteCanaryTitle?:string;
+  remoteCanaryPrivacyStatus?:string;
+  remoteCanaryUploadStatus?:string;
+  remoteCanaryProcessingStatus?:string;
   publicApprovedAt?:string;
   abortedAt?:string;
   updatedAt?:string;
@@ -34,7 +41,7 @@ export function productionKillSwitch():KillSwitchState{return read(KILL_KEY,{eng
 export function updateProductionActivation(ownerId:string,patch:Partial<ProductionActivationState>,actor:string){const current=productionActivationState(ownerId),next:ProductionActivationState={...current,...patch,ownerId,updatedBy:actor};const updatedAt=write(activationKey(ownerId),next);return{...next,updatedAt}}
 export function engageProductionKillSwitch(actor:string,reason='Operator kill switch'){const now=new Date().toISOString(),next:KillSwitchState={engaged:true,engagedAt:now,engagedBy:actor,reason};write(KILL_KEY,next);return productionKillSwitch()}
 export function clearProductionKillSwitch(actor:string){const current=productionKillSwitch(),now=new Date().toISOString(),next:KillSwitchState={...current,engaged:false,clearedAt:now,clearedBy:actor};write(KILL_KEY,next);return productionKillSwitch()}
-export function abortProductionActivation(ownerId:string,actor:string){const now=new Date().toISOString();return updateProductionActivation(ownerId,{status:'aborted',armed:false,maxPrivacy:'private',abortedAt:now,sessionId:undefined,armedAt:undefined,unlistedAuthorizedAt:undefined,unlistedVerifiedAt:undefined,unlistedTestVideoId:undefined,publicApprovedAt:undefined},actor)}
+export function abortProductionActivation(ownerId:string,actor:string){const now=new Date().toISOString();return updateProductionActivation(ownerId,{status:'aborted',armed:false,maxPrivacy:'private',abortedAt:now,sessionId:undefined,armedAt:undefined,unlistedAuthorizedAt:undefined,unlistedVerifiedAt:undefined,unlistedTestVideoId:undefined,remoteCanaryVerifiedAt:undefined,remoteCanaryVideoId:undefined,remoteCanaryChannelId:undefined,remoteCanaryTitle:undefined,remoteCanaryPrivacyStatus:undefined,remoteCanaryUploadStatus:undefined,remoteCanaryProcessingStatus:undefined,publicApprovedAt:undefined},actor)}
 export function productionPublishGuard(ownerId:string,input:{deploymentTest?:boolean;privacy?:ActivationPrivacy}={}){
   const kill=productionKillSwitch(),state=productionActivationState(ownerId),privacy=input.privacy||envYouTubePrivacy();
   if(kill.engaged)return{allowed:false,reason:`Production Kill Switch đang bật${kill.reason?`: ${kill.reason}`:''}`,killSwitch:kill,state,privacy};

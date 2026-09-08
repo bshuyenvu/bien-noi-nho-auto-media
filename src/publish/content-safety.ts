@@ -14,7 +14,7 @@ export interface ContentSafetySnapshot{
 type DraftRow={id:string;owner_id:string;title:string;body:string;source_url?:string};
 type RenderRow={id:string;owner_id:string;draft_id:string;status:string;output?:string};
 type FingerprintRow={publish_job_id:string;draft_id:string;title_hash:string;body_hash:string;source_hash?:string;video_hash?:string;title_tokens_json:string;body_tokens_json:string;created_at:string};
-type PublishedRow=FingerprintRow&{published_at?:string};
+type ComparedRow=FingerprintRow&{published_at?:string;status:string};
 
 try{run(`CREATE TABLE IF NOT EXISTS publish_content_fingerprints (
   id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, publish_job_id TEXT NOT NULL UNIQUE, draft_id TEXT NOT NULL, render_job_id TEXT NOT NULL,
@@ -55,17 +55,17 @@ export function evaluateContentSafety(input:{ownerId:string;draftId:string;rende
   const titleNorm=normalizeText(title),bodyNorm=normalizeText(body),titleHash=sha(titleNorm),bodyHash=sha(bodyNorm),sourceHash=source?sha(source):undefined,videoHash=videoFingerprint(render?.output,cfg.sampleBytes),titleTokens=tokens(title,80),bodyTokens=tokens(body,256);
   if(videoHash)checks.push(pass('video-fingerprint','Video fingerprint','Đã tạo fingerprint từ kích thước + mẫu đầu/cuối file'));else checks.push(fail('video-fingerprint','Video fingerprint','Không đọc được file output để fingerprint'));
   const cutoff=new Date(Date.now()-cfg.windowHours*3600000).toISOString();
-  const recent=all<PublishedRow>(`SELECT f.*,p.published_at FROM publish_content_fingerprints f JOIN publish_jobs p ON p.id=f.publish_job_id WHERE f.owner_id=? AND p.platform='youtube' AND p.status='published' AND COALESCE(p.published_at,p.updated_at)>=? ORDER BY COALESCE(p.published_at,p.updated_at) DESC LIMIT 200`,input.ownerId,cutoff);
+  const recent=all<ComparedRow>(`SELECT f.*,p.published_at,p.status FROM publish_content_fingerprints f JOIN publish_jobs p ON p.id=f.publish_job_id WHERE f.owner_id=? AND p.platform='youtube' AND p.status IN ('pending','scheduled','publishing','needs_reconcile','published') AND COALESCE(p.published_at,p.updated_at)>=? ORDER BY COALESCE(p.published_at,p.updated_at) DESC LIMIT 200`,input.ownerId,cutoff);
   let duplicate:ContentSafetySnapshot['duplicate'];let bestWarn:{title:number;body:number;job:string}|undefined;
   for(const r of recent){
     const exact=r.title_hash===titleHash||r.body_hash===bodyHash||Boolean(sourceHash&&r.source_hash===sourceHash)||Boolean(videoHash&&r.video_hash===videoHash);
     const ts=jaccard(titleTokens,parseTokens(r.title_tokens_json)),bs=jaccard(bodyTokens,parseTokens(r.body_tokens_json));
-    if(exact||ts>=cfg.titleSimilarity||bs>=cfg.bodySimilarity){duplicate={publishJobId:r.publish_job_id,draftId:r.draft_id,publishedAt:r.published_at,reason:exact?'Trùng fingerprint/source/video':'Nội dung gần giống vượt ngưỡng',titleSimilarity:Number(ts.toFixed(3)),bodySimilarity:Number(bs.toFixed(3))};break}
+    if(exact||ts>=cfg.titleSimilarity||bs>=cfg.bodySimilarity){duplicate={publishJobId:r.publish_job_id,draftId:r.draft_id,publishedAt:r.published_at,reason:exact?`Trùng fingerprint/source/video với job ${r.status}`:`Nội dung gần giống vượt ngưỡng với job ${r.status}`,titleSimilarity:Number(ts.toFixed(3)),bodySimilarity:Number(bs.toFixed(3))};break}
     if(Math.max(ts,bs)>=cfg.warnSimilarity&&(!bestWarn||Math.max(ts,bs)>Math.max(bestWarn.title,bestWarn.body)))bestWarn={title:ts,body:bs,job:r.publish_job_id};
   }
   if(duplicate)checks.push(fail('duplicate','Chống đăng trùng',`${duplicate.reason} • job ${duplicate.publishJobId} • title ${Math.round((duplicate.titleSimilarity||0)*100)}% • body ${Math.round((duplicate.bodySimilarity||0)*100)}%`));
   else if(bestWarn)checks.push(warn('duplicate','Chống đăng trùng',`Có nội dung tương tự nhưng dưới ngưỡng khóa • job ${bestWarn.job} • title ${Math.round(bestWarn.title*100)}% • body ${Math.round(bestWarn.body*100)}%`));
-  else checks.push(pass('duplicate','Chống đăng trùng',`Không thấy bản PUBLIC trùng trong ${cfg.windowHours} giờ`));
+  else checks.push(pass('duplicate','Chống đăng trùng',`Không thấy bản PUBLIC trùng/đang hoạt động trong ${cfg.windowHours} giờ`));
   const blockers=checks.filter(x=>x.severity==='fail').map(x=>`${x.label}: ${x.detail}`),warnings=checks.filter(x=>x.severity==='warn').map(x=>`${x.label}: ${x.detail}`);
   return{ok:blockers.length===0,ownerId:input.ownerId,draftId:input.draftId,renderJobId:input.renderJobId,publishTitle:title,checkedAt,windowHours:cfg.windowHours,checks,blockers,warnings,fingerprints:{title:titleHash,body:bodyHash,source:sourceHash,video:videoHash},duplicate};
 }

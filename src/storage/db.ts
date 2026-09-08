@@ -117,6 +117,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS rss_sources_tenant (
 )`);
 try{db.exec("INSERT OR IGNORE INTO rss_sources_tenant(id,owner_id,name,url,created_at,last_scan_at,last_error,locked,managed) SELECT id,COALESCE(owner_id,'legacy-admin'),name,url,created_at,last_scan_at,last_error,locked,managed FROM rss_sources")}catch{}
 try{db.exec("INSERT OR IGNORE INTO rss_items_tenant(id,owner_id,source_id,source_name,title,link,summary,image_url,published_at,discovered_at) SELECT id,COALESCE(owner_id,'legacy-admin'),source_id,source_name,title,link,summary,image_url,published_at,discovered_at FROM rss_items")}catch{}
+try{db.exec("UPDATE drafts SET owner_id=(SELECT id FROM accounts WHERE role='admin' ORDER BY created_at LIMIT 1) WHERE owner_id='legacy-admin' AND EXISTS(SELECT 1 FROM accounts WHERE role='admin')")}catch{}
+try{db.exec("UPDATE render_jobs SET owner_id=(SELECT id FROM accounts WHERE role='admin' ORDER BY created_at LIMIT 1) WHERE owner_id='legacy-admin' AND EXISTS(SELECT 1 FROM accounts WHERE role='admin')")}catch{}
 
 export function all<T=any>(sql:string,...params:any[]):T[]{return db.prepare(sql).all(...params) as T[];}
 export function run(sql:string,...params:any[]){return db.prepare(sql).run(...params);}

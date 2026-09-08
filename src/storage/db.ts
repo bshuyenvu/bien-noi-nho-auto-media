@@ -95,16 +95,23 @@ try{db.exec('ALTER TABLE rss_items ADD COLUMN summary TEXT')}catch{}
 try{db.exec('ALTER TABLE rss_items ADD COLUMN image_url TEXT')}catch{}
 try{db.exec('ALTER TABLE drafts ADD COLUMN owner_id TEXT')}catch{}
 try{db.exec('ALTER TABLE render_jobs ADD COLUMN owner_id TEXT')}catch{}
+try{db.exec('ALTER TABLE render_jobs ADD COLUMN payload_json TEXT')}catch{}
+try{db.exec('ALTER TABLE render_jobs ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0')}catch{}
+try{db.exec('ALTER TABLE render_jobs ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 3')}catch{}
+try{db.exec('ALTER TABLE render_jobs ADD COLUMN next_attempt_at TEXT')}catch{}
+try{db.exec('ALTER TABLE render_jobs ADD COLUMN updated_at TEXT')}catch{}
 try{db.exec('ALTER TABLE rss_sources ADD COLUMN owner_id TEXT')}catch{}
 try{db.exec('ALTER TABLE rss_items ADD COLUMN owner_id TEXT')}catch{}
 try{db.exec('ALTER TABLE accounts ADD COLUMN daily_limit INTEGER')}catch{}
 try{db.exec('ALTER TABLE accounts ADD COLUMN total_limit INTEGER')}catch{}
 try{db.exec("UPDATE drafts SET owner_id='legacy-admin' WHERE owner_id IS NULL")}catch{}
 try{db.exec("UPDATE render_jobs SET owner_id='legacy-admin' WHERE owner_id IS NULL")}catch{}
+try{db.exec("UPDATE render_jobs SET updated_at=created_at WHERE updated_at IS NULL")}catch{}
 try{db.exec("UPDATE rss_sources SET owner_id='legacy-admin' WHERE owner_id IS NULL")}catch{}
 try{db.exec("UPDATE rss_items SET owner_id='legacy-admin' WHERE owner_id IS NULL")}catch{}
 try{db.exec('CREATE INDEX IF NOT EXISTS idx_drafts_owner ON drafts(owner_id)')}catch{}
 try{db.exec('CREATE INDEX IF NOT EXISTS idx_render_jobs_owner ON render_jobs(owner_id)')}catch{}
+try{db.exec('CREATE INDEX IF NOT EXISTS idx_render_jobs_status_next ON render_jobs(status,next_attempt_at)')}catch{}
 db.exec(`CREATE TABLE IF NOT EXISTS rss_items_tenant (
  id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, source_id TEXT NOT NULL, source_name TEXT NOT NULL,
  title TEXT NOT NULL, link TEXT NOT NULL, summary TEXT, image_url TEXT, published_at TEXT, discovered_at TEXT NOT NULL,

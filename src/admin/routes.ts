@@ -4,9 +4,11 @@ import { canRender, deleteReview } from '../review/store.js';
 import { deleteQueueItem, ensureQueueItem, setQueueStatus, syncRenderJobs } from '../queue/production.js';
 import { renderJobs, type RenderJob } from '../video/job.js';
 import { run } from '../storage/db.js';
+import { accessOf } from '../auth/access.js';
 
 export interface AdminDraft {
   id:string;
+  ownerId:string;
   title:string;
   status:'draft'|'approved'|'rendering'|'ready'|'failed';
 }
@@ -39,12 +41,12 @@ export function createAdminRouter<T extends AdminDraft>(drafts:T[]){
 
   router.get('/admin/state',(_req,res)=>{
     syncDraftStatuses(drafts);
-    const active=renderJobs.filter(x=>x.status==='queued'||x.status==='rendering').length;
-    return res.json({drafts:drafts.length,renders:renderJobs.length,active,ready:renderJobs.filter(x=>x.status==='ready').length,failed:renderJobs.filter(x=>x.status==='failed').length});
+    const ownerId=accessOf(res).accountId,ownDrafts=drafts.filter(x=>x.ownerId===ownerId),ownJobs=renderJobs.filter(x=>x.ownerId===ownerId),active=ownJobs.filter(x=>x.status==='queued'||x.status==='rendering').length;
+    return res.json({drafts:ownDrafts.length,renders:ownJobs.length,active,ready:ownJobs.filter(x=>x.status==='ready').length,failed:ownJobs.filter(x=>x.status==='failed').length});
   });
 
   router.delete('/drafts/:id',async(req,res)=>{
-    const i=drafts.findIndex(x=>x.id===req.params.id);if(i<0)return res.status(404).json({error:'Không tìm thấy bản tin'});
+    const ownerId=accessOf(res).accountId,i=drafts.findIndex(x=>x.id===req.params.id&&x.ownerId===ownerId);if(i<0)return res.status(404).json({error:'Không tìm thấy bản tin'});
     const related=renderJobs.filter(x=>x.draftId===req.params.id);
     if(related.some(x=>x.status==='queued'||x.status==='rendering'))return res.status(409).json({error:'Không thể xóa bản tin khi video đang được xử lý'});
     for(const j of related){removeJob(j);await cleanupJobFiles(j.id)}
@@ -53,7 +55,7 @@ export function createAdminRouter<T extends AdminDraft>(drafts:T[]){
   });
 
   router.delete('/render-jobs/:id',async(req,res)=>{
-    const job=renderJobs.find(x=>x.id===req.params.id);if(!job)return res.status(404).json({error:'Không tìm thấy tác vụ render'});
+    const ownerId=accessOf(res).accountId,job=renderJobs.find(x=>x.id===req.params.id&&x.ownerId===ownerId);if(!job)return res.status(404).json({error:'Không tìm thấy tác vụ render'});
     if(job.status==='queued'||job.status==='rendering')return res.status(409).json({error:'Không thể xóa tác vụ đang xử lý'});
     removeJob(job);await cleanupJobFiles(job.id);
     const draft=drafts.find(x=>x.id===job.draftId);if(draft){const remain=latestJob(draft.id),next=draftStatusFromJob(remain)||(canRender(draft.id)?'approved':'draft');draft.status=next;run('UPDATE drafts SET status=? WHERE id=?',next,draft.id)}
@@ -62,7 +64,7 @@ export function createAdminRouter<T extends AdminDraft>(drafts:T[]){
 
   router.post('/render-jobs/delete',async(req,res)=>{
     const ids=Array.isArray(req.body?.ids)?new Set(req.body.ids.map(String)):null,status=String(req.body?.status||'');
-    const selected=renderJobs.filter(j=>(ids?.has(j.id)||(!ids&&status&&j.status===status))&&j.status!=='queued'&&j.status!=='rendering');
+    const ownerId=accessOf(res).accountId,selected=renderJobs.filter(j=>j.ownerId===ownerId&&(ids?.has(j.id)||(!ids&&status&&j.status===status))&&j.status!=='queued'&&j.status!=='rendering');
     if(!ids&&!status)return res.status(400).json({error:'Chưa chọn tác vụ cần xóa'});
     for(const j of selected){removeJob(j);await cleanupJobFiles(j.id)}
     syncDraftStatuses(drafts);return res.json({ok:true,deleted:selected.length});

@@ -7,9 +7,10 @@ import { publishWorkerStatus } from '../publish/worker.js';
 import { publisherDeploymentReadiness } from '../publish/deployment-readiness.js';
 import { alertingStatus, dispatchExternalAlert, type AlertEvent } from './alerts.js';
 import { applySafeSelfHealing, selfHealingStatus } from './self-heal.js';
+import { incidentControl, maintenanceStatus } from './maintenance.js';
 
 export type MonitorSeverity='green'|'yellow'|'red';
-type IncidentRow={id:string;owner_id:string;incident_key:string;component:string;severity:MonitorSeverity;message:string;metadata_json?:string;opened_at:string;last_seen_at:string;resolved_at?:string};
+type IncidentRow={id:string;owner_id:string;incident_key:string;component:string;severity:MonitorSeverity;message:string;metadata_json?:string;opened_at:string;last_seen_at:string;resolved_at?:string;acknowledged_at?:string;acknowledged_by?:string;ack_note?:string;silenced_until?:string;silenced_by?:string;silence_reason?:string};
 type QueueCountRow={status:string;count:number};
 type PublishingRow={id:string;updated_at:string};
 
@@ -41,7 +42,7 @@ function reconcileIncident(ownerId:string,key:string,component:string,severity:M
   return{incidentId:id,ownerId,kind:'open',component,severity,message,occurredAt:now};
 }
 
-function trimHistory(){const days=envNumber('MONITOR_HISTORY_DAYS',30),cutoff=new Date(Date.now()-days*86400000).toISOString();run('DELETE FROM system_alert_deliveries WHERE sent_at<?',cutoff);run('DELETE FROM system_incidents WHERE resolved_at IS NOT NULL AND resolved_at<?',cutoff)}
+function trimHistory(){const days=envNumber('MONITOR_HISTORY_DAYS',30),cutoff=new Date(Date.now()-days*86400000).toISOString();run('DELETE FROM system_alert_deliveries WHERE sent_at<?',cutoff);run('DELETE FROM system_incidents WHERE resolved_at IS NOT NULL AND resolved_at<?',cutoff);run('DELETE FROM system_maintenance_windows WHERE ended_at IS NOT NULL AND ended_at<?',cutoff)}
 function publishQueueSnapshot(){
   const rows=all<QueueCountRow>('SELECT status,COUNT(*) AS count FROM publish_jobs GROUP BY status'),counts:Record<string,number>={};
   for(const row of rows)counts[row.status]=Number(row.count||0);
@@ -75,7 +76,7 @@ export async function productionMonitorSnapshot(ownerId?:string){
     youtube:{severity:youtubeSeverity,message:!deployment?'Chưa nạp owner readiness':youtubeSeverity==='green'?'YouTube gate phù hợp trạng thái hiện tại':deployment.blockers.join(' | '),ready:deployment?.youtubeLiveReady,configurationReady:deployment?.configurationReady,liveEnabled:deployment?.config.liveEnabled,privacyStatus:deployment?.config.privacyStatus},
   };
   const overall=worst(memorySeverity,cpuSeverity,diskSeverity,renderSeverity,publishSeverity,youtubeSeverity);
-  return{overall,checkedAt:new Date().toISOString(),components,render,publish,publishQueue,deployment,selfHealing,alerting:alertingStatus(),monitor:{started:Boolean(timer),intervalMs:envNumber('MONITOR_INTERVAL_MS',30000),lastCycleAt,lastCycleError}};
+  return{overall,checkedAt:new Date().toISOString(),components,render,publish,publishQueue,deployment,selfHealing,alerting:alertingStatus(),maintenance:maintenanceStatus(),monitor:{started:Boolean(timer),intervalMs:envNumber('MONITOR_INTERVAL_MS',30000),lastCycleAt,lastCycleError}};
 }
 
 export async function runProductionMonitorCycle(ownerId?:string){
@@ -89,12 +90,12 @@ export async function runProductionMonitorCycle(ownerId?:string){
     if(ownerId)events.push(reconcileIncident(ownerId,'youtube-readiness','youtube',snapshot.components.youtube.severity,snapshot.components.youtube.message,snapshot.components.youtube));
     const selfHealing=await applySafeSelfHealing({memory:snapshot.components.memory.severity,disk:snapshot.components.disk.severity,memoryMessage:snapshot.components.memory.message,diskMessage:snapshot.components.disk.message});
     await Promise.allSettled(events.filter((x):x is AlertEvent=>Boolean(x)).map(event=>dispatchExternalAlert(event)));
-    trimHistory();lastCycleAt=new Date().toISOString();lastCycleError=undefined;return{...snapshot,selfHealing,alerting:alertingStatus()};
+    trimHistory();lastCycleAt=new Date().toISOString();lastCycleError=undefined;return{...snapshot,selfHealing,alerting:alertingStatus(),maintenance:maintenanceStatus()};
   }catch(e){lastCycleError=e instanceof Error?e.message:String(e);lastCycleAt=new Date().toISOString();throw e}
 }
 
 export function monitorIncidents(ownerId:string,limit=50){
-  return all<IncidentRow>("SELECT * FROM system_incidents WHERE owner_id='system' OR owner_id=? ORDER BY (resolved_at IS NULL) DESC,last_seen_at DESC LIMIT ?",ownerId,Math.max(1,Math.min(200,limit))).map(x=>({id:x.id,ownerId:x.owner_id,key:x.incident_key,component:x.component,severity:x.severity,message:x.message,metadata:parseMetadata(x.metadata_json),openedAt:x.opened_at,lastSeenAt:x.last_seen_at,resolvedAt:x.resolved_at||undefined,active:!x.resolved_at}));
+  return all<IncidentRow>("SELECT * FROM system_incidents WHERE owner_id='system' OR owner_id=? ORDER BY (resolved_at IS NULL) DESC,last_seen_at DESC LIMIT ?",ownerId,Math.max(1,Math.min(200,limit))).map(x=>{const control=incidentControl(x.id,ownerId);return{id:x.id,ownerId:x.owner_id,key:x.incident_key,component:x.component,severity:x.severity,message:x.message,metadata:parseMetadata(x.metadata_json),openedAt:x.opened_at,lastSeenAt:x.last_seen_at,resolvedAt:x.resolved_at||undefined,active:!x.resolved_at,...control}});
 }
 
 export function startProductionMonitor(){if(timer)return;const intervalMs=envNumber('MONITOR_INTERVAL_MS',30000);timer=setInterval(()=>void runProductionMonitorCycle().catch(e=>console.warn('[production-monitor]',e instanceof Error?e.message:String(e))),intervalMs);timer.unref();void runProductionMonitorCycle().catch(e=>console.warn('[production-monitor]',e instanceof Error?e.message:String(e)))}

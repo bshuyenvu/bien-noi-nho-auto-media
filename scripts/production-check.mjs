@@ -34,11 +34,13 @@ try{
     const c=components[name];if(c?.severity&&c.severity!=='green')console.log(`  ${name}: ${String(c.severity).toUpperCase()} • ${c.message||''}`);
   }
   const activeIncidents=Array.isArray(monitoring.incidents)?monitoring.incidents.filter(x=>x.active):[];
-  if(activeIncidents.length)console.log(`  Active incidents: ${activeIncidents.length}`);
+  if(activeIncidents.length){const acked=activeIncidents.filter(x=>x.acknowledged).length,silenced=activeIncidents.filter(x=>x.silenced).length;console.log(`  Active incidents: ${activeIncidents.length} • ACK ${acked} • silenced ${silenced}`)}
+  const maintenance=monitoring.maintenance||snapshot.maintenance||{};
+  line('Maintenance window',true,maintenance.active?`ACTIVE until ${maintenance.endsAt||'?'} • ${maintenance.reason||'maintenance'}`:'OFF');
   const selfHeal=snapshot.selfHealing||{};
   line('Safe self-heal',selfHeal.enabled!==false,selfHeal.enabled===false?'OFF':selfHeal.autoPaused?`AUTO-PAUSED • green ${selfHeal.greenCycles||0}/${selfHeal.requiredGreen||3}`:'ON');
   const alerting=snapshot.alerting||{},channels=alerting.channels||{},enabledChannels=[channels.webhook?'webhook':'',channels.telegram?'telegram':'',channels.email?'email':''].filter(Boolean);
-  line('External alerts',Boolean(alerting.enabled),alerting.enabled?`${enabledChannels.join(', ')} • min ${String(alerting.minSeverity||'red').toUpperCase()}`:'not configured');
+  line('External alerts',Boolean(alerting.enabled),alerting.enabled?`${enabledChannels.join(', ')} • min ${String(alerting.minSeverity||'red').toUpperCase()}${maintenance.active?' • MUTED BY MAINTENANCE':''}`:'not configured');
 
   const deployment=await request('/api/publish-deployment-readiness',true);
   line('Publisher configuration',Boolean(deployment.configurationReady),deployment.configurationReady?'configured':'not complete');

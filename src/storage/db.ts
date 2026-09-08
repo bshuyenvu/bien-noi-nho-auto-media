@@ -24,13 +24,15 @@ CREATE INDEX IF NOT EXISTS idx_publish_jobs_status_schedule ON publish_jobs(stat
 CREATE UNIQUE INDEX IF NOT EXISTS idx_publish_jobs_unique_target ON publish_jobs(owner_id,render_job_id,platform) WHERE status NOT IN ('cancelled','failed');
 CREATE TABLE IF NOT EXISTS publish_credentials (id TEXT PRIMARY KEY,owner_id TEXT NOT NULL,platform TEXT NOT NULL,account_label TEXT NOT NULL,secret_encrypted TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,UNIQUE(owner_id,platform));
 CREATE INDEX IF NOT EXISTS idx_publish_credentials_owner ON publish_credentials(owner_id);
-CREATE TABLE IF NOT EXISTS system_incidents (id TEXT PRIMARY KEY,owner_id TEXT NOT NULL,incident_key TEXT NOT NULL,component TEXT NOT NULL,severity TEXT NOT NULL,message TEXT NOT NULL,metadata_json TEXT,opened_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,resolved_at TEXT);
+CREATE TABLE IF NOT EXISTS system_incidents (id TEXT PRIMARY KEY,owner_id TEXT NOT NULL,incident_key TEXT NOT NULL,component TEXT NOT NULL,severity TEXT NOT NULL,message TEXT NOT NULL,metadata_json TEXT,opened_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,resolved_at TEXT,acknowledged_at TEXT,acknowledged_by TEXT,ack_note TEXT,silenced_until TEXT,silenced_by TEXT,silence_reason TEXT);
 CREATE INDEX IF NOT EXISTS idx_system_incidents_owner_seen ON system_incidents(owner_id,last_seen_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_system_incidents_active_key ON system_incidents(owner_id,incident_key) WHERE resolved_at IS NULL;
 CREATE TABLE IF NOT EXISTS system_runtime_state (state_key TEXT PRIMARY KEY,value_json TEXT NOT NULL,updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS system_alert_deliveries (id TEXT PRIMARY KEY,incident_id TEXT NOT NULL,owner_id TEXT NOT NULL,channel TEXT NOT NULL,kind TEXT NOT NULL,severity TEXT NOT NULL,status TEXT NOT NULL,error TEXT,sent_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_system_alert_incident_channel ON system_alert_deliveries(incident_id,channel,sent_at DESC);
 CREATE INDEX IF NOT EXISTS idx_system_alert_sent ON system_alert_deliveries(sent_at DESC);
+CREATE TABLE IF NOT EXISTS system_maintenance_windows (id TEXT PRIMARY KEY,owner_id TEXT NOT NULL,reason TEXT NOT NULL,created_by TEXT NOT NULL,started_at TEXT NOT NULL,ends_at TEXT NOT NULL,ended_at TEXT);
+CREATE INDEX IF NOT EXISTS idx_system_maintenance_active ON system_maintenance_windows(ended_at,ends_at DESC);
 `);
 try{db.exec('ALTER TABLE rss_sources ADD COLUMN locked INTEGER NOT NULL DEFAULT 0')}catch{}
 try{db.exec('ALTER TABLE rss_sources ADD COLUMN managed INTEGER NOT NULL DEFAULT 0')}catch{}
@@ -50,6 +52,12 @@ try{db.exec('ALTER TABLE rss_sources ADD COLUMN owner_id TEXT')}catch{}
 try{db.exec('ALTER TABLE rss_items ADD COLUMN owner_id TEXT')}catch{}
 try{db.exec('ALTER TABLE accounts ADD COLUMN daily_limit INTEGER')}catch{}
 try{db.exec('ALTER TABLE accounts ADD COLUMN total_limit INTEGER')}catch{}
+try{db.exec('ALTER TABLE system_incidents ADD COLUMN acknowledged_at TEXT')}catch{}
+try{db.exec('ALTER TABLE system_incidents ADD COLUMN acknowledged_by TEXT')}catch{}
+try{db.exec('ALTER TABLE system_incidents ADD COLUMN ack_note TEXT')}catch{}
+try{db.exec('ALTER TABLE system_incidents ADD COLUMN silenced_until TEXT')}catch{}
+try{db.exec('ALTER TABLE system_incidents ADD COLUMN silenced_by TEXT')}catch{}
+try{db.exec('ALTER TABLE system_incidents ADD COLUMN silence_reason TEXT')}catch{}
 try{db.exec("UPDATE drafts SET owner_id='legacy-admin' WHERE owner_id IS NULL")}catch{}
 try{db.exec("UPDATE render_jobs SET owner_id='legacy-admin' WHERE owner_id IS NULL")}catch{}
 try{db.exec("UPDATE render_jobs SET updated_at=created_at WHERE updated_at IS NULL")}catch{}

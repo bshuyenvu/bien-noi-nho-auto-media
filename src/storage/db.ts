@@ -100,6 +100,8 @@ try{db.exec('ALTER TABLE render_jobs ADD COLUMN attempts INTEGER NOT NULL DEFAUL
 try{db.exec('ALTER TABLE render_jobs ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 3')}catch{}
 try{db.exec('ALTER TABLE render_jobs ADD COLUMN next_attempt_at TEXT')}catch{}
 try{db.exec('ALTER TABLE render_jobs ADD COLUMN updated_at TEXT')}catch{}
+try{db.exec('ALTER TABLE render_jobs ADD COLUMN checkpoint_stage TEXT')}catch{}
+try{db.exec('ALTER TABLE render_jobs ADD COLUMN interrupted_at TEXT')}catch{}
 try{db.exec('ALTER TABLE rss_sources ADD COLUMN owner_id TEXT')}catch{}
 try{db.exec('ALTER TABLE rss_items ADD COLUMN owner_id TEXT')}catch{}
 try{db.exec('ALTER TABLE accounts ADD COLUMN daily_limit INTEGER')}catch{}

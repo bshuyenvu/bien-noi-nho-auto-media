@@ -177,14 +177,15 @@ export async function youtubeReadiness(credential?: PublishCredential): Promise<
   }
 }
 
-function privacyFor(job: PublishJob) {
-  if (job.scheduledAt && new Date(job.scheduledAt).getTime() > Date.now()) return 'private';
+export function youtubePrivacyFor(job: PublishJob) {
+  if (job.deploymentTest) return 'private' as const;
+  if (job.scheduledAt && new Date(job.scheduledAt).getTime() > Date.now()) return 'private' as const;
   const p = String(process.env.YOUTUBE_PRIVACY_STATUS || 'private');
   return p === 'public' || p === 'unlisted' ? p : 'private';
 }
 
 export async function uploadYouTubeVideo(job: PublishJob, videoPath: string, credential?: PublishCredential): Promise<PublishResult> {
-  const accessToken = await youtubeAccessTokenFor(credential), info = await stat(videoPath), privacyStatus = privacyFor(job);
+  const accessToken = await youtubeAccessTokenFor(credential), info = await stat(videoPath), privacyStatus = youtubePrivacyFor(job);
   const status: Record<string, unknown> = { privacyStatus, selfDeclaredMadeForKids: false };
   if (job.scheduledAt && new Date(job.scheduledAt).getTime() > Date.now()) status.publishAt = new Date(job.scheduledAt).toISOString();
   if (process.env.YOUTUBE_CONTAINS_SYNTHETIC_MEDIA !== 'false') status.containsSyntheticMedia = true;

@@ -33,7 +33,7 @@ export function contentSafetyConfig(){return{
   sampleBytes:Math.floor(num('CONTENT_VIDEO_FINGERPRINT_SAMPLE_BYTES',524288,65536,2097152)),
 }}
 function sha(v:string|Buffer){return createHash('sha256').update(v).digest('hex')}
-function normalizeText(v:string){return String(v||'').normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim()}
+function normalizeText(v:string){return String(v||'').replace(/[đĐ]/g,'d').normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim()}
 function tokens(v:string,limit=256){return [...new Set(normalizeText(v).split(' ').filter(x=>x.length>=2))].slice(0,limit)}
 function normalizeUrl(raw:string|undefined){if(!raw)return'';try{const u=new URL(raw);u.hash='';for(const k of [...u.searchParams.keys()])if(/^utm_/i.test(k)||['fbclid','gclid','mc_cid','mc_eid'].includes(k.toLowerCase()))u.searchParams.delete(k);u.searchParams.sort();u.hostname=u.hostname.toLowerCase();return u.toString().replace(/\/$/,'')}catch{return normalizeText(raw)}}
 function jaccard(a:string[],b:string[]){if(!a.length||!b.length)return 0;const A=new Set(a),B=new Set(b);let inter=0;for(const x of A)if(B.has(x))inter++;return inter/(A.size+B.size-inter)}

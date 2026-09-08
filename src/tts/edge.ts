@@ -1,6 +1,7 @@
 import { EdgeTTS, createSRT } from 'edge-tts-universal';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { generateVieNeuSpeech } from './vieneu.js';
 
 export const VOICE_CATALOG = [
   { id:'vi-male', name:'Nam Minh', language:'Tiếng Việt chuẩn', locale:'vi-VN', gender:'Nam', edgeVoice:'vi-VN-NamMinhNeural', tier:'native', recommended:true, description:'Nam Việt, rõ chữ; phù hợp bản tin.' },
@@ -36,6 +37,7 @@ async function synthesize(text:string,voice:VoiceId,rate:string,style:VoiceStyle
 export async function generateSpeech(options:{text:string;audioPath:string;srtPath?:string;voice?:VoiceId;rate?:string;style?:VoiceStyle}){
  const {text,audioPath,srtPath,voice='vi-male',style='news'}=options,preset=VOICE_STYLES[style];const rate=options.rate&&options.rate!=='+0%'?options.rate:preset.rate;
  await mkdir(dirname(audioPath),{recursive:true});if(srtPath)await mkdir(dirname(srtPath),{recursive:true});const directed=directVietnameseText(text,style);
+ if(process.env.VIENEU_TTS_ENABLED==='true'){try{const local=await generateVieNeuSpeech({text:directed,audioPath,srtPath,voiceId:voice});if(local)return local}catch(e){console.warn('VieNeu unavailable; falling back to Edge TTS:',e)}}
  const fallbackOrder:VoiceId[]=[voice,...(['vi-male','vi-female','multi-andrew','multi-ava'] as VoiceId[]).filter(v=>v!==voice)];let lastError:unknown;
  for(let i=0;i<fallbackOrder.length;i++){const candidate=fallbackOrder[i];for(let attempt=1;attempt<=2;attempt++){try{const {selected,result,audio}=await synthesize(directed,candidate,rate,style);await writeFile(audioPath,audio);if(srtPath&&result.subtitle?.length)await writeFile(srtPath,createSRT(result.subtitle),'utf8');return{audioPath,srtPath,voice:selected.edgeVoice,voiceId:candidate,locale:selected.locale,rate,tier:selected.tier,style,fallbackUsed:candidate!==voice,attempt}}catch(e){lastError=e;console.warn(`TTS attempt ${attempt} failed for ${candidate}:`,e);if(attempt<2)await sleep(900)}}}
  throw new Error(`TTS failed after retry/fallback: ${lastError instanceof Error?lastError.message:String(lastError)}`)

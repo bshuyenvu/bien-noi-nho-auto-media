@@ -26,7 +26,8 @@ trap cleanup_staging EXIT
 
 if [[ "$running" == "true" ]]; then
   echo "[backup] Creating online SQLite snapshot with VACUUM INTO..."
-  docker compose exec -T auto-media node scripts/sqlite-backup.mjs "$STAGING_CONTAINER" >/dev/null
+  # Stream the helper through stdin so this also works when the currently running image predates Phase 4.1.
+  docker compose exec -T auto-media node --input-type=module - "$STAGING_CONTAINER" < scripts/sqlite-backup.mjs >/dev/null
   if [[ ! -s "$STAGING_HOST" ]]; then
     echo "[backup] ERROR: online snapshot was not created" >&2
     exit 1

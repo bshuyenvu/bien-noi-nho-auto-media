@@ -7,9 +7,10 @@ function configured(name:string){return Boolean(process.env[name]?.trim())}
 function youtubePrivacy():YouTubePrivacyStatus{const v=String(process.env.YOUTUBE_PRIVACY_STATUS||'private');return v==='public'||v==='unlisted'?v:'private'}
 function redirectStatus(){const raw=String(process.env.YOUTUBE_REDIRECT_URI||'').trim();if(!raw)return{configured:false,https:false,localhost:false,ok:false};try{const u=new URL(raw),localhost=u.hostname==='localhost'||u.hostname==='127.0.0.1'||u.hostname==='::1';return{configured:true,https:u.protocol==='https:',localhost,ok:u.protocol==='https:'||localhost}}catch{return{configured:true,https:false,localhost:false,ok:false}}}
 function privateTest(secret?:Record<string,string>){const passedAt=secret?.privateTestPassedAt||'',ms=passedAt?Date.parse(passedAt):NaN;return{passed:Boolean(passedAt&&Number.isFinite(ms)),passedAt:passedAt||undefined,videoId:secret?.privateTestVideoId||undefined}}
+function uploadChunk(){const bytes=Math.max(256*1024,Number(process.env.YOUTUBE_UPLOAD_CHUNK_BYTES||8*1024*1024));return{bytes,multipleOf256KiB:bytes%(256*1024)===0,ok:bytes%(256*1024)===0}}
 
 export function publisherDeploymentReadiness(ownerId?:string){
-  const redirect=redirectStatus(),privacyStatus=youtubePrivacy(),liveEnabled=process.env.PUBLISH_LIVE_ENABLED==='true';
+  const redirect=redirectStatus(),privacyStatus=youtubePrivacy(),liveEnabled=process.env.PUBLISH_LIVE_ENABLED==='true',chunk=uploadChunk();
   const config={
     credentialVault:configured('CREDENTIAL_VAULT_KEY'),
     oauthStateSecret:configured('OAUTH_STATE_SECRET'),
@@ -17,10 +18,11 @@ export function publisherDeploymentReadiness(ownerId?:string){
     youtubeClientSecret:configured('YOUTUBE_CLIENT_SECRET'),
     youtubeRedirectUri:redirect,
     readinessTtlMs:Math.max(60_000,Number(process.env.YOUTUBE_READINESS_MAX_AGE_MS||15*60_000)),
+    uploadChunk:chunk,
     privacyStatus,
     liveEnabled,
   };
-  const configurationReady=config.credentialVault&&config.oauthStateSecret&&config.youtubeClientId&&config.youtubeClientSecret&&redirect.ok;
+  const configurationReady=config.credentialVault&&config.oauthStateSecret&&config.youtubeClientId&&config.youtubeClientSecret&&redirect.ok&&chunk.ok;
   let youtubeCredential:ReturnType<typeof credentialStatus>[number]|undefined,credential:PublishCredential|undefined;
   if(ownerId){youtubeCredential=credentialStatus(ownerId).find(x=>x.platform==='youtube');try{credential=getCredential(ownerId,'youtube')}catch{}}
   const test=privateTest(credential?.secret);
@@ -32,6 +34,7 @@ export function publisherDeploymentReadiness(ownerId?:string){
   if(!config.youtubeClientId)blockers.push('Thiếu YOUTUBE_CLIENT_ID');
   if(!config.youtubeClientSecret)blockers.push('Thiếu YOUTUBE_CLIENT_SECRET');
   if(!redirect.ok)blockers.push('YOUTUBE_REDIRECT_URI phải hợp lệ và dùng HTTPS ngoài localhost');
+  if(!chunk.ok)blockers.push('YOUTUBE_UPLOAD_CHUNK_BYTES phải là bội số 256 KiB');
   if(!liveEnabled)blockers.push('PUBLISH_LIVE_ENABLED đang false');
   if(ownerId&&!youtubeCredential)blockers.push('YouTube chưa kết nối OAuth');
   if(ownerId&&youtubeCredential&&!youtubeCredential.liveReadyCached)blockers.push('YouTube cần TEST KẾT NỐI gần đây');
@@ -40,3 +43,5 @@ export function publisherDeploymentReadiness(ownerId?:string){
 }
 
 export function logPublisherStartupReadiness(){const x=publisherDeploymentReadiness();const missing=x.blockers.filter(b=>!b.includes('PUBLISH_LIVE_ENABLED'));if(missing.length)console.warn(`[publisher-readiness] ${missing.join(' | ')}`);else console.info(`[publisher-readiness] config ready; live=${x.config.liveEnabled}; youtubePrivacy=${x.config.privacyStatus}`);if(process.env.PUBLISH_STRICT_STARTUP==='true'&&process.env.PUBLISH_LIVE_ENABLED==='true'&&!x.configurationReady)throw new Error(`Publisher production config chưa sẵn sàng: ${x.blockers.join('; ')}`);return x}
+
+if(process.env.CI!=='true'&&process.env.PUBLISH_STARTUP_DIAGNOSTICS!=='false')setImmediate(()=>{try{logPublisherStartupReadiness()}catch(e){console.error(e);if(process.env.PUBLISH_STRICT_STARTUP==='true')process.exitCode=1}});

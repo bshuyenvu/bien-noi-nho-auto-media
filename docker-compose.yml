@@ -3,6 +3,8 @@ services:
     build: .
     container_name: bien-noi-nho-auto-media
     restart: unless-stopped
+    init: true
+    stop_grace_period: 15s
     ports:
       - "8787:8787"
     environment:
@@ -28,6 +30,21 @@ services:
       VIENEU_TTS_ENABLED: ${VIENEU_TTS_ENABLED:-false}
       VIENEU_TTS_URL: ${VIENEU_TTS_URL:-http://vieneu-tts:7861}
       VIENEU_TTS_TIMEOUT_MS: ${VIENEU_TTS_TIMEOUT_MS:-240000}
+      LOW_MEMORY_MODE: ${LOW_MEMORY_MODE:-true}
+      RENDER_QUEUE_PAUSED: ${RENDER_QUEUE_PAUSED:-false}
+      RENDER_MIN_AVAILABLE_MB: ${RENDER_MIN_AVAILABLE_MB:-512}
+      RENDER_MAX_LOAD_PER_CPU: ${RENDER_MAX_LOAD_PER_CPU:-0.85}
+      RENDER_RESOURCE_POLL_MS: ${RENDER_RESOURCE_POLL_MS:-10000}
+      RENDER_RESOURCE_MAX_WAIT_MS: ${RENDER_RESOURCE_MAX_WAIT_MS:-900000}
+      RENDER_MIN_FREE_DISK_MB: ${RENDER_MIN_FREE_DISK_MB:-2048}
+      RENDER_MAX_OUTPUT_MB: ${RENDER_MAX_OUTPUT_MB:-8192}
+      RENDER_OUTPUT_RETENTION_HOURS: ${RENDER_OUTPUT_RETENTION_HOURS:-72}
+      RENDER_WATCHDOG_MS: ${RENDER_WATCHDOG_MS:-1200000}
+      RENDER_MAX_ATTEMPTS: ${RENDER_MAX_ATTEMPTS:-3}
+      RENDER_RETRY_BASE_MS: ${RENDER_RETRY_BASE_MS:-15000}
+      TTS_TIMEOUT_MS: ${TTS_TIMEOUT_MS:-300000}
+      FFMPEG_TIMEOUT_MS: ${FFMPEG_TIMEOUT_MS:-1800000}
+      SHUTDOWN_GRACE_MS: ${SHUTDOWN_GRACE_MS:-5000}
       AUTOPILOT_ENABLED: ${AUTOPILOT_ENABLED:-true}
       AUTOPILOT_INTERVAL_MINUTES: ${AUTOPILOT_INTERVAL_MINUTES:-15}
       AUTOPILOT_LENGTH: ${AUTOPILOT_LENGTH:-60}
@@ -46,6 +63,8 @@ services:
       context: .
       dockerfile: services/vieneu-tts/Dockerfile
     restart: unless-stopped
+    init: true
+    stop_grace_period: 15s
     environment:
       VIENEU_MODE: ${VIENEU_MODE:-v3nano}
       HF_HOME: /models

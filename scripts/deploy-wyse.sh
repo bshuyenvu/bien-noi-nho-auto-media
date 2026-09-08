@@ -28,17 +28,25 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   exit 1
 fi
 
-PREVIOUS_COMMIT="$(git rev-parse HEAD)"
+CHECKOUT_COMMIT="$(git rev-parse HEAD)"
 OLD_IMAGE_ID="$(docker image inspect bien-noi-nho-auto-media:current --format '{{.Id}}' 2>/dev/null || true)"
 if [[ -z "$OLD_IMAGE_ID" ]]; then
   OLD_IMAGE_ID="$(docker compose images -q auto-media 2>/dev/null | head -n 1 || true)"
 fi
+PREVIOUS_COMMIT="$CHECKOUT_COMMIT"
+if [[ -n "$OLD_IMAGE_ID" ]]; then
+  image_revision="$(docker image inspect "$OLD_IMAGE_ID" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' 2>/dev/null || true)"
+  if [[ -n "$image_revision" && "$image_revision" != "unknown" && "$image_revision" != "<no value>" ]]; then
+    PREVIOUS_COMMIT="$image_revision"
+  fi
+fi
+
 ROLLBACK_IMAGE=""
 if [[ -n "$OLD_IMAGE_ID" ]]; then
   ROLLBACK_IMAGE="bien-noi-nho-auto-media:rollback-$STAMP"
   docker image tag "$OLD_IMAGE_ID" "$ROLLBACK_IMAGE"
   ROLLBACK_AVAILABLE=true
-  echo "[deploy] Preserved previous image as $ROLLBACK_IMAGE"
+  echo "[deploy] Preserved previous image as $ROLLBACK_IMAGE (revision $PREVIOUS_COMMIT)"
 else
   echo "[deploy] WARNING: no previous image found; automatic image rollback is unavailable for this first deployment."
 fi
@@ -87,7 +95,7 @@ rollback_on_error(){
 trap 'rollback_on_error $?' ERR
 
 echo "[deploy] Building production image for commit $TARGET_COMMIT..."
-APP_IMAGE_TAG=current docker compose build --pull auto-media
+APP_REVISION="$TARGET_COMMIT" APP_IMAGE_TAG=current docker compose build --pull auto-media
 
 NEW_SERVICE_STARTED=true
 echo "[deploy] Recreating auto-media container..."

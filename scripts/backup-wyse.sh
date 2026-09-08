@@ -26,14 +26,7 @@ trap cleanup_staging EXIT
 
 if [[ "$running" == "true" ]]; then
   echo "[backup] Creating online SQLite snapshot with VACUUM INTO..."
-  docker compose exec -T -e BACKUP_TARGET="$STAGING_CONTAINER" auto-media node --input-type=module -e '
-    import { DatabaseSync } from "node:sqlite";
-    const target=String(process.env.BACKUP_TARGET||"");
-    if(!target.startsWith("/app/data/")||target.includes("..")) throw new Error("Invalid backup target");
-    const escaped=target.replaceAll("'","''");
-    const db=new DatabaseSync(process.env.DB_PATH||"/app/data/auto-media.sqlite");
-    try{ db.exec(`VACUUM INTO '\''${escaped}'\''`); } finally { db.close(); }
-  '
+  docker compose exec -T auto-media node scripts/sqlite-backup.mjs "$STAGING_CONTAINER" >/dev/null
   if [[ ! -s "$STAGING_HOST" ]]; then
     echo "[backup] ERROR: online snapshot was not created" >&2
     exit 1

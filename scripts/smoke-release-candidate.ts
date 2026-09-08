@@ -28,7 +28,7 @@ try{
   if(!good.database.quickCheckOk||good.database.missingTables.length)throw new Error('database acceptance checks failed');
   if(!good.deployment.config.durableResumableSessions)throw new Error('durable resumable capability missing');
 
-  run("INSERT INTO publish_jobs(id,owner_id,render_job_id,draft_id,platform,status,title,attempts,max_attempts,dry_run,deployment_test,created_at,updated_at) VALUES(?,?,?,?,?,'needs_reconcile',?,1,3,0,0,?,?)",'pub-release-block','render-x','draft-x','youtube','Ambiguous publish',now,now);
+  run("INSERT INTO publish_jobs(id,owner_id,render_job_id,draft_id,platform,status,title,attempts,max_attempts,dry_run,deployment_test,created_at,updated_at) VALUES(?,?,?,?,?,'needs_reconcile',?,1,3,0,0,?,?)",'pub-release-block',owner,'render-x','draft-x','youtube','Ambiguous publish',now,now);
   const blocked=await releaseCandidateSnapshot(owner);
   if(blocked.candidateReady||blocked.verdict!=='NO_GO'||!blocked.blockers.some(x=>x.includes('Ambiguous publish jobs')))throw new Error('needs_reconcile did not block release gate');
 

@@ -53,6 +53,8 @@ if [[ "$healthy" != "true" ]]; then
   exit 1
 fi
 
+bash scripts/audit-deployment.sh rollback "$PREVIOUS_COMMIT" "${TARGET_COMMIT:-}" >/dev/null 2>&1 || true
+
 mkdir -p "$ROOT/data/deployments"
 cat > "$ROOT/data/deployments/rollback-active.env" <<EOF
 ROLLBACK_AT=$(date -u +%Y%m%dT%H%M%SZ)

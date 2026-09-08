@@ -47,6 +47,8 @@ jobs:
         run: npm run smoke:release-candidate
       - name: Production activation wizard safety smoke test
         run: npm run smoke:activation-wizard
+      - name: Production cutover and Unlisted canary smoke test
+        run: npm run smoke:cutover
       - name: Production operator check syntax
         run: node --check scripts/production-check.mjs
       - name: Persistent render recovery smoke test

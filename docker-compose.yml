@@ -1,5 +1,6 @@
 services:
   auto-media:
+    image: bien-noi-nho-auto-media:${APP_IMAGE_TAG:-current}
     build:
       context: .
       dockerfile: Dockerfile

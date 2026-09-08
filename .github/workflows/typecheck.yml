@@ -49,6 +49,8 @@ jobs:
         run: npm run smoke:activation-wizard
       - name: YouTube Remote Canary verification smoke test
         run: npm run smoke:youtube-canary
+      - name: Controlled Public Rollout and post-publish watch smoke test
+        run: npm run smoke:public-rollout
       - name: Production cutover and Unlisted canary smoke test
         run: npm run smoke:cutover
       - name: Production operator check syntax

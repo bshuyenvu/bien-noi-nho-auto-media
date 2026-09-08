@@ -1,5 +1,6 @@
 import { all, run } from '../storage/db.js';
 import { pauseRenderQueue, renderWorkerStatus, resumeRenderQueue } from '../video/job.js';
+import { recordAuditEvent, systemActor } from './audit.js';
 
 export type SelfHealSeverity='green'|'yellow'|'red';
 type StateRow={value_json:string;updated_at:string};
@@ -18,7 +19,7 @@ export async function applySafeSelfHealing(input:SelfHealInput){
   const critical=input.memory==='red'||input.disk==='red',stableGreen=input.memory==='green'&&input.disk==='green';
   if(critical){
     state.greenCycles=0;const reason=reasonOf(input);
-    if(!worker.paused){pauseRenderQueue();state={autoPaused:true,greenCycles:0,pausedAt:new Date().toISOString(),reason,lastActionAt:new Date().toISOString()};console.warn(`[self-heal] Render Queue auto-paused: ${reason}`)}
+    if(!worker.paused){pauseRenderQueue();state={autoPaused:true,greenCycles:0,pausedAt:new Date().toISOString(),reason,lastActionAt:new Date().toISOString()};console.warn(`[self-heal] Render Queue auto-paused: ${reason}`);recordAuditEvent({ownerId:'system',actor:systemActor('self-heal'),action:'self-heal.pause',targetType:'render-queue',summary:'Self-Heal tự tạm dừng Render Queue',metadata:{reason,memory:input.memory,disk:input.disk}})}
     else if(state.autoPaused){state.reason=reason;state.pausedAt=state.pausedAt||new Date().toISOString()}
     else{state.reason=undefined;state.pausedAt=undefined}
     writeState(state);worker=await renderWorkerStatus();return{enabled:true,autoPaused:state.autoPaused,greenCycles:0,requiredGreen,queuePaused:worker.paused,reason:state.reason,lastActionAt:state.lastActionAt};
@@ -26,7 +27,7 @@ export async function applySafeSelfHealing(input:SelfHealInput){
   if(state.autoPaused){
     worker=await renderWorkerStatus();
     if(!worker.paused)state={autoPaused:false,greenCycles:0,lastActionAt:new Date().toISOString()};
-    else if(stableGreen){state.greenCycles=(state.greenCycles||0)+1;if(state.greenCycles>=requiredGreen){resumeRenderQueue();console.info(`[self-heal] Render Queue auto-resumed after ${requiredGreen} green cycles`);state={autoPaused:false,greenCycles:0,lastActionAt:new Date().toISOString()}}}
+    else if(stableGreen){state.greenCycles=(state.greenCycles||0)+1;if(state.greenCycles>=requiredGreen){resumeRenderQueue();console.info(`[self-heal] Render Queue auto-resumed after ${requiredGreen} green cycles`);recordAuditEvent({ownerId:'system',actor:systemActor('self-heal'),action:'self-heal.resume',targetType:'render-queue',summary:`Self-Heal tiếp tục Render Queue sau ${requiredGreen} chu kỳ xanh`,metadata:{requiredGreen}});state={autoPaused:false,greenCycles:0,lastActionAt:new Date().toISOString()}}}
     else state.greenCycles=0;
     writeState(state);
   }

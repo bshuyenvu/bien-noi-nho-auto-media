@@ -14,6 +14,10 @@ export interface AuditInput {
 }
 type AuditRow={id:string;owner_id:string;actor_id:string;actor_label:string;actor_role?:string;auth_type?:string;action:string;target_type:string;target_id?:string;summary:string;metadata_json?:string;created_at:string};
 
+run('CREATE TABLE IF NOT EXISTS system_audit_events (id TEXT PRIMARY KEY,owner_id TEXT NOT NULL,actor_id TEXT NOT NULL,actor_label TEXT NOT NULL,actor_role TEXT,auth_type TEXT,action TEXT NOT NULL,target_type TEXT NOT NULL,target_id TEXT,summary TEXT NOT NULL,metadata_json TEXT,created_at TEXT NOT NULL)');
+run('CREATE INDEX IF NOT EXISTS idx_system_audit_owner_created ON system_audit_events(owner_id,created_at DESC)');
+run('CREATE INDEX IF NOT EXISTS idx_system_audit_action_created ON system_audit_events(action,created_at DESC)');
+
 const SENSITIVE_KEY=/(token|secret|password|pass|authorization|cookie|api[_-]?key|credential|bearer|client[_-]?secret|refresh[_-]?token|access[_-]?token)/i;
 function envNumber(name:string,fallback:number){const n=Number(process.env[name]);return Number.isFinite(n)&&n>0?n:fallback}
 function clean(value:unknown,depth=0):unknown{

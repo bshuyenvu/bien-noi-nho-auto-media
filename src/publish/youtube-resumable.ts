@@ -25,6 +25,7 @@ export class YouTubeUploadNeedsReconcileError extends Error{
   readonly code='YOUTUBE_UPLOAD_NEEDS_RECONCILE';
   constructor(message:string,readonly httpStatus?:number){super(message);this.name='YouTubeUploadNeedsReconcileError'}
 }
+class YouTubeUploadPermanentError extends Error{constructor(message:string,readonly httpStatus:number){super(message);this.name='YouTubeUploadPermanentError'}}
 
 function envNumber(name:string,fallback:number,min:number,max:number){const n=Number(process.env[name]);return Number.isFinite(n)?Math.max(min,Math.min(max,n)):fallback}
 export function normalizedYouTubeChunkSize(raw=Number(process.env.YOUTUBE_UPLOAD_CHUNK_BYTES||DEFAULT_CHUNK)){
@@ -32,9 +33,9 @@ export function normalizedYouTubeChunkSize(raw=Number(process.env.YOUTUBE_UPLOAD
   return Math.max(CHUNK_QUANTUM,Math.min(MAX_CHUNK,Math.floor(requested/CHUNK_QUANTUM)*CHUNK_QUANTUM));
 }
 function retryMax(){return Math.trunc(envNumber('YOUTUBE_UPLOAD_MAX_RETRIES',6,1,12))}
-function retryBaseMs(){return envNumber('YOUTUBE_UPLOAD_RETRY_BASE_MS',1000,10,60_000)}
-function retryMaxMs(){return envNumber('YOUTUBE_UPLOAD_RETRY_MAX_MS',60_000,100,10*60_000)}
-function requestTimeoutMs(){return envNumber('YOUTUBE_UPLOAD_REQUEST_TIMEOUT_MS',120_000,5_000,30*60_000)}
+function retryBaseMs(){return envNumber('YOUTUBE_UPLOAD_RETRY_BASE_MS',1000,1,60_000)}
+function retryMaxMs(){return envNumber('YOUTUBE_UPLOAD_RETRY_MAX_MS',60_000,10,10*60_000)}
+function requestTimeoutMs(){return envNumber('YOUTUBE_UPLOAD_REQUEST_TIMEOUT_MS',120_000,1000,30*60_000)}
 function parseJson(text:string){try{return text?JSON.parse(text) as Record<string,unknown>:{};}catch{return{}}}
 function remoteResult(body:Record<string,unknown>):PublishResult|undefined{const id=String(body.id||'');return id?{remoteId:id,remoteUrl:`https://www.youtube.com/watch?v=${id}`,publishedAt:new Date().toISOString(),dryRun:false}:undefined}
 function nextOffsetFromRange(range:string|null,total:number){if(!range)return 0;const m=range.match(/(?:bytes=)?(\d+)-(\d+)/i);if(!m)return 0;const end=Number(m[2]);if(!Number.isFinite(end)||end<0||end>=total)throw new Error(`YouTube Range không hợp lệ: ${range}`);return end+1}
@@ -47,17 +48,13 @@ async function createSession(input:{job:PublishJob;videoPath:string;fileSize:num
   const initUrl=new URL(UPLOAD_URL);initUrl.searchParams.set('uploadType','resumable');initUrl.searchParams.set('part','snippet,status');
   let lastError='';
   for(let attempt=1;attempt<=retryMax();attempt++){
-    const accessToken=await input.getAccessToken();
-    try{
-      const r=await request(initUrl,{method:'POST',headers:{authorization:`Bearer ${accessToken}`,'content-type':'application/json; charset=UTF-8','x-upload-content-length':String(input.fileSize),'x-upload-content-type':'video/mp4'},body:JSON.stringify(input.metadata)});
-      if(r.ok){const uri=r.headers.get('location');if(!uri)throw new Error('YouTube không trả resumable upload URL');return createYouTubeUploadSession({publishJobId:input.job.id,ownerId:input.job.ownerId,sessionUri:uri,filePath:input.videoPath,fileSize:input.fileSize,chunkSize:input.chunkSize})}
-      const text=await r.text();lastError=`YouTube upload init thất bại ${r.status}: ${text.slice(0,500)}`;
-      if(!RETRYABLE_HTTP.has(r.status))throw new Error(lastError);
-      if(attempt<retryMax())await sleep(backoffMs(attempt,r.headers.get('retry-after')));
-    }catch(e){
-      if(e instanceof Error&&/^YouTube upload init thất bại \d+/.test(e.message)&&!/[ ](429|500|502|503|504):/.test(e.message))throw e;
-      lastError=e instanceof Error?e.message:String(e);if(attempt<retryMax())await sleep(backoffMs(attempt,null));
-    }
+    const accessToken=await input.getAccessToken();let r:Response;
+    try{r=await request(initUrl,{method:'POST',headers:{authorization:`Bearer ${accessToken}`,'content-type':'application/json; charset=UTF-8','x-upload-content-length':String(input.fileSize),'x-upload-content-type':'video/mp4'},body:JSON.stringify(input.metadata)})}
+    catch(e){lastError=e instanceof Error?e.message:String(e);if(attempt<retryMax()){await sleep(backoffMs(attempt,null));continue}break}
+    if(r.ok){const uri=r.headers.get('location');if(!uri)throw new Error('YouTube không trả resumable upload URL');return createYouTubeUploadSession({publishJobId:input.job.id,ownerId:input.job.ownerId,sessionUri:uri,filePath:input.videoPath,fileSize:input.fileSize,chunkSize:input.chunkSize})}
+    const text=await r.text();lastError=`YouTube upload init thất bại ${r.status}: ${text.slice(0,500)}`;
+    if(!RETRYABLE_HTTP.has(r.status))throw new YouTubeUploadPermanentError(lastError,r.status);
+    if(attempt<retryMax())await sleep(backoffMs(attempt,r.headers.get('retry-after')));
   }
   throw new Error(`YouTube upload init không thành công sau ${retryMax()} lần: ${lastError}`);
 }
@@ -66,21 +63,16 @@ type StatusResult={kind:'incomplete';offset:number}|{kind:'completed';result:Pub
 async function querySessionStatus(session:YouTubeUploadSession,getAccessToken:()=>Promise<string>):Promise<StatusResult>{
   let lastError='';
   for(let attempt=1;attempt<=retryMax();attempt++){
-    const token=await getAccessToken();
-    try{
-      const r=await request(session.sessionUri,{method:'PUT',headers:{authorization:`Bearer ${token}`,'content-length':'0','content-range':`bytes */${session.fileSize}`}});
-      if(r.status===308){const offset=nextOffsetFromRange(r.headers.get('range'),session.fileSize);updateYouTubeUploadProgress(session.publishJobId,session.ownerId,offset,308);return{kind:'incomplete',offset}}
-      const text=await r.text();
-      if(r.ok){const result=remoteResult(parseJson(text));if(!result){markYouTubeUploadNeedsReconcile(session.publishJobId,session.ownerId,r.status);throw new YouTubeUploadNeedsReconcileError('YouTube báo upload hoàn tất nhưng phản hồi không có video id; cần Reconcile.',r.status)}markYouTubeUploadCompleted(session.publishJobId,session.ownerId,result.remoteId,result.remoteUrl);return{kind:'completed',result}}
-      if(r.status===404)return{kind:'expired'};
-      lastError=`YouTube status check ${r.status}: ${text.slice(0,500)}`;
-      if(!RETRYABLE_HTTP.has(r.status)){markYouTubeUploadFailed(session.publishJobId,session.ownerId,r.status);throw new Error(lastError)}
-      bumpYouTubeUploadRetry(session.publishJobId,session.ownerId,r.status);if(attempt<retryMax())await sleep(backoffMs(attempt,r.headers.get('retry-after')));
-    }catch(e){
-      if(e instanceof YouTubeUploadNeedsReconcileError)throw e;
-      if(e instanceof Error&&/^YouTube status check \d+/.test(e.message)&&!/[ ](429|500|502|503|504):/.test(e.message))throw e;
-      lastError=e instanceof Error?e.message:String(e);bumpYouTubeUploadRetry(session.publishJobId,session.ownerId);if(attempt<retryMax())await sleep(backoffMs(attempt,null));
-    }
+    const token=await getAccessToken();let r:Response;
+    try{r=await request(session.sessionUri,{method:'PUT',headers:{authorization:`Bearer ${token}`,'content-length':'0','content-range':`bytes */${session.fileSize}`}})}
+    catch(e){lastError=e instanceof Error?e.message:String(e);bumpYouTubeUploadRetry(session.publishJobId,session.ownerId);if(attempt<retryMax()){await sleep(backoffMs(attempt,null));continue}break}
+    if(r.status===308){const offset=nextOffsetFromRange(r.headers.get('range'),session.fileSize);updateYouTubeUploadProgress(session.publishJobId,session.ownerId,offset,308);return{kind:'incomplete',offset}}
+    const text=await r.text();
+    if(r.ok){const result=remoteResult(parseJson(text));if(!result){markYouTubeUploadNeedsReconcile(session.publishJobId,session.ownerId,r.status);throw new YouTubeUploadNeedsReconcileError('YouTube báo upload hoàn tất nhưng phản hồi không có video id; cần Reconcile.',r.status)}markYouTubeUploadCompleted(session.publishJobId,session.ownerId,result.remoteId,result.remoteUrl);return{kind:'completed',result}}
+    if(r.status===404)return{kind:'expired'};
+    lastError=`YouTube status check ${r.status}: ${text.slice(0,500)}`;
+    if(!RETRYABLE_HTTP.has(r.status)){markYouTubeUploadFailed(session.publishJobId,session.ownerId,r.status);throw new YouTubeUploadPermanentError(lastError,r.status)}
+    bumpYouTubeUploadRetry(session.publishJobId,session.ownerId,r.status);if(attempt<retryMax())await sleep(backoffMs(attempt,r.headers.get('retry-after')));
   }
   markYouTubeUploadNeedsReconcile(session.publishJobId,session.ownerId);
   throw new YouTubeUploadNeedsReconcileError(`Không xác định được trạng thái resumable upload sau ${retryMax()} lần: ${lastError}`);
@@ -109,7 +101,7 @@ export async function uploadYouTubeResumable(input:{job:PublishJob;videoPath:str
     }else session=getYouTubeUploadSession(input.job.id,input.job.ownerId);
   }
   if(!session)session=await createSession({job:input.job,videoPath:input.videoPath,fileSize:info.size,chunkSize,metadata:input.metadata,getAccessToken:input.getAccessToken});
-  let offset=session.nextOffset,stalledRetries=0;
+  let offset=session.nextOffset,stalled308=0,consecutiveFailures=0;
   const fh=await open(input.videoPath,'r');
   try{
     while(offset<info.size){
@@ -120,22 +112,24 @@ export async function uploadYouTubeResumable(input:{job:PublishJob;videoPath:str
       try{const token=await input.getAccessToken();response=await request(session.sessionUri,{method:'PUT',headers:{authorization:`Bearer ${token}`,'content-type':'video/mp4','content-length':String(read.bytesRead),'content-range':`bytes ${offset}-${end}/${info.size}`},body:buf.subarray(0,read.bytesRead)})}catch(e){networkError=e instanceof Error?e.message:String(e)}
       if(response?.status===308){
         const next=nextOffsetFromRange(response.headers.get('range'),info.size);updateYouTubeUploadProgress(input.job.id,input.job.ownerId,next,308);
-        if(next>offset){offset=next;stalledRetries=0;continue}
-        stalledRetries++;if(stalledRetries>retryMax()){markYouTubeUploadNeedsReconcile(input.job.id,input.job.ownerId,308);throw new YouTubeUploadNeedsReconcileError('YouTube nhiều lần trả 308 nhưng không ghi nhận tiến độ; cần Reconcile.',308)}
-        await sleep(backoffMs(stalledRetries,response.headers.get('retry-after')));continue;
+        if(next>offset){offset=next;stalled308=0;consecutiveFailures=0;continue}
+        stalled308++;consecutiveFailures++;
+        if(stalled308>=retryMax()||consecutiveFailures>=retryMax()){markYouTubeUploadNeedsReconcile(input.job.id,input.job.ownerId,308);throw new YouTubeUploadNeedsReconcileError('YouTube nhiều lần trả 308 nhưng không ghi nhận tiến độ; cần Reconcile.',308)}
+        await sleep(backoffMs(stalled308,response.headers.get('retry-after')));continue;
       }
       if(response?.ok){const text=await response.text(),result=remoteResult(parseJson(text));if(!result){markYouTubeUploadNeedsReconcile(input.job.id,input.job.ownerId,response.status);throw new YouTubeUploadNeedsReconcileError('YouTube báo upload hoàn tất nhưng thiếu video id; cần Reconcile.',response.status)}markYouTubeUploadCompleted(input.job.id,input.job.ownerId,result.remoteId,result.remoteUrl);return result}
       const status=response?.status;
       if(response&&status===404){markYouTubeUploadNeedsReconcile(input.job.id,input.job.ownerId,404);throw new YouTubeUploadNeedsReconcileError('Resumable session hết hạn trong lúc upload; cần kiểm tra YouTube trước khi Retry.',404)}
-      if(response&&status&&!RETRYABLE_HTTP.has(status)){const text=await response.text();markYouTubeUploadFailed(input.job.id,input.job.ownerId,status);throw new Error(`YouTube upload thất bại ${status}: ${text.slice(0,500)}`)}
-      bumpYouTubeUploadRetry(input.job.id,input.job.ownerId,status);
-      const retryNo=Math.min(retryMax(),(getYouTubeUploadSession(input.job.id,input.job.ownerId)?.retryCount||1));
-      await sleep(backoffMs(retryNo,response?.headers.get('retry-after')||null));
-      const fresh=getYouTubeUploadSession(input.job.id,input.job.ownerId);if(!fresh)throw new YouTubeUploadNeedsReconcileError('Mất resumable session trong lúc phục hồi upload.');
-      let checked:StatusResult;try{checked=await querySessionStatus(fresh,input.getAccessToken)}catch(e){if(e instanceof YouTubeUploadNeedsReconcileError)throw e;throw e}
+      if(response&&status&&!RETRYABLE_HTTP.has(status)){const text=await response.text();markYouTubeUploadFailed(input.job.id,input.job.ownerId,status);throw new YouTubeUploadPermanentError(`YouTube upload thất bại ${status}: ${text.slice(0,500)}`,status)}
+      consecutiveFailures++;bumpYouTubeUploadRetry(input.job.id,input.job.ownerId,status);
+      const retryNo=Math.min(retryMax(),consecutiveFailures);await sleep(backoffMs(retryNo,response?.headers.get('retry-after')||null));
+      const fresh=getYouTubeUploadSession(input.job.id,input.job.ownerId);if(!fresh){throw new YouTubeUploadNeedsReconcileError('Mất resumable session trong lúc phục hồi upload.')}
+      const before=offset,checked=await querySessionStatus(fresh,input.getAccessToken);
       if(checked.kind==='completed')return checked.result;
       if(checked.kind==='expired'){markYouTubeUploadNeedsReconcile(input.job.id,input.job.ownerId,404);throw new YouTubeUploadNeedsReconcileError('Không thể xác nhận session sau lỗi truyền tải; session đã hết hạn.',404)}
-      offset=checked.offset;stalledRetries=0;
+      offset=checked.offset;stalled308=0;
+      if(offset>before)consecutiveFailures=0;
+      else if(consecutiveFailures>=retryMax()){markYouTubeUploadNeedsReconcile(input.job.id,input.job.ownerId,status);throw new YouTubeUploadNeedsReconcileError(`Không có tiến độ sau ${retryMax()} lần phục hồi resumable upload; cần Reconcile.`,status)}
       if(networkError)console.warn(`[youtube-upload] recovered after network error at byte ${offset}: ${networkError}`);
     }
   }finally{await fh.close()}

@@ -27,3 +27,5 @@ jobs:
         run: npm run smoke:publish
       - name: YouTube OAuth and resumable upload smoke test
         run: npm run smoke:youtube-oauth
+      - name: Frontend dashboard syntax smoke test
+        run: npm run smoke:ui

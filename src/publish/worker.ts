@@ -17,7 +17,7 @@ function quarantineInterrupted(row:Row,reason='server_restart_during_publish'){
   const now=new Date().toISOString(),message='Publish bị gián đoạn khi tiến trình dừng và không có resumable session an toàn. Hãy kiểm tra nền tảng từ xa trước khi Retry để tránh đăng trùng.';
   run("UPDATE publish_jobs SET status='needs_reconcile',error=?,reconcile_reason=?,reconcile_at=?,reconciled_at=NULL,reconciled_by=NULL,reconcile_note=NULL,updated_at=? WHERE id=? AND status='publishing'",message,reason,now,now,row.id);
 }
-function recoverInterruptedPublishing(){
+export function recoverInterruptedPublishing(){
   if(recoveryChecked)return{resumable:0,reconcile:0};recoveryChecked=true;
   const rows=all<Row>("SELECT * FROM publish_jobs WHERE status='publishing' ORDER BY updated_at ASC");let resumable=0,reconcile=0;
   for(const row of rows){

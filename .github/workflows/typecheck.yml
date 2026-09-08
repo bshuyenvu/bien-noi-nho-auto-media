@@ -37,6 +37,8 @@ jobs:
         run: npm run smoke:audit
       - name: Production analytics KPI and timing smoke test
         run: npm run smoke:analytics
+      - name: AI operations assistant read-only smoke test
+        run: npm run smoke:ops-assistant
       - name: Production operator check syntax
         run: node --check scripts/production-check.mjs
       - name: Persistent render recovery smoke test

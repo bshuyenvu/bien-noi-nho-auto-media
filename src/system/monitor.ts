@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { all, run } from '../storage/db.js';
 import { resourceSnapshot } from './resource-guard.js';
 import { storageSnapshot } from './storage-guard.js';
@@ -15,7 +16,7 @@ function envNumber(name:string,fallback:number){const n=Number(process.env[name]
 function worst(...values:MonitorSeverity[]):MonitorSeverity{return values.reduce((a,b)=>severityRank[b]>severityRank[a]?b:a,'green' as MonitorSeverity)}
 function ageMs(iso?:string){if(!iso)return Number.POSITIVE_INFINITY;const t=Date.parse(iso);return Number.isFinite(t)?Date.now()-t:Number.POSITIVE_INFINITY}
 function parseMetadata(raw?:string){if(!raw)return undefined;try{return JSON.parse(raw)}catch{return undefined}}
-function incidentId(ownerId:string,key:string){return `${ownerId}:${key}`}
+function incidentId(ownerId:string,key:string){return `${ownerId}:${key}:${randomUUID()}`}
 
 function reconcileIncident(ownerId:string,key:string,component:string,severity:MonitorSeverity,message:string,metadata:Record<string,unknown>){
   const now=new Date().toISOString();

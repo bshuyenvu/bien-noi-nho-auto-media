@@ -1,4 +1,4 @@
-import { mkdtempSync,rmSync,mkdirSync } from 'node:fs';
+import { mkdtempSync,rmSync,mkdirSync,writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 const dir=mkdtempSync(join(tmpdir(),'public-ramp-smoke-')),output=join(dir,'output');mkdirSync(output,{recursive:true});
@@ -11,9 +11,11 @@ try{
   const owner='ramp-owner',now=new Date().toISOString();
   run('INSERT INTO accounts(id,clerk_user_id,email,role,plan,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)',owner,'clerk-ramp','ramp@example.test','admin','pro','active',now,now);
   updateProductionActivation(owner,{status:'armed',armed:true,maxPrivacy:'public',publicApprovedAt:now,publicRolloutStatus:'completed',publicRolloutCompletedAt:now},'smoke');
-  const first=queue.enqueuePublish({ownerId:owner,renderJobId:'render-1',draftId:'draft-1',platform:'youtube',title:'Public 1',dryRun:false});
+  const addSource=(n:number)=>{const draft=`draft-${n}`,render=`render-${n}`,video=join(output,`${render}.mp4`),body=`Nội dung kiểm thử Public Ramp số ${n}. `.repeat(8)+`Chi tiết riêng cho bản tin ${n}.`;writeFileSync(video,Buffer.from(`video-${n}-`.repeat(200)));run('INSERT INTO drafts(id,owner_id,title,body,source_url,format,status,created_at) VALUES(?,?,?,?,?,?,?,?)',draft,owner,`Public story ${n}`,body,`https://example.test/news/${n}`,'latest','approved',now);run('INSERT INTO render_jobs(id,draft_id,owner_id,status,progress,output,created_at,updated_at,attempts,max_attempts) VALUES(?,?,?,?,?,?,?,?,?,?)',render,draft,owner,'ready',100,video,now,now,1,3);return{draft,render}};
+  const one=addSource(1),two=addSource(2);
+  const first=queue.enqueuePublish({ownerId:owner,renderJobId:one.render,draftId:one.draft,platform:'youtube',title:'Public story 1',dryRun:false});
   if(first.publishPrivacy!=='public')throw new Error('publish_privacy was not persisted on enqueue object');
-  let burstBlocked=false;try{queue.enqueuePublish({ownerId:owner,renderJobId:'render-2',draftId:'draft-2',platform:'youtube',title:'Public 2',dryRun:false})}catch(e){burstBlocked=String(e).includes('Public Ramp')}
+  let burstBlocked=false;try{queue.enqueuePublish({ownerId:owner,renderJobId:two.render,draftId:two.draft,platform:'youtube',title:'Public story 2',dryRun:false})}catch(e){burstBlocked=String(e).includes('Public Ramp')}
   if(!burstBlocked)throw new Error('Stage 1 did not block immediate second PUBLIC enqueue');
   const snap=ramp.publicRampSnapshot(owner);if(snap.limits.hourly!==1||snap.usage.hour!==1)throw new Error(`unexpected Stage 1 snapshot: ${JSON.stringify(snap)}`);
   ramp.recordPublicRampFailure(owner,'YouTube HTTP 429 quotaExceeded');

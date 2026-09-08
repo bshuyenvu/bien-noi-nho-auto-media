@@ -3,6 +3,7 @@ import { accessOf } from '../auth/access.js';
 import { productionMonitorRouter } from '../system/monitor-routes.js';
 import { releaseReadinessRouter } from '../system/release-routes.js';
 import { activationWizardRouter } from './activation-routes.js';
+import { contentSafetyRouter } from './content-safety-routes.js';
 import { publicRolloutRouter } from './public-rollout-routes.js';
 import { publicRampRouter } from './public-ramp-routes.js';
 import { publishReconcileRouter } from './reconcile-routes.js';
@@ -16,6 +17,7 @@ publishOAuthRouter.use(releaseReadinessRouter);
 publishOAuthRouter.use(activationWizardRouter);
 publishOAuthRouter.use(publicRolloutRouter);
 publishOAuthRouter.use(publicRampRouter);
+publishOAuthRouter.use(contentSafetyRouter);
 publishOAuthRouter.use(publishReconcileRouter);
 function esc(v:string){return v.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c))}
 function resultPage(ok:boolean,title:string,message:string){const tone=ok?'#16a34a':'#dc2626';return`<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style>body{margin:0;background:#07111f;color:#e5eefb;font-family:system-ui;display:grid;place-items:center;min-height:100vh}.card{max-width:620px;margin:24px;padding:28px;border-radius:18px;background:#111827;border:1px solid #334155}.state{font-weight:800;color:${tone};font-size:22px}.msg{margin:14px 0;color:#cbd5e1;line-height:1.6}.btn{display:inline-block;padding:10px 14px;border-radius:10px;background:#2563eb;color:#fff;text-decoration:none;font-weight:700}</style></head><body><main class="card"><div class="state">${ok?'✓':'⚠'} ${esc(title)}</div><div class="msg">${esc(message)}</div><a class="btn" href="/">QUAY LẠI BẢNG ĐIỀU KHIỂN</a></main></body></html>`}

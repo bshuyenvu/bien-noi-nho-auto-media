@@ -5,6 +5,8 @@ import { storageSnapshot } from './storage-guard.js';
 import { renderWorkerStatus } from '../video/job.js';
 import { publishWorkerStatus } from '../publish/worker.js';
 import { publisherDeploymentReadiness } from '../publish/deployment-readiness.js';
+import { alertingStatus, dispatchExternalAlert, type AlertEvent } from './alerts.js';
+import { applySafeSelfHealing, selfHealingStatus } from './self-heal.js';
 
 export type MonitorSeverity='green'|'yellow'|'red';
 type IncidentRow={id:string;owner_id:string;incident_key:string;component:string;severity:MonitorSeverity;message:string;metadata_json?:string;opened_at:string;last_seen_at:string;resolved_at?:string};
@@ -20,24 +22,26 @@ function ageMs(iso?:string){if(!iso)return Number.POSITIVE_INFINITY;const t=Date
 function parseMetadata(raw?:string){if(!raw)return undefined;try{return JSON.parse(raw)}catch{return undefined}}
 function incidentId(ownerId:string,key:string){return `${ownerId}:${key}:${randomUUID()}`}
 
-function reconcileIncident(ownerId:string,key:string,component:string,severity:MonitorSeverity,message:string,metadata:Record<string,unknown>){
+function reconcileIncident(ownerId:string,key:string,component:string,severity:MonitorSeverity,message:string,metadata:Record<string,unknown>):AlertEvent|undefined{
   const now=new Date().toISOString();
   const open=all<IncidentRow>('SELECT * FROM system_incidents WHERE owner_id=? AND incident_key=? AND resolved_at IS NULL LIMIT 1',ownerId,key)[0];
   if(severity==='green'){
-    if(open){run('UPDATE system_incidents SET resolved_at=?,last_seen_at=? WHERE id=?',now,now,open.id);console.info(`[monitor-recovery] ${component}: ${open.message}`)}
+    if(open){run('UPDATE system_incidents SET resolved_at=?,last_seen_at=? WHERE id=?',now,now,open.id);console.info(`[monitor-recovery] ${component}: ${open.message}`);return{incidentId:open.id,ownerId,kind:'recovery',component,severity:'green',message:`Đã phục hồi: ${open.message}`,occurredAt:now}}
     return;
   }
   const json=JSON.stringify(metadata);
   if(open){
     run('UPDATE system_incidents SET severity=?,message=?,metadata_json=?,last_seen_at=? WHERE id=?',severity,message,json,now,open.id);
     if(open.severity!==severity)console.warn(`[monitor-alert] ${component}: ${open.severity} -> ${severity}: ${message}`);
-  }else{
-    run('INSERT INTO system_incidents(id,owner_id,incident_key,component,severity,message,metadata_json,opened_at,last_seen_at,resolved_at) VALUES(?,?,?,?,?,?,?,?,?,NULL)',incidentId(ownerId,key),ownerId,key,component,severity,message,json,now,now);
-    console.warn(`[monitor-alert] ${component}: ${severity}: ${message}`);
+    return{incidentId:open.id,ownerId,kind:'update',component,severity,message,occurredAt:now};
   }
+  const id=incidentId(ownerId,key);
+  run('INSERT INTO system_incidents(id,owner_id,incident_key,component,severity,message,metadata_json,opened_at,last_seen_at,resolved_at) VALUES(?,?,?,?,?,?,?,?,?,NULL)',id,ownerId,key,component,severity,message,json,now,now);
+  console.warn(`[monitor-alert] ${component}: ${severity}: ${message}`);
+  return{incidentId:id,ownerId,kind:'open',component,severity,message,occurredAt:now};
 }
 
-function trimHistory(){const days=envNumber('MONITOR_HISTORY_DAYS',30),cutoff=new Date(Date.now()-days*86400000).toISOString();run('DELETE FROM system_incidents WHERE resolved_at IS NOT NULL AND resolved_at<?',cutoff)}
+function trimHistory(){const days=envNumber('MONITOR_HISTORY_DAYS',30),cutoff=new Date(Date.now()-days*86400000).toISOString();run('DELETE FROM system_alert_deliveries WHERE sent_at<?',cutoff);run('DELETE FROM system_incidents WHERE resolved_at IS NOT NULL AND resolved_at<?',cutoff)}
 function publishQueueSnapshot(){
   const rows=all<QueueCountRow>('SELECT status,COUNT(*) AS count FROM publish_jobs GROUP BY status'),counts:Record<string,number>={};
   for(const row of rows)counts[row.status]=Number(row.count||0);
@@ -47,7 +51,7 @@ function publishQueueSnapshot(){
 }
 
 export async function productionMonitorSnapshot(ownerId?:string){
-  const [render,storage]=await Promise.all([renderWorkerStatus(),storageSnapshot().catch(()=>null)]),resources=resourceSnapshot(),publish=publishWorkerStatus(),publishQueue=publishQueueSnapshot();
+  const [render,storage,selfHealing]=await Promise.all([renderWorkerStatus(),storageSnapshot().catch(()=>null),selfHealingStatus()]),resources=resourceSnapshot(),publish=publishWorkerStatus(),publishQueue=publishQueueSnapshot();
   const warnMemoryMb=envNumber('MONITOR_WARN_AVAILABLE_MB',768),warnLoadPerCpu=envNumber('MONITOR_WARN_LOAD_PER_CPU',0.70),warnCgroupPct=envNumber('MONITOR_WARN_CGROUP_MEMORY_PCT',75),critCgroupPct=envNumber('MONITOR_CRIT_CGROUP_MEMORY_PCT',90),loadPerCpu=resources.cpuLoad1m/Math.max(1,resources.cpuCount),cgroupPct=resources.cgroupMemoryUsagePct;
   const memorySeverity:MonitorSeverity=!resources.memoryOk||(cgroupPct!=null&&cgroupPct>=critCgroupPct)?'red':resources.availableMemoryMb<warnMemoryMb||(cgroupPct!=null&&cgroupPct>=warnCgroupPct)?'yellow':'green';
   const cpuSeverity:MonitorSeverity=!resources.cpuOk?'red':loadPerCpu>warnLoadPerCpu?'yellow':'green';
@@ -71,19 +75,21 @@ export async function productionMonitorSnapshot(ownerId?:string){
     youtube:{severity:youtubeSeverity,message:!deployment?'Chưa nạp owner readiness':youtubeSeverity==='green'?'YouTube gate phù hợp trạng thái hiện tại':deployment.blockers.join(' | '),ready:deployment?.youtubeLiveReady,configurationReady:deployment?.configurationReady,liveEnabled:deployment?.config.liveEnabled,privacyStatus:deployment?.config.privacyStatus},
   };
   const overall=worst(memorySeverity,cpuSeverity,diskSeverity,renderSeverity,publishSeverity,youtubeSeverity);
-  return{overall,checkedAt:new Date().toISOString(),components,render,publish,publishQueue,deployment,monitor:{started:Boolean(timer),intervalMs:envNumber('MONITOR_INTERVAL_MS',30000),lastCycleAt,lastCycleError}};
+  return{overall,checkedAt:new Date().toISOString(),components,render,publish,publishQueue,deployment,selfHealing,alerting:alertingStatus(),monitor:{started:Boolean(timer),intervalMs:envNumber('MONITOR_INTERVAL_MS',30000),lastCycleAt,lastCycleError}};
 }
 
 export async function runProductionMonitorCycle(ownerId?:string){
   try{
-    const snapshot=await productionMonitorSnapshot(ownerId),systemOwner='system';
-    reconcileIncident(systemOwner,'memory','memory',snapshot.components.memory.severity,snapshot.components.memory.message,snapshot.components.memory);
-    reconcileIncident(systemOwner,'cpu','cpu',snapshot.components.cpu.severity,snapshot.components.cpu.message,snapshot.components.cpu);
-    reconcileIncident(systemOwner,'disk','disk',snapshot.components.disk.severity,snapshot.components.disk.message,snapshot.components.disk);
-    reconcileIncident(systemOwner,'render-worker','render',snapshot.components.render.severity,snapshot.components.render.message,snapshot.components.render);
-    reconcileIncident(systemOwner,'publish-worker','publish',snapshot.components.publish.severity,snapshot.components.publish.message,snapshot.components.publish);
-    if(ownerId)reconcileIncident(ownerId,'youtube-readiness','youtube',snapshot.components.youtube.severity,snapshot.components.youtube.message,snapshot.components.youtube);
-    trimHistory();lastCycleAt=new Date().toISOString();lastCycleError=undefined;return snapshot;
+    const snapshot=await productionMonitorSnapshot(ownerId),systemOwner='system',events:(AlertEvent|undefined)[]=[];
+    events.push(reconcileIncident(systemOwner,'memory','memory',snapshot.components.memory.severity,snapshot.components.memory.message,snapshot.components.memory));
+    events.push(reconcileIncident(systemOwner,'cpu','cpu',snapshot.components.cpu.severity,snapshot.components.cpu.message,snapshot.components.cpu));
+    events.push(reconcileIncident(systemOwner,'disk','disk',snapshot.components.disk.severity,snapshot.components.disk.message,snapshot.components.disk));
+    events.push(reconcileIncident(systemOwner,'render-worker','render',snapshot.components.render.severity,snapshot.components.render.message,snapshot.components.render));
+    events.push(reconcileIncident(systemOwner,'publish-worker','publish',snapshot.components.publish.severity,snapshot.components.publish.message,snapshot.components.publish));
+    if(ownerId)events.push(reconcileIncident(ownerId,'youtube-readiness','youtube',snapshot.components.youtube.severity,snapshot.components.youtube.message,snapshot.components.youtube));
+    const selfHealing=await applySafeSelfHealing({memory:snapshot.components.memory.severity,disk:snapshot.components.disk.severity,memoryMessage:snapshot.components.memory.message,diskMessage:snapshot.components.disk.message});
+    await Promise.allSettled(events.filter((x):x is AlertEvent=>Boolean(x)).map(event=>dispatchExternalAlert(event)));
+    trimHistory();lastCycleAt=new Date().toISOString();lastCycleError=undefined;return{...snapshot,selfHealing,alerting:alertingStatus()};
   }catch(e){lastCycleError=e instanceof Error?e.message:String(e);lastCycleAt=new Date().toISOString();throw e}
 }
 

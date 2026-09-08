@@ -27,6 +27,10 @@ CREATE INDEX IF NOT EXISTS idx_publish_credentials_owner ON publish_credentials(
 CREATE TABLE IF NOT EXISTS system_incidents (id TEXT PRIMARY KEY,owner_id TEXT NOT NULL,incident_key TEXT NOT NULL,component TEXT NOT NULL,severity TEXT NOT NULL,message TEXT NOT NULL,metadata_json TEXT,opened_at TEXT NOT NULL,last_seen_at TEXT NOT NULL,resolved_at TEXT);
 CREATE INDEX IF NOT EXISTS idx_system_incidents_owner_seen ON system_incidents(owner_id,last_seen_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_system_incidents_active_key ON system_incidents(owner_id,incident_key) WHERE resolved_at IS NULL;
+CREATE TABLE IF NOT EXISTS system_runtime_state (state_key TEXT PRIMARY KEY,value_json TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS system_alert_deliveries (id TEXT PRIMARY KEY,incident_id TEXT NOT NULL,owner_id TEXT NOT NULL,channel TEXT NOT NULL,kind TEXT NOT NULL,severity TEXT NOT NULL,status TEXT NOT NULL,error TEXT,sent_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_system_alert_incident_channel ON system_alert_deliveries(incident_id,channel,sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_system_alert_sent ON system_alert_deliveries(sent_at DESC);
 `);
 try{db.exec('ALTER TABLE rss_sources ADD COLUMN locked INTEGER NOT NULL DEFAULT 0')}catch{}
 try{db.exec('ALTER TABLE rss_sources ADD COLUMN managed INTEGER NOT NULL DEFAULT 0')}catch{}

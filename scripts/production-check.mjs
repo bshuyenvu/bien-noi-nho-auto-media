@@ -27,14 +27,18 @@ try{
     process.exit(0);
   }
 
-  const monitoring=await request('/api/admin/monitoring',true),overall=String(monitoring.snapshot?.overall||'unknown');
+  const monitoring=await request('/api/admin/monitoring',true),snapshot=monitoring.snapshot||{},overall=String(snapshot.overall||'unknown');
   line('Production monitor',overall!=='red',overall.toUpperCase());
-  const components=monitoring.snapshot?.components||{};
+  const components=snapshot.components||{};
   for(const name of ['memory','cpu','disk','render','publish','youtube']){
     const c=components[name];if(c?.severity&&c.severity!=='green')console.log(`  ${name}: ${String(c.severity).toUpperCase()} • ${c.message||''}`);
   }
   const activeIncidents=Array.isArray(monitoring.incidents)?monitoring.incidents.filter(x=>x.active):[];
   if(activeIncidents.length)console.log(`  Active incidents: ${activeIncidents.length}`);
+  const selfHeal=snapshot.selfHealing||{};
+  line('Safe self-heal',selfHeal.enabled!==false,selfHeal.enabled===false?'OFF':selfHeal.autoPaused?`AUTO-PAUSED • green ${selfHeal.greenCycles||0}/${selfHeal.requiredGreen||3}`:'ON');
+  const alerting=snapshot.alerting||{},channels=alerting.channels||{},enabledChannels=[channels.webhook?'webhook':'',channels.telegram?'telegram':'',channels.email?'email':''].filter(Boolean);
+  line('External alerts',Boolean(alerting.enabled),alerting.enabled?`${enabledChannels.join(', ')} • min ${String(alerting.minSeverity||'red').toUpperCase()}`:'not configured');
 
   const deployment=await request('/api/publish-deployment-readiness',true);
   line('Publisher configuration',Boolean(deployment.configurationReady),deployment.configurationReady?'configured':'not complete');

@@ -9,3 +9,11 @@ Optional local Vietnamese speech synthesis is provided by VieNeu-TTS v3.3.0.
 - License: Apache License 2.0
 
 VieNeu-TTS v4 is proprietary and is not installed or called by this project.
+
+## Nodemailer
+
+Optional SMTP email alerts use Nodemailer.
+
+- Project: https://github.com/nodemailer/nodemailer
+- Package: `nodemailer`
+- License: MIT-0

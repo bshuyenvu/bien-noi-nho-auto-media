@@ -12,6 +12,7 @@ npm-debug.log*
 !/data/.gitkeep
 /output/*
 !/output/.gitkeep
+/backups/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal

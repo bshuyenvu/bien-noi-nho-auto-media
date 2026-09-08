@@ -6,6 +6,9 @@ COPY src ./src
 RUN npm run build
 
 FROM node:22-bookworm-slim AS runner
+ARG APP_REVISION=unknown
+LABEL org.opencontainers.image.title="bien-noi-nho-auto-media" \
+      org.opencontainers.image.revision="$APP_REVISION"
 WORKDIR /app
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core ca-certificates \
@@ -16,6 +19,7 @@ RUN npm install --omit=dev \
 COPY --from=builder /app/dist ./dist
 COPY public ./public
 COPY scripts/production-check.mjs ./scripts/production-check.mjs
+COPY scripts/sqlite-backup.mjs ./scripts/sqlite-backup.mjs
 RUN mkdir -p /app/data /app/output \
   && chown -R node:node /app
 USER node

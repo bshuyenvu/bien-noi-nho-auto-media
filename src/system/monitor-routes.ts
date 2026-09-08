@@ -3,11 +3,13 @@ import { accessOf, requireAdmin } from '../auth/access.js';
 import { sendExternalAlertTest } from './alerts.js';
 import { acknowledgeIncident, endMaintenance, maintenanceStatus, silenceIncident, startMaintenance, unsilenceIncident } from './maintenance.js';
 import { monitorIncidents, productionMonitorSnapshot, runProductionMonitorCycle, startProductionMonitor } from './monitor.js';
+import { auditActor, recordAuditEvent } from './audit.js';
 
 export const productionMonitorRouter=Router();
 queueMicrotask(startProductionMonitor);
 function actorOf(res:any){return accessOf(res).accountId}
 function minutesOf(value:unknown){const n=Number(value);return Number.isFinite(n)&&n>0?Math.round(n):undefined}
+function audit(res:any,ownerId:string,action:string,targetType:string,targetId:string|undefined,summary:string,metadata?:unknown){const access=accessOf(res);recordAuditEvent({ownerId,actor:auditActor(access),action,targetType,targetId,summary,metadata})}
 
 productionMonitorRouter.get('/admin/monitoring',async(_req,res)=>{
   const ownerId=accessOf(res).accountId;
@@ -17,20 +19,20 @@ productionMonitorRouter.get('/admin/monitoring',async(_req,res)=>{
 
 productionMonitorRouter.post('/admin/monitoring/run',requireAdmin,async(_req,res)=>{
   const ownerId=accessOf(res).accountId;
-  try{const snapshot=await runProductionMonitorCycle(ownerId);return res.json({ok:true,snapshot,incidents:monitorIncidents(ownerId,60),maintenance:maintenanceStatus()})}
+  try{const snapshot=await runProductionMonitorCycle(ownerId);audit(res,'system','monitor.run','production-monitor',undefined,'Chạy Production Monitor thủ công',{overall:snapshot.overall});return res.json({ok:true,snapshot,incidents:monitorIncidents(ownerId,60),maintenance:maintenanceStatus()})}
   catch(e){return res.status(500).json({error:e instanceof Error?e.message:String(e)})}
 });
 
 productionMonitorRouter.post('/admin/monitoring/alerts/test',requireAdmin,async(_req,res)=>{
   const ownerId=accessOf(res).accountId;
-  try{const result=await sendExternalAlertTest(ownerId);if(!result.results.length)return res.status(409).json({error:'Chưa cấu hình Webhook, Telegram hoặc Email cảnh báo'});return res.json({ok:result.results.some(x=>x.sent),results:result.results})}
+  try{const result=await sendExternalAlertTest(ownerId);if(!result.results.length)return res.status(409).json({error:'Chưa cấu hình Webhook, Telegram hoặc Email cảnh báo'});audit(res,ownerId,'alerts.test','alerting',result.event.incidentId,'Gửi cảnh báo kiểm tra',{channels:result.results.map(x=>({channel:x.channel,sent:x.sent}))});return res.json({ok:result.results.some(x=>x.sent),results:result.results})}
   catch(e){return res.status(500).json({error:e instanceof Error?e.message:String(e)})}
 });
 
 productionMonitorRouter.get('/admin/monitoring/maintenance',(_req,res)=>res.json(maintenanceStatus()));
-productionMonitorRouter.post('/admin/monitoring/maintenance',requireAdmin,(req,res)=>{try{return res.status(201).json(startMaintenance(actorOf(res),minutesOf(req.body?.minutes),req.body?.reason?String(req.body.reason):undefined))}catch(e){return res.status(409).json({error:e instanceof Error?e.message:String(e)})}});
-productionMonitorRouter.delete('/admin/monitoring/maintenance',requireAdmin,(_req,res)=>{try{return res.json(endMaintenance(actorOf(res)))}catch(e){return res.status(409).json({error:e instanceof Error?e.message:String(e)})}});
+productionMonitorRouter.post('/admin/monitoring/maintenance',requireAdmin,(req,res)=>{try{const result=startMaintenance(actorOf(res),minutesOf(req.body?.minutes),req.body?.reason?String(req.body.reason):undefined);audit(res,'system','maintenance.start','maintenance-window',result.id,'Bật Maintenance Mode',{endsAt:result.endsAt,reason:result.reason});return res.status(201).json(result)}catch(e){return res.status(409).json({error:e instanceof Error?e.message:String(e)})}});
+productionMonitorRouter.delete('/admin/monitoring/maintenance',requireAdmin,(_req,res)=>{try{const result=endMaintenance(actorOf(res));audit(res,'system','maintenance.end','maintenance-window',result.id,'Kết thúc Maintenance Mode',{endedAt:result.endedAt});return res.json(result)}catch(e){return res.status(409).json({error:e instanceof Error?e.message:String(e)})}});
 
-productionMonitorRouter.post('/admin/monitoring/incidents/:id/ack',requireAdmin,(req,res)=>{const ownerId=accessOf(res).accountId,id=String(req.params.id);try{return res.json(acknowledgeIncident(id,ownerId,ownerId,req.body?.note?String(req.body.note):undefined))}catch(e){return res.status(404).json({error:e instanceof Error?e.message:String(e)})}});
-productionMonitorRouter.post('/admin/monitoring/incidents/:id/silence',requireAdmin,(req,res)=>{const ownerId=accessOf(res).accountId,id=String(req.params.id);try{return res.json(silenceIncident(id,ownerId,ownerId,minutesOf(req.body?.minutes),req.body?.reason?String(req.body.reason):undefined))}catch(e){return res.status(404).json({error:e instanceof Error?e.message:String(e)})}});
-productionMonitorRouter.delete('/admin/monitoring/incidents/:id/silence',requireAdmin,(req,res)=>{const ownerId=accessOf(res).accountId,id=String(req.params.id);try{return res.json(unsilenceIncident(id,ownerId))}catch(e){return res.status(404).json({error:e instanceof Error?e.message:String(e)})}});
+productionMonitorRouter.post('/admin/monitoring/incidents/:id/ack',requireAdmin,(req,res)=>{const ownerId=accessOf(res).accountId,id=String(req.params.id);try{const result=acknowledgeIncident(id,ownerId,ownerId,req.body?.note?String(req.body.note):undefined);audit(res,ownerId,'incident.ack','incident',id,'Xác nhận đã tiếp nhận incident',{note:req.body?.note?String(req.body.note):undefined});return res.json(result)}catch(e){return res.status(404).json({error:e instanceof Error?e.message:String(e)})}});
+productionMonitorRouter.post('/admin/monitoring/incidents/:id/silence',requireAdmin,(req,res)=>{const ownerId=accessOf(res).accountId,id=String(req.params.id);try{const result=silenceIncident(id,ownerId,ownerId,minutesOf(req.body?.minutes),req.body?.reason?String(req.body.reason):undefined);audit(res,ownerId,'incident.silence','incident',id,'Tạm im cảnh báo incident',{silencedUntil:result?.silencedUntil,reason:req.body?.reason?String(req.body.reason):undefined});return res.json(result)}catch(e){return res.status(404).json({error:e instanceof Error?e.message:String(e)})}});
+productionMonitorRouter.delete('/admin/monitoring/incidents/:id/silence',requireAdmin,(req,res)=>{const ownerId=accessOf(res).accountId,id=String(req.params.id);try{const result=unsilenceIncident(id,ownerId);audit(res,ownerId,'incident.unsilence','incident',id,'Bật lại cảnh báo incident');return res.json(result)}catch(e){return res.status(404).json({error:e instanceof Error?e.message:String(e)})}});

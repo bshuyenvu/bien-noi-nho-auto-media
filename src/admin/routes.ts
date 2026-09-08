@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { readdir, rm } from 'node:fs/promises';
 import { canRender, deleteReview } from '../review/store.js';
 import { deleteQueueItem, ensureQueueItem, setQueueStatus, syncRenderJobs } from '../queue/production.js';
-import { pauseRenderQueue, renderJobs, renderWorkerStatus, resumeRenderQueue, type RenderJob } from '../video/job.js';
+import { cleanupRenderOutput, pauseRenderQueue, renderJobs, renderWorkerStatus, resumeRenderQueue, retryRenderJob, type RenderJob } from '../video/job.js';
 import { run } from '../storage/db.js';
 import { accessOf } from '../auth/access.js';
 
@@ -39,15 +39,22 @@ function removeJob(job:RenderJob){const i=renderJobs.findIndex(x=>x.id===job.id)
 export function createAdminRouter<T extends AdminDraft>(drafts:T[]){
   const router=Router();
 
-  router.get('/admin/state',(_req,res)=>{
+  router.get('/admin/state',async(_req,res)=>{
     syncDraftStatuses(drafts);
     const ownerId=accessOf(res).accountId,ownDrafts=drafts.filter(x=>x.ownerId===ownerId),ownJobs=renderJobs.filter(x=>x.ownerId===ownerId),active=ownJobs.filter(x=>x.status==='queued'||x.status==='rendering').length;
-    return res.json({drafts:ownDrafts.length,renders:ownJobs.length,active,ready:ownJobs.filter(x=>x.status==='ready').length,failed:ownJobs.filter(x=>x.status==='failed').length,stableControl:renderWorkerStatus()});
+    return res.json({drafts:ownDrafts.length,renders:ownJobs.length,active,ready:ownJobs.filter(x=>x.status==='ready').length,failed:ownJobs.filter(x=>x.status==='failed').length,stableControl:await renderWorkerStatus()});
   });
 
-  router.get('/admin/stable-control',(_req,res)=>res.json(renderWorkerStatus()));
-  router.post('/admin/stable-control/pause',(_req,res)=>res.json({ok:true,...pauseRenderQueue()}));
-  router.post('/admin/stable-control/resume',(_req,res)=>res.json({ok:true,...resumeRenderQueue()}));
+  router.get('/admin/stable-control',async(_req,res)=>res.json(await renderWorkerStatus()));
+  router.post('/admin/stable-control/pause',async(_req,res)=>{pauseRenderQueue();return res.json({ok:true,...await renderWorkerStatus()})});
+  router.post('/admin/stable-control/resume',async(_req,res)=>{resumeRenderQueue();return res.json({ok:true,...await renderWorkerStatus()})});
+  router.post('/admin/stable-control/cleanup',async(_req,res)=>{try{return res.json({ok:true,...await cleanupRenderOutput(),state:await renderWorkerStatus()})}catch(e){return res.status(500).json({error:e instanceof Error?e.message:String(e)})}});
+
+  router.post('/render-jobs/:id/retry',async(req,res)=>{
+    const ownerId=accessOf(res).accountId,job=renderJobs.find(x=>x.id===req.params.id&&x.ownerId===ownerId);
+    if(!job)return res.status(404).json({error:'Không tìm thấy tác vụ render'});
+    try{const next=await retryRenderJob(job.id);return res.status(201).json(next)}catch(e){return res.status(409).json({error:e instanceof Error?e.message:String(e)})}
+  });
 
   router.delete('/drafts/:id',async(req,res)=>{
     const ownerId=accessOf(res).accountId,i=drafts.findIndex(x=>x.id===req.params.id&&x.ownerId===ownerId);if(i<0)return res.status(404).json({error:'Không tìm thấy bản tin'});

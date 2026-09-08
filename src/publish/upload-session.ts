@@ -49,6 +49,7 @@ function fromRow(r:Row):YouTubeUploadSession{return{
 
 export function getYouTubeUploadSession(publishJobId:string,ownerId:string){const row=all<Row>('SELECT * FROM youtube_upload_sessions WHERE publish_job_id=? AND owner_id=? LIMIT 1',publishJobId,ownerId)[0];return row?fromRow(row):undefined}
 export function listActiveYouTubeUploadSessions(){return all<Row>("SELECT * FROM youtube_upload_sessions WHERE state='active' ORDER BY updated_at ASC").map(fromRow)}
+export function youtubeUploadSessionPublicStatus(publishJobId:string,ownerId:string){const s=getYouTubeUploadSession(publishJobId,ownerId);if(!s)return undefined;const progressPct=s.fileSize>0?Math.max(0,Math.min(100,Math.round((s.nextOffset/s.fileSize)*1000)/10)):0;return{state:s.state,fileSize:s.fileSize,nextOffset:s.nextOffset,chunkSize:s.chunkSize,retryCount:s.retryCount,lastHttpStatus:s.lastHttpStatus,lastAttemptAt:s.lastAttemptAt,remoteId:s.remoteId,remoteUrl:s.remoteUrl,progressPct,createdAt:s.createdAt,updatedAt:s.updatedAt}}
 
 export function createYouTubeUploadSession(input:{publishJobId:string;ownerId:string;sessionUri:string;filePath:string;fileSize:number;chunkSize:number}){
   const now=new Date().toISOString();

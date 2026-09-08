@@ -1,8 +1,32 @@
 import { addRssSource,deleteRssSource,rssSources } from './manager.js';
-const feed=(domain:string,term='health')=>'https://news.google.com/rss/search?q='+encodeURIComponent(`site:${domain} ${term}`)+'&hl=en-US&gl=US&ceid=US:en';
+
 const CATALOG=[
- ['WHO Health',feed('who.int','health OR outbreak')],['CDC News',feed('cdc.gov','health OR outbreak')],['FDA Safety',feed('fda.gov','drug OR food safety OR recall')],['NIH Medical Research',feed('nih.gov','health OR medical research')],['ECDC',feed('ecdc.europa.eu','disease OR outbreak')],['NHS Health',feed('nhs.uk','health')],['UN Health',feed('news.un.org','health')],['Reuters Health',feed('reuters.com','health OR medicine')],['AP Health',feed('apnews.com','health OR medicine')],['BBC Health',feed('bbc.com','health OR medicine')],['DW Health',feed('dw.com','health OR medicine')],['France 24 Health',feed('france24.com','health')],['The Lancet',feed('thelancet.com','health research')],['NEJM',feed('nejm.org','medicine')],['BMJ',feed('bmj.com','health OR medicine')],['Mayo Clinic',feed('mayoclinic.org','health research')],['Vietnam Ministry of Health',feed('moh.gov.vn','y tế OR sức khỏe')],['Sức khỏe & Đời sống',feed('suckhoedoisong.vn','sức khỏe')],['VnExpress Sức khỏe',feed('vnexpress.net','sức khỏe')],['Tuổi Trẻ Sức khỏe',feed('tuoitre.vn','sức khỏe')]
+ ['WHO News','https://www.who.int/rss-feeds/news-english.xml'],
+ ['CDC Newsroom','https://tools.cdc.gov/api/v2/resources/media/132608.rss'],
+ ['CDC Emerging Infectious Diseases','https://wwwnc.cdc.gov/eid/rss/ahead-of-print.xml'],
+ ['CDC Expedited Articles','https://wwwnc.cdc.gov/eid/rss/expedited.xml'],
+ ['FDA MedWatch','https://www.fda.gov/AboutFDA/ContactFDA/StayInformed/RSSFeeds/MedWatch/rss.xml'],
+ ['NIH News Releases','https://www.nih.gov/news-events/news-releases/rss.xml'],
+ ['BMJ Recent','https://www.bmj.com/rss/recent.xml'],
+ ['NEJM','https://www.nejm.org/action/showFeed?jc=nejm&type=etoc&feed=rss'],
+ ['ScienceDaily Health','https://www.sciencedaily.com/rss/health_medicine.xml'],
+ ['Medical Xpress','https://medicalxpress.com/rss-feed/'],
+ ['NHS England','https://www.england.nhs.uk/feed/'],
+ ['VnExpress Sức khỏe','https://vnexpress.net/rss/suc-khoe.rss'],
+ ['Tuổi Trẻ Sức khỏe','https://tuoitre.vn/rss/suc-khoe.rss'],
+ ['Sức khỏe & Đời sống','https://suckhoedoisong.vn/rss/home.rss'],
+ ['VietnamNet Sức khỏe','https://vietnamnet.vn/rss/suc-khoe.rss']
 ] as const;
-const TARGET=18,MAX=20;
-export function curateTrustedRss(){let removed=0,added=0;const broken=rssSources.filter(x=>x.managed&&!x.locked&&Boolean(x.lastError));for(const x of broken){deleteRssSource(x.id,true);removed++}const excess=Math.max(0,rssSources.length-MAX);for(const x of rssSources.filter(x=>!x.locked).sort((a,b)=>(a.managed===b.managed?0:a.managed?1:-1)).slice(0,excess)){deleteRssSource(x.id,true);removed++}const existing=new Set(rssSources.map(x=>x.url));for(const[name,url]of CATALOG){if(rssSources.length>=TARGET)break;if(existing.has(url))continue;addRssSource({name,url,managed:true});existing.add(url);added++}return{added,removed,total:rssSources.length,locked:rssSources.filter(x=>x.locked).length,managed:rssSources.filter(x=>x.managed).length,target:TARGET,max:MAX}}
+
+const TARGET=15,MAX=20;
+export function curateTrustedRss(){
+ let removed=0,added=0;
+ const unsafe=rssSources.filter(x=>x.managed&&!x.locked&&(Boolean(x.lastError)||x.url.includes('news.google.com/rss/')));
+ for(const x of unsafe){deleteRssSource(x.id,true);removed++}
+ const excess=Math.max(0,rssSources.length-MAX);
+ for(const x of rssSources.filter(x=>!x.locked).sort((a,b)=>(a.managed===b.managed?0:a.managed?1:-1)).slice(0,excess)){deleteRssSource(x.id,true);removed++}
+ const existing=new Set(rssSources.map(x=>x.url));
+ for(const[name,url]of CATALOG){if(rssSources.length>=TARGET)break;if(existing.has(url))continue;addRssSource({name,url,managed:true});existing.add(url);added++}
+ return{added,removed,total:rssSources.length,locked:rssSources.filter(x=>x.locked).length,managed:rssSources.filter(x=>x.managed).length,target:TARGET,max:MAX}
+}
 export const trustedRssCatalog=CATALOG.map(([name,url])=>({name,url}));

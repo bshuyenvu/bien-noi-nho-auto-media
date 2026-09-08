@@ -56,7 +56,8 @@ try{
   if(remote.state.remoteCanaryVideoId!=='unlisted-video-123'||remote.state.remoteCanaryProcessingStatus!=='succeeded')throw new Error('Remote Canary evidence did not persist sanitized status');
   const approved=await approvePublicActivation(owner,'smoke','APPROVE PUBLIC');if(approved.state.maxPrivacy!=='public'||!approved.state.publicApprovedAt)throw new Error('PUBLIC approval did not persist');
   process.env.YOUTUBE_PRIVACY_STATUS='public';
-  enqueuePublish(liveInput('public-live'));
+  let normalPublicBlocked=false;try{enqueuePublish(liveInput('public-live'))}catch(e){normalPublicBlocked=String(e).includes('Public Canary')||String(e).includes('rollout')}if(!normalPublicBlocked)throw new Error('normal PUBLIC was not held behind Controlled Public Rollout after approval');
+  const publicCanary=enqueuePublish({...liveInput('public-canary'),publicCanary:true});if(!publicCanary.publicCanary)throw new Error('Public Canary was not allowed after explicit Public approval');
 
   await engageActivationKillSwitch(owner,'smoke','smoke emergency');
   let killBlocked=false;try{enqueuePublish(liveInput('kill-block'))}catch(e){killBlocked=String(e).includes('Kill Switch')}if(!killBlocked)throw new Error('Kill Switch did not block normal LIVE');
@@ -65,6 +66,7 @@ try{
 
   const aborted=await abortActivationWizard(owner,'smoke');if(aborted.state.armed||aborted.state.status!=='aborted')throw new Error('ABORT did not disarm activation');
   if(aborted.state.remoteCanaryVerifiedAt)throw new Error('ABORT did not clear Remote Canary evidence');
+  if(aborted.state.publicRolloutStatus!=='idle')throw new Error('ABORT did not clear Public Rollout state');
   if(productionPublishGuard(owner).allowed)throw new Error('publish guard remained open after ABORT');
-  console.log('Production activation wizard + Remote Canary promotion safety smoke OK');
+  console.log('Production activation wizard + Remote Canary + controlled Public lock smoke OK');
 }finally{globalThis.fetch=originalFetch;rmSync(dir,{recursive:true,force:true})}

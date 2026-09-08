@@ -166,6 +166,11 @@ if [[ "$ARMED" != true ]]; then
       echo "[cutover] Có thể đặt CUTOVER_PRIVATE_RENDER_JOB_ID và CUTOVER_CANARY_RENDER_JOB_ID rồi chạy lại." >&2
       exit 21
     fi
+    if [[ "$PRIVATE_RENDER_ID" == "$CANARY_RENDER_ID" ]]; then
+      STAGE=need-distinct-renders;write_state
+      echo "[cutover] PAUSED: Private Test và Unlisted Canary phải dùng 2 render khác nhau." >&2
+      exit 24
+    fi
     STAGE=private-test;write_state
     echo "[cutover] Creating forced-PRIVATE deployment test from render $PRIVATE_RENDER_ID..."
     PRIVATE_JOB_ID="$(client private-test "$PRIVATE_RENDER_ID")";write_state
@@ -210,6 +215,7 @@ docker compose exec -T -e PROD_CHECK_STRICT=true auto-media npm run prod:check
 if [[ -z "$CANARY_JOB_ID" ]]; then
   CANARY_RENDER_ID="${CANARY_RENDER_ID:-$(client candidate "$PRIVATE_RENDER_ID")}"
   if [[ -z "$CANARY_RENDER_ID" ]]; then STAGE=need-canary-render-after-arm;write_state;engage_kill_switch 'Cutover paused: no READY render available for Unlisted canary';echo "[cutover] PAUSED with Kill Switch: create a READY render, inspect state, then clear Kill Switch manually before resuming." >&2;exit 23;fi
+  if [[ -n "$PRIVATE_RENDER_ID" && "$CANARY_RENDER_ID" == "$PRIVATE_RENDER_ID" ]]; then echo "[cutover] ERROR: canary render must differ from private-test render" >&2;false;fi
   STAGE=unlisted-canary;write_state
   echo "[cutover] Creating UNLISTED canary from render $CANARY_RENDER_ID..."
   CANARY_JOB_ID="$(client create-canary "$CANARY_RENDER_ID")";write_state

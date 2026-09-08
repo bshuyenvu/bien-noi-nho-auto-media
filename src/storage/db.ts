@@ -93,6 +93,30 @@ try{db.exec('ALTER TABLE rss_sources ADD COLUMN locked INTEGER NOT NULL DEFAULT 
 try{db.exec('ALTER TABLE rss_sources ADD COLUMN managed INTEGER NOT NULL DEFAULT 0')}catch{}
 try{db.exec('ALTER TABLE rss_items ADD COLUMN summary TEXT')}catch{}
 try{db.exec('ALTER TABLE rss_items ADD COLUMN image_url TEXT')}catch{}
+try{db.exec('ALTER TABLE drafts ADD COLUMN owner_id TEXT')}catch{}
+try{db.exec('ALTER TABLE render_jobs ADD COLUMN owner_id TEXT')}catch{}
+try{db.exec('ALTER TABLE rss_sources ADD COLUMN owner_id TEXT')}catch{}
+try{db.exec('ALTER TABLE rss_items ADD COLUMN owner_id TEXT')}catch{}
+try{db.exec('ALTER TABLE accounts ADD COLUMN daily_limit INTEGER')}catch{}
+try{db.exec('ALTER TABLE accounts ADD COLUMN total_limit INTEGER')}catch{}
+try{db.exec("UPDATE drafts SET owner_id='legacy-admin' WHERE owner_id IS NULL")}catch{}
+try{db.exec("UPDATE render_jobs SET owner_id='legacy-admin' WHERE owner_id IS NULL")}catch{}
+try{db.exec("UPDATE rss_sources SET owner_id='legacy-admin' WHERE owner_id IS NULL")}catch{}
+try{db.exec("UPDATE rss_items SET owner_id='legacy-admin' WHERE owner_id IS NULL")}catch{}
+try{db.exec('CREATE INDEX IF NOT EXISTS idx_drafts_owner ON drafts(owner_id)')}catch{}
+try{db.exec('CREATE INDEX IF NOT EXISTS idx_render_jobs_owner ON render_jobs(owner_id)')}catch{}
+db.exec(`CREATE TABLE IF NOT EXISTS rss_items_tenant (
+ id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, source_id TEXT NOT NULL, source_name TEXT NOT NULL,
+ title TEXT NOT NULL, link TEXT NOT NULL, summary TEXT, image_url TEXT, published_at TEXT, discovered_at TEXT NOT NULL,
+ UNIQUE(owner_id,link)
+)`);
+db.exec(`CREATE TABLE IF NOT EXISTS rss_sources_tenant (
+ id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, name TEXT NOT NULL, url TEXT NOT NULL,
+ created_at TEXT NOT NULL, last_scan_at TEXT, last_error TEXT, locked INTEGER NOT NULL DEFAULT 0,
+ managed INTEGER NOT NULL DEFAULT 0, UNIQUE(owner_id,url)
+)`);
+try{db.exec("INSERT OR IGNORE INTO rss_sources_tenant(id,owner_id,name,url,created_at,last_scan_at,last_error,locked,managed) SELECT id,COALESCE(owner_id,'legacy-admin'),name,url,created_at,last_scan_at,last_error,locked,managed FROM rss_sources")}catch{}
+try{db.exec("INSERT OR IGNORE INTO rss_items_tenant(id,owner_id,source_id,source_name,title,link,summary,image_url,published_at,discovered_at) SELECT id,COALESCE(owner_id,'legacy-admin'),source_id,source_name,title,link,summary,image_url,published_at,discovered_at FROM rss_items")}catch{}
 
 export function all<T=any>(sql:string,...params:any[]):T[]{return db.prepare(sql).all(...params) as T[];}
 export function run(sql:string,...params:any[]){return db.prepare(sql).run(...params);}

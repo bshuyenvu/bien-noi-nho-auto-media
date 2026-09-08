@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { accessOf,requireAdmin } from '../auth/access.js';
 import { auditActor,recordAuditEvent } from '../system/audit.js';
+import { productionPublishGuard } from './activation-state.js';
 import {
   activationWizardSnapshot,
   approvePublicActivation,
@@ -15,12 +16,23 @@ import {
 } from './activation-wizard.js';
 
 export const activationWizardRouter=Router();
-activationWizardRouter.use('/admin/activation-wizard',requireAdmin);
 function owner(res:any){return accessOf(res).accountId}
 function actor(res:any){return auditActor(accessOf(res))}
 function audit(res:any,action:string,summary:string,metadata?:unknown){const a=actor(res);recordAuditEvent({ownerId:owner(res),actor:a,action,targetType:'production-activation',targetId:owner(res),summary,metadata})}
 const Confirm=z.object({confirmation:z.string().max(80)});
 
+// Defense in depth: this router is mounted before the admin publish router. A normal
+// YouTube LIVE request must pass the persistent Activation Guard before it can even
+// enter the Publish Queue. Private deployment-test jobs use a separate endpoint and
+// are still checked again by the Publish Worker / Kill Switch immediately before upload.
+activationWizardRouter.post('/publish-jobs',(req,res,next)=>{
+  if(req.body?.dryRun!==false||String(req.body?.platform||'')!=='youtube')return next();
+  const guard=productionPublishGuard(owner(res));
+  if(!guard.allowed)return res.status(409).json({error:`Production Activation chặn enqueue: ${guard.reason}`,activation:{armed:guard.state.armed,maxPrivacy:guard.state.maxPrivacy,privacy:guard.privacy,killSwitch:guard.killSwitch.engaged}});
+  return next();
+});
+
+activationWizardRouter.use('/admin/activation-wizard',requireAdmin);
 activationWizardRouter.get('/admin/activation-wizard',async(_req,res)=>{try{return res.json(await activationWizardSnapshot(owner(res)))}catch(e){return res.status(500).json({error:e instanceof Error?e.message:String(e)})}});
 activationWizardRouter.post('/admin/activation-wizard/backup-confirm',async(req,res)=>{try{const x=await confirmActivationBackup(owner(res),actor(res).id,req.body?.note?String(req.body.note):undefined);audit(res,'activation.backup-confirm','Xác nhận backup SQLite trước Production Activation',{backupConfirmedAt:x.state.backupConfirmedAt,noteLength:String(req.body?.note||'').length});return res.json(x)}catch(e){return res.status(409).json({error:e instanceof Error?e.message:String(e)})}});
 activationWizardRouter.post('/admin/activation-wizard/arm',async(req,res)=>{const p=Confirm.safeParse(req.body||{});if(!p.success)return res.status(400).json({error:'Cần confirmation'});try{const x=await armProductionActivation(owner(res),actor(res).id,p.data.confirmation);audit(res,'activation.arm','ARM Production Activation ở mức PRIVATE',{sessionId:x.state.sessionId,maxPrivacy:x.state.maxPrivacy});return res.json(x)}catch(e){return res.status(409).json({error:e instanceof Error?e.message:String(e)})}});

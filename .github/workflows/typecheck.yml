@@ -45,8 +45,10 @@ jobs:
         run: npm run smoke:youtube-resumable
       - name: Release candidate GO NO-GO and backup restore smoke test
         run: npm run smoke:release-candidate
-      - name: Production activation wizard safety smoke test
+      - name: Production activation wizard and promotion safety smoke test
         run: npm run smoke:activation-wizard
+      - name: YouTube Remote Canary verification smoke test
+        run: npm run smoke:youtube-canary
       - name: Production cutover and Unlisted canary smoke test
         run: npm run smoke:cutover
       - name: Production operator check syntax

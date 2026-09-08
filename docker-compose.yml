@@ -15,6 +15,13 @@ services:
       AI_API_URL: ${AI_API_URL:-}
       AI_API_KEY: ${AI_API_KEY:-}
       AI_MODEL: ${AI_MODEL:-}
+      OLLAMA_ENABLED: ${OLLAMA_ENABLED:-false}
+      OLLAMA_API_URL: ${OLLAMA_API_URL:-http://host.docker.internal:11434/v1}
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-ollama}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:14b}
+      GEMINI_API_URL: ${GEMINI_API_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
       VISION_API_URL: ${VISION_API_URL:-}
       VISION_API_KEY: ${VISION_API_KEY:-}
       VISION_MODEL: ${VISION_MODEL:-}
@@ -28,3 +35,5 @@ services:
     volumes:
       - ./data:/app/data
       - ./output:/app/output
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

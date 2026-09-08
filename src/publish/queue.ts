@@ -1,6 +1,6 @@
 import { all, run } from '../storage/db.js';
 import { envYouTubePrivacy,productionPublishGuard,type ActivationPrivacy } from './activation-state.js';
-import { assertContentSafety,recordContentFingerprint,type ContentSafetySnapshot } from './content-safety.js';
+import { assertContentSafety,evaluateContentSafety,recordContentFingerprint,type ContentSafetySnapshot } from './content-safety.js';
 import { assertPublicRampAllowed } from './public-ramp.js';
 
 export type PublishPlatform='youtube'|'facebook'|'tiktok';
@@ -43,9 +43,12 @@ export function enqueuePublish(input:{ownerId:string;renderJobId:string;draftId:
   if(!dryRun&&input.platform==='youtube'){
     const guard=productionPublishGuard(input.ownerId,{deploymentTest,publicCanary,privacy:publishPrivacy});
     if(!guard.allowed)throw new Error(`Production Activation chặn publish: ${guard.reason}`);
-    if(publishPrivacy==='public'&&!publicCanary){
-      contentSafety=assertContentSafety({ownerId:input.ownerId,draftId:input.draftId,renderJobId:input.renderJobId,publishTitle:input.title});
-      assertPublicRampAllowed(input.ownerId,{targetAt:input.scheduledAt});
+    if(publishPrivacy==='public'){
+      if(publicCanary)contentSafety=evaluateContentSafety({ownerId:input.ownerId,draftId:input.draftId,renderJobId:input.renderJobId,publishTitle:input.title});
+      else{
+        contentSafety=assertContentSafety({ownerId:input.ownerId,draftId:input.draftId,renderJobId:input.renderJobId,publishTitle:input.title});
+        assertPublicRampAllowed(input.ownerId,{targetAt:input.scheduledAt});
+      }
     }
   }
   const now=new Date().toISOString();

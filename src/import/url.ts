@@ -18,7 +18,7 @@ function clean(text:string){return text.replace(/\s+/g,' ').trim();}
 function privateIp(ip:string){if(ip.includes(':'))return ip==='::1'||ip.startsWith('fc')||ip.startsWith('fd')||ip.startsWith('fe80:');const p=ip.split('.').map(Number);return p[0]===10||p[0]===127||(p[0]===169&&p[1]===254)||(p[0]===172&&p[1]>=16&&p[1]<=31)||(p[0]===192&&p[1]===168);}
 async function assertPublicUrl(raw:string){const u=new URL(raw);if(!['http:','https:'].includes(u.protocol))throw new Error('Chỉ hỗ trợ URL HTTP/HTTPS');if(u.hostname==='localhost'||u.hostname.endsWith('.local'))throw new Error('Địa chỉ nội bộ bị chặn');if(isIP(u.hostname)){if(privateIp(u.hostname))throw new Error('Địa chỉ nội bộ bị chặn');}else{const rows=await lookup(u.hostname,{all:true});if(!rows.length||rows.some(x=>privateIp(x.address)))throw new Error('Địa chỉ nội bộ bị chặn');}return u;}
 function absoluteUrl(raw:string,base:string){try{const u=new URL(raw,base);if(!['http:','https:'].includes(u.protocol))return undefined;return u.toString();}catch{return undefined;}}
-function looksLikeContentImage(url:string){const s=url.toLowerCase();return !/(logo|icon|avatar|sprite|emoji|tracking|pixel|banner-ad|advert|quangcao)/.test(s);}
+function looksLikeContentImage(url:string){const s=url.toLowerCase();return !/(logo|icon|avatar|sprite|emoji|tracking|pixel|banner-ad|advert|quangcao|google-news|news\.google|gnews)/.test(s);}
 function isoDate(raw?:string){if(!raw?.trim())return undefined;const d=new Date(raw.trim());return Number.isNaN(d.getTime())?undefined:d.toISOString();}
 
 function jsonLdArticles($:cheerio.CheerioAPI){
@@ -43,6 +43,7 @@ async function fetchPage(url:string){
 
 export async function importArticleFromUrl(url:string):Promise<ImportedArticle>{
   let page=await fetchPage(url),parsed=await assertPublicUrl(page.url);
+  if(parsed.hostname==='news.google.com')throw new Error('Liên kết Google News chưa chuyển về bài gốc; hệ thống đã chặn để tránh lấy logo và nội dung rỗng.');
   let html=page.html;
   const $=cheerio.load(html);
   const publishedAt=isoDate(

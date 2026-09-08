@@ -5,6 +5,9 @@ export interface ResourceSnapshot {
   availableMemoryMb: number;
   cpuLoad1m: number;
   cpuCount: number;
+  cgroupMemoryCurrentMb?: number;
+  cgroupMemoryLimitMb?: number;
+  cgroupMemoryUsagePct?: number;
   memoryOk: boolean;
   cpuOk: boolean;
   allowed: boolean;
@@ -29,6 +32,18 @@ function availableMemoryMb() {
   return Number.POSITIVE_INFINITY;
 }
 
+function cgroupMemory(){
+  try{
+    const currentRaw=readFileSync('/sys/fs/cgroup/memory.current','utf8').trim(),maxRaw=readFileSync('/sys/fs/cgroup/memory.max','utf8').trim();
+    const current=Number(currentRaw),limit=maxRaw==='max'?NaN:Number(maxRaw);
+    if(!Number.isFinite(current)||current<0)return{};
+    const currentMb=Math.round(current/1024/1024);
+    if(!Number.isFinite(limit)||limit<=0)return{cgroupMemoryCurrentMb:currentMb};
+    const limitMb=Math.round(limit/1024/1024),usagePct=Math.round((current/limit)*1000)/10;
+    return{cgroupMemoryCurrentMb:currentMb,cgroupMemoryLimitMb:limitMb,cgroupMemoryUsagePct:usagePct};
+  }catch{return{}}
+}
+
 export function resourceSnapshot(): ResourceSnapshot {
   const cpuCount = Math.max(1, cpus().length);
   const cpuLoad1m = loadavg()[0] || 0;
@@ -41,6 +56,7 @@ export function resourceSnapshot(): ResourceSnapshot {
     availableMemoryMb: available,
     cpuLoad1m,
     cpuCount,
+    ...cgroupMemory(),
     memoryOk,
     cpuOk,
     allowed: memoryOk && cpuOk,

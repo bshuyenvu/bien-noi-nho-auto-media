@@ -4,7 +4,7 @@
 
 Normal PUBLIC chỉ được vào Public Ramp sau khi **Pre-Publish Content Safety** PASS. Guard này giảm nguy cơ Autopilot/RSS tạo hai video gần như cùng một bản tin rồi đăng lặp.
 
-Private Live Test và Public Canary không đi qua duplicate guard này vì đã có gate riêng. Normal PUBLIC luôn bị backend kiểm tra, kể cả khi operator không bấm nút preflight trên giao diện.
+Private Live Test không đi qua duplicate guard. Public Canary không bị duplicate guard chặn vì có gate riêng, nhưng nếu có đủ draft/render thì Canary vẫn được ghi fingerprint để normal PUBLIC sau đó không thể đăng lặp chính nội dung Canary. Normal PUBLIC luôn bị backend kiểm tra, kể cả khi operator không bấm nút preflight trên giao diện.
 
 ## Checklist bắt buộc
 

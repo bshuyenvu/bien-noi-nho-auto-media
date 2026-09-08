@@ -10,6 +10,8 @@ import { publisherDeploymentReadiness } from '../publish/deployment-readiness.js
 import { publishWorkerStatus,runPublishWorkerOnce,startPublishWorker } from '../publish/worker.js';
 import { run } from '../storage/db.js';
 import { accessOf } from '../auth/access.js';
+import { auditMutationMiddleware } from '../system/audit-middleware.js';
+import { auditRouter } from '../system/audit-routes.js';
 
 export interface AdminDraft {id:string;ownerId:string;title:string;status:'draft'|'approved'|'rendering'|'ready'|'failed'}
 function latestJob(draftId:string){return renderJobs.find(j=>j.draftId===draftId)}
@@ -20,7 +22,7 @@ async function cleanupJobFiles(jobId:string){try{const files=await readdir('outp
 function removeJob(job:RenderJob){const i=renderJobs.findIndex(x=>x.id===job.id);if(i>=0)renderJobs.splice(i,1);run('DELETE FROM render_jobs WHERE id=?',job.id)}
 
 export function createAdminRouter<T extends AdminDraft>(drafts:T[]){
-  const router=Router();startPublishWorker();
+  const router=Router();startPublishWorker();router.use(auditMutationMiddleware);router.use(auditRouter);
   router.get('/admin/state',async(_req,res)=>{syncDraftStatuses(drafts);const ownerId=accessOf(res).accountId,ownDrafts=drafts.filter(x=>x.ownerId===ownerId),ownJobs=renderJobs.filter(x=>x.ownerId===ownerId),active=ownJobs.filter(x=>x.status==='queued'||x.status==='rendering').length;return res.json({drafts:ownDrafts.length,renders:ownJobs.length,active,ready:ownJobs.filter(x=>x.status==='ready').length,failed:ownJobs.filter(x=>x.status==='failed').length,publish:publishQueueStats(ownerId),publisher:publishWorkerStatus(),credentials:credentialStatus(ownerId),deployment:publisherDeploymentReadiness(ownerId),stableControl:await renderWorkerStatus()});});
   router.get('/admin/stable-control',async(_req,res)=>res.json(await renderWorkerStatus()));
   router.post('/admin/stable-control/pause',async(_req,res)=>{pauseRenderQueue();return res.json({ok:true,...await renderWorkerStatus()})});

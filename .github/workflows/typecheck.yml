@@ -33,6 +33,8 @@ jobs:
         run: npm run smoke:self-heal-alerts
       - name: Maintenance ACK silence smoke test
         run: npm run smoke:maintenance
+      - name: Operator audit trail smoke test
+        run: npm run smoke:audit
       - name: Production operator check syntax
         run: node --check scripts/production-check.mjs
       - name: Persistent render recovery smoke test

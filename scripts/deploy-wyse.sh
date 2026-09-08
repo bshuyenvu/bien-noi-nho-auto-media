@@ -157,6 +157,12 @@ if [[ "$MAINTENANCE_STARTED" == "true" ]]; then
   if maintenance_api end; then echo "[deploy] Maintenance window ended.";else echo "[deploy] WARNING: maintenance window could not be cleared; it will auto-expire." >&2; fi
 fi
 
+if bash scripts/audit-deployment.sh success "$TARGET_COMMIT" "$PREVIOUS_COMMIT" >/dev/null 2>&1; then
+  echo "[deploy] Deployment revision recorded in audit trail."
+else
+  echo "[deploy] WARNING: deployment audit could not be recorded; production remains healthy." >&2
+fi
+
 cat > "$STATE_DIR/last-success.env" <<EOF
 DEPLOYED_AT=$STAMP
 ACTIVE_COMMIT=$TARGET_COMMIT

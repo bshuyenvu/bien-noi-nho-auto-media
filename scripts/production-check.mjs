@@ -9,7 +9,8 @@ async function request(path,authenticated=false){
   const r=await fetch(`${base}${path}`,{headers,signal:AbortSignal.timeout(timeoutMs)});
   const text=await r.text();
   let data={};
-  try{data=text?JSON.parse(text):{}}catch{}
+  try{data=text?JSON.parse(text):{}}
+  catch{}
   if(!r.ok)throw new Error(`${path} -> HTTP ${r.status}: ${String(data.error||text||'unknown').slice(0,300)}`);
   return data;
 }
@@ -41,6 +42,9 @@ try{
   line('Safe self-heal',selfHeal.enabled!==false,selfHeal.enabled===false?'OFF':selfHeal.autoPaused?`AUTO-PAUSED • green ${selfHeal.greenCycles||0}/${selfHeal.requiredGreen||3}`:'ON');
   const alerting=snapshot.alerting||{},channels=alerting.channels||{},enabledChannels=[channels.webhook?'webhook':'',channels.telegram?'telegram':'',channels.email?'email':''].filter(Boolean);
   line('External alerts',Boolean(alerting.enabled),alerting.enabled?`${enabledChannels.join(', ')} • min ${String(alerting.minSeverity||'red').toUpperCase()}${maintenance.active?' • MUTED BY MAINTENANCE':''}`:'not configured');
+
+  const audit=await request('/api/admin/audit?limit=1',true);
+  line('Operator audit trail',Boolean(audit.stats),audit.stats?`${audit.stats.total||0} events • retention ${audit.stats.retentionDays||90}d`:'unavailable');
 
   const deployment=await request('/api/publish-deployment-readiness',true);
   line('Publisher configuration',Boolean(deployment.configurationReady),deployment.configurationReady?'configured':'not complete');

@@ -7,7 +7,7 @@ on:
     branches: ["main"]
 
 jobs:
-  typecheck:
+  verify:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -21,3 +21,5 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: TypeScript typecheck
         run: npm run typecheck
+      - name: Persistent queue recovery smoke test
+        run: npm run smoke:recovery

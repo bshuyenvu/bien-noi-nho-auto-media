@@ -1,0 +1,17 @@
+.git
+.github
+node_modules
+dist
+.env
+.env.*
+!.env.example
+data
+output
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.log
+*.bak
+*.backup
+*.tar
+*.tar.gz

@@ -10,9 +10,12 @@ process.env.YOUTUBE_UPLOAD_RETRY_BASE_MS='1';
 process.env.YOUTUBE_UPLOAD_RETRY_MAX_MS='10';
 process.env.YOUTUBE_UPLOAD_RETRY_JITTER='false';
 process.env.YOUTUBE_UPLOAD_REQUEST_TIMEOUT_MS='5000';
+process.env.PUBLISH_STARTUP_DIAGNOSTICS='false';
 
 const { uploadYouTubeResumable,normalizedYouTubeChunkSize,YouTubeUploadNeedsReconcileError }=await import('../src/publish/youtube-resumable.js');
 const { createYouTubeUploadSession,getYouTubeUploadSession,markYouTubeUploadAttempt,updateYouTubeUploadProgress }=await import('../src/publish/upload-session.js');
+await import('../src/publish/queue.js');
+const { all,run }=await import('../src/storage/db.js');
 const typeNow=()=>new Date().toISOString();
 function job(id:string){const now=typeNow();return{id,ownerId:'owner-resume',renderJobId:`render-${id}`,draftId:`draft-${id}`,platform:'youtube' as const,status:'publishing' as const,title:`Video ${id}`,dryRun:false,deploymentTest:false,attempts:1,maxAttempts:3,createdAt:now,updatedAt:now}}
 function rangeOf(init?:RequestInit){return new Headers(init?.headers).get('content-range')||''}
@@ -64,5 +67,14 @@ try{
   createYouTubeUploadSession({publishJobId:'job-3',ownerId:'owner-resume',sessionUri:'https://upload.example.test/session-3',filePath:video3,fileSize:1024,chunkSize:chunk});markYouTubeUploadAttempt('job-3','owner-resume');
   let uncertain=false;try{await uploadYouTubeResumable({job:job('job-3'),videoPath:video3,metadata:{},getAccessToken:async()=> 'token'})}catch(e){uncertain=e instanceof YouTubeUploadNeedsReconcileError||Boolean((e as any)?.needsReconcile)}
   const s3=getYouTubeUploadSession('job-3','owner-resume');if(!uncertain||s3?.state!=='needs_reconcile'||session3Checks!==3)throw new Error(`uncertain upload was not quarantined ${JSON.stringify({uncertain,s3,session3Checks})}`);
+
+  const now=typeNow();
+  run("INSERT INTO publish_jobs(id,owner_id,render_job_id,draft_id,platform,status,title,attempts,max_attempts,dry_run,deployment_test,created_at,updated_at) VALUES(?,?,?,?,?,'publishing',?,1,3,0,0,?,?)",'worker-resume','owner-resume','render-worker-resume','draft-worker-resume','youtube','worker resume',now,now);
+  createYouTubeUploadSession({publishJobId:'worker-resume',ownerId:'owner-resume',sessionUri:'https://upload.example.test/worker-resume',filePath:video2,fileSize:600000,chunkSize:chunk});markYouTubeUploadAttempt('worker-resume','owner-resume');updateYouTubeUploadProgress('worker-resume','owner-resume',262144,308);
+  run("INSERT INTO publish_jobs(id,owner_id,render_job_id,draft_id,platform,status,title,attempts,max_attempts,dry_run,deployment_test,created_at,updated_at) VALUES(?,?,?,?,?,'publishing',?,1,3,0,0,?,?)",'worker-unknown','owner-resume','render-worker-unknown','draft-worker-unknown','youtube','worker unknown',now,now);
+  const { recoverInterruptedPublishing }=await import('../src/publish/worker.js');const recovery=recoverInterruptedPublishing();
+  const recovered=all<{id:string;status:string}>('SELECT id,status FROM publish_jobs WHERE id IN (?,?) ORDER BY id','worker-resume','worker-unknown');
+  const byId=Object.fromEntries(recovered.map(x=>[x.id,x.status]));if(recovery.resumable!==1||recovery.reconcile!==1||byId['worker-resume']!=='pending'||byId['worker-unknown']!=='needs_reconcile')throw new Error(`worker recovery classification failed ${JSON.stringify({recovery,byId})}`);
+
   console.log('YouTube resumable upload hardening smoke OK');
 }finally{globalThis.fetch=originalFetch;await rm(dir,{recursive:true,force:true})}

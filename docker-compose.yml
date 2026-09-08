@@ -4,6 +4,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        APP_REVISION: ${APP_REVISION:-unknown}
     container_name: bien-noi-nho-auto-media
     restart: unless-stopped
     init: true

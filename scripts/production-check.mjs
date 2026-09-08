@@ -45,6 +45,8 @@ try{
 
   const audit=await request('/api/admin/audit?limit=1',true);
   line('Operator audit trail',Boolean(audit.stats),audit.stats?`${audit.stats.total||0} events • retention ${audit.stats.retentionDays||90}d`:'unavailable');
+  const analytics=await request('/api/admin/analytics?days=7',true),k=analytics.kpis||{};
+  line('Production analytics',Boolean(analytics.period&&analytics.daily),analytics.period?`7d • render OK ${k.videosReady||0} • publish OK ${k.publishPublished||0}`:'unavailable');
 
   const deployment=await request('/api/publish-deployment-readiness',true);
   line('Publisher configuration',Boolean(deployment.configurationReady),deployment.configurationReady?'configured':'not complete');

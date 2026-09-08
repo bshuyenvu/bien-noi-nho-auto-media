@@ -35,6 +35,8 @@ jobs:
         run: npm run smoke:maintenance
       - name: Operator audit trail smoke test
         run: npm run smoke:audit
+      - name: Production analytics KPI and timing smoke test
+        run: npm run smoke:analytics
       - name: Production operator check syntax
         run: node --check scripts/production-check.mjs
       - name: Persistent render recovery smoke test

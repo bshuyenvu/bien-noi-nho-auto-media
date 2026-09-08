@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { accessOf, requireAdmin } from '../auth/access.js';
+import { productionAnalyticsSnapshot } from '../analytics/production.js';
 import { sendExternalAlertTest } from './alerts.js';
 import { acknowledgeIncident, endMaintenance, maintenanceStatus, silenceIncident, startMaintenance, unsilenceIncident } from './maintenance.js';
 import { monitorIncidents, productionMonitorSnapshot, runProductionMonitorCycle, startProductionMonitor } from './monitor.js';
@@ -10,6 +11,12 @@ queueMicrotask(startProductionMonitor);
 function actorOf(res:any){return accessOf(res).accountId}
 function minutesOf(value:unknown){const n=Number(value);return Number.isFinite(n)&&n>0?Math.round(n):undefined}
 function audit(res:any,ownerId:string,action:string,targetType:string,targetId:string|undefined,summary:string,metadata?:unknown){const access=accessOf(res);recordAuditEvent({ownerId,actor:auditActor(access),action,targetType,targetId,summary,metadata})}
+
+productionMonitorRouter.get('/admin/analytics',(req,res)=>{
+  const ownerId=accessOf(res).accountId,days=Number(String(req.query.days||'7'))===30?30:7;
+  try{return res.json(productionAnalyticsSnapshot(ownerId,days))}
+  catch(e){return res.status(500).json({error:e instanceof Error?e.message:String(e)})}
+});
 
 productionMonitorRouter.get('/admin/monitoring',async(_req,res)=>{
   const ownerId=accessOf(res).accountId;

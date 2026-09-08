@@ -25,6 +25,9 @@ services:
       VISION_API_URL: ${VISION_API_URL:-}
       VISION_API_KEY: ${VISION_API_KEY:-}
       VISION_MODEL: ${VISION_MODEL:-}
+      VIENEU_TTS_ENABLED: ${VIENEU_TTS_ENABLED:-false}
+      VIENEU_TTS_URL: ${VIENEU_TTS_URL:-http://vieneu-tts:7861}
+      VIENEU_TTS_TIMEOUT_MS: ${VIENEU_TTS_TIMEOUT_MS:-240000}
       AUTOPILOT_ENABLED: ${AUTOPILOT_ENABLED:-true}
       AUTOPILOT_INTERVAL_MINUTES: ${AUTOPILOT_INTERVAL_MINUTES:-15}
       AUTOPILOT_LENGTH: ${AUTOPILOT_LENGTH:-60}
@@ -37,3 +40,19 @@ services:
       - ./output:/app/output
     extra_hosts:
       - "host.docker.internal:host-gateway"
+  vieneu-tts:
+    profiles: ["vieneu"]
+    build:
+      context: .
+      dockerfile: services/vieneu-tts/Dockerfile
+    restart: unless-stopped
+    environment:
+      VIENEU_MODE: ${VIENEU_MODE:-v3nano}
+      HF_HOME: /models
+    volumes:
+      - vieneu-models:/models
+    mem_limit: 2200m
+    cpus: 2.0
+
+volumes:
+  vieneu-models:

@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+.DS_Store
+
+# Runtime state
+/data/*
+!/data/.gitkeep
+/output/*
+!/output/.gitkeep
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Local deployment / backup files
+*.bak
+*.backup
+*.tar
+*.tar.gz

@@ -51,6 +51,8 @@ jobs:
         run: npm run smoke:youtube-canary
       - name: Controlled Public Rollout and post-publish watch smoke test
         run: npm run smoke:public-rollout
+      - name: Gradual Public Ramp and circuit breaker smoke test
+        run: npm run smoke:public-ramp
       - name: Production cutover and Unlisted canary smoke test
         run: npm run smoke:cutover
       - name: Production operator check syntax

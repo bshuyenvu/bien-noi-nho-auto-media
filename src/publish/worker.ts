@@ -7,7 +7,7 @@ type Row={id:string;owner_id:string;render_job_id:string;draft_id:string;platfor
 type RenderRow={id:string;output?:string};
 function fromRow(r:Row):PublishJob{return{id:r.id,ownerId:r.owner_id,renderJobId:r.render_job_id,draftId:r.draft_id,platform:r.platform,status:r.status,title:r.title,description:r.description||undefined,scheduledAt:r.scheduled_at||undefined,publishedAt:r.published_at||undefined,remoteId:r.remote_id||undefined,remoteUrl:r.remote_url||undefined,error:r.error||undefined,attempts:Number(r.attempts||0),maxAttempts:Number(r.max_attempts||3),dryRun:Boolean(r.dry_run),deploymentTest:Boolean(r.deployment_test),createdAt:r.created_at,updatedAt:r.updated_at}}
 
-let running=false,timer:NodeJS.Timeout|undefined,lastRunAt:string|undefined,lastError:string|undefined,processed=0;
+let running=false,timer:NodeJS.Timeout|undefined,lastRunAt:string|undefined,lastError:string|undefined,lastErrorAt:string|undefined,lastSuccessAt:string|undefined,processed=0;
 const intervalMs=Math.max(5000,Number(process.env.PUBLISH_WORKER_INTERVAL_MS||15000));
 
 function dueJobs(){const now=new Date().toISOString();return all<Row>("SELECT * FROM publish_jobs WHERE status='pending' OR (status='scheduled' AND scheduled_at<=?) ORDER BY created_at LIMIT 10",now).map(fromRow)}
@@ -27,11 +27,11 @@ export async function processPublishJob(job:PublishJob){
     if(job.platform==='youtube'&&job.deploymentTest&&!job.dryRun&&credential){
       saveCredential(job.ownerId,'youtube',credential.accountLabel,{...credential.secret,privateTestPassedAt:completedAt,privateTestVideoId:result.remoteId,privateTestJobId:job.id});
     }
-    processed++;return result;
+    processed++;lastSuccessAt=completedAt;lastError=undefined;lastErrorAt=undefined;return result;
   }catch(e){
     const message=e instanceof Error?e.message:String(e),attempts=job.attempts+1,final=attempts>=job.maxAttempts;
     run("UPDATE publish_jobs SET status=?,error=?,updated_at=? WHERE id=?",'failed',message,new Date().toISOString(),job.id);
-    lastError=message;
+    lastError=message;lastErrorAt=new Date().toISOString();
     if(!final){} // retries are explicit through the existing retry endpoint
     throw e;
   }
@@ -42,4 +42,4 @@ export async function runPublishWorkerOnce(){
   try{for(const job of dueJobs()){try{await processPublishJob(job);count++}catch{}}return{ok:true,busy:false,processed:count}}finally{running=false}
 }
 export function startPublishWorker(){if(timer)return;timer=setInterval(()=>void runPublishWorkerOnce(),intervalMs);timer.unref();void runPublishWorkerOnce()}
-export function publishWorkerStatus(){return{running,started:Boolean(timer),intervalMs,lastRunAt,lastError,processed,liveEnabled:process.env.PUBLISH_LIVE_ENABLED==='true'}}
+export function publishWorkerStatus(){return{running,started:Boolean(timer),intervalMs,lastRunAt,lastError,lastErrorAt,lastSuccessAt,processed,liveEnabled:process.env.PUBLISH_LIVE_ENABLED==='true'}}

@@ -15,6 +15,7 @@ import { addRssSource,rssItems,rssSources,scanAllRss,scanRssSource } from './rss
 import { rssAdminRouter } from './rss/routes.js';
 import { migrateGoogleNewsRss } from './rss/curator.js';
 import { createAdminRouter,syncDraftStatuses } from './admin/routes.js';
+import { publishOAuthRouter } from './publish/oauth-routes.js';
 import { all,run } from './storage/db.js';
 import { aiEditorStatus,editNews,testAiEditor } from './ai/editor.js';
 import { VOICE_CATALOG,VOICE_STYLES,VIETNAMESE_VOICE_TEST,generateSpeech,isVoiceId,isVoiceStyle } from './tts/edge.js';
@@ -35,6 +36,7 @@ app.get('/api/public-config',(_q,r)=>r.json({productName:'VietNewsFlow AI',clerk
 app.use('/api',requireAccess);
 app.use('/api',accountRouter);
 app.use('/api',rssAdminRouter);
+app.use('/api',publishOAuthRouter);
 app.use('/output',express.static('output',{fallthrough:false,maxAge:'1h'}));
 app.use(express.static('public'));
 
@@ -68,7 +70,7 @@ app.post('/api/ai-edit',async(q,r)=>{const p=z.object({title:z.string().min(5).m
 app.get('/api/templates',(_q,r)=>r.json([{id:'classic',name:'Newsroom Blue'},{id:'breaking',name:'Breaking Red'},{id:'clean',name:'Ocean Clean'}]));
 app.get('/api/voices',(_q,r)=>r.json(VOICE_CATALOG));
 app.get('/api/voice-styles',(_q,r)=>r.json(Object.entries(VOICE_STYLES).map(([id,v])=>({id,...v}))));
-app.post('/api/voice-cast',(q,r)=>{const p=z.object({title:z.string().min(1).max(180),text:z.string().min(1).max(10000),format:z.enum(['breaking','latest','standard']).default('latest')}).safeParse(q.body);if(!p.success)return r.status(400).json({error:'Nội dung casting không hợp lệ'});return r.json(castVietnameseVoice(p.data))});
+app.post('/api/voice-cast',(q,r)=>{const p=z.object({title:z.string().min(1).max(180),text:z.string().min(1).max(10000),format:z.enum(['breaking','latest','standard']).default('latest')}).safeParse(q.body||{});if(!p.success)return r.status(400).json({error:'Nội dung casting không hợp lệ'});return r.json(castVietnameseVoice(p.data))});
 app.post('/api/voice-preview',async(q,r)=>{const p=z.object({voice:z.string(),style:z.string().default('news'),rate:z.enum(['-20%','-10%','+0%','+10%','+20%']).default('+0%'),text:z.string().min(5).max(400).optional()}).safeParse(q.body||{});if(!p.success||!isVoiceId(p.data.voice)||!isVoiceStyle(p.data.style))return r.status(400).json({error:'Giọng hoặc phong cách không hợp lệ'});try{const name=`voice-preview-${p.data.voice}-${Date.now()}.mp3`;await generateSpeech({text:p.data.text?.trim()||VIETNAMESE_VOICE_TEST,audioPath:`output/${name}`,voice:p.data.voice,rate:p.data.rate,style:p.data.style});return r.json({ok:true,output:name,voice:p.data.voice,style:p.data.style})}catch(e){return r.status(422).json({error:e instanceof Error?e.message:String(e)})}});
 
 app.get('/api/rss-sources',(_q,r)=>r.json(rssSources.filter(x=>x.ownerId===accessOf(r).accountId)));

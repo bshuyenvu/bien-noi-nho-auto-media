@@ -15,7 +15,7 @@ import { addRssSource,rssItems,rssSources,scanAllRss,scanRssSource } from './rss
 import { rssAdminRouter } from './rss/routes.js';
 import { createAdminRouter,syncDraftStatuses } from './admin/routes.js';
 import { all,run } from './storage/db.js';
-import { editNews } from './ai/editor.js';
+import { aiEditorStatus,editNews,testAiEditor } from './ai/editor.js';
 import { VOICE_CATALOG,VOICE_STYLES,VIETNAMESE_VOICE_TEST,generateSpeech,isVoiceId,isVoiceStyle } from './tts/edge.js';
 import { castVietnameseVoice } from './tts/casting.js';
 import { createAutoPilot } from './autopilot/controller.js';
@@ -37,6 +37,8 @@ app.use(express.static('public'));
 
 app.get('/api/vision/status',(_q,r)=>r.json(visionConfigStatus()));
 app.post('/api/vision/test',async(_q,r)=>r.json(await testVisionConnection()));
+app.get('/api/ai/status',(_q,r)=>r.json(aiEditorStatus()));
+app.post('/api/ai/test',async(_q,r)=>r.json(await testAiEditor()));
 app.post('/api/auto-producer',async(q,r)=>{const p=z.object({url:z.string().url(),length:z.enum(['30','60','90']).default('60'),format:z.enum(['breaking','latest','standard']).default('latest')}).safeParse(q.body||{});if(!p.success)return r.status(400).json({error:'Dữ liệu Auto Producer không hợp lệ'});try{return r.json(await prepareAutoNews(p.data))}catch(e){return r.status(422).json({error:e instanceof Error?e.message:String(e)})}});
 
 const NewsDraft=z.object({title:z.string().min(5).max(180),sourceUrl:z.string().url().optional(),sourceName:z.string().max(120).optional(),imageUrl:z.string().url().optional(),body:z.string().min(20).max(10000),format:z.enum(['breaking','latest','standard']).default('latest')});

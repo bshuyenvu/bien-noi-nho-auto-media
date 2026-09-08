@@ -7,6 +7,7 @@ import { readdir, rm } from 'node:fs/promises';
 import { directScenes } from './scenes.js';
 import { renderNewsVideo, type VideoTemplate, type MotionLevel, type TickerMode, type VideoScene } from './ffmpeg.js';
 import { resourceSnapshot, waitForRenderResources } from '../system/resource-guard.js';
+import { cleanupOldOutput, ensureStorageForRender, storageSnapshot } from '../system/storage-guard.js';
 
 export type RenderStatus = 'queued' | 'rendering' | 'ready' | 'failed';
 export interface RenderJob {
@@ -77,6 +78,7 @@ export async function deleteRenderJob(id: string) {
   const i = renderJobs.findIndex(j => j.id === id);
   if (i < 0) return false;
   const [job] = renderJobs.splice(i, 1);
+  renderInputs.delete(id);
   run('DELETE FROM render_jobs WHERE id=?', id);
   await cleanupArtifacts(job.id);
   return true;
@@ -120,21 +122,35 @@ export interface EnqueueRenderInput {
 
 type PendingRender = { job: RenderJob; input: EnqueueRenderInput };
 const pendingRenders: PendingRender[] = [];
+const renderInputs = new Map<string, EnqueueRenderInput>();
 let workerBusy = false;
 let workerPaused = process.env.RENDER_QUEUE_PAUSED === 'true';
 let currentJobId: string | null = null;
+let currentStage = 'idle';
 let lastActivityAt = new Date().toISOString();
 let completedSinceStart = 0;
 let failedSinceStart = 0;
 
-function touchActivity() {
+function touchActivity(stage?: string) {
   lastActivityAt = new Date().toISOString();
+  if (stage) currentStage = stage;
 }
 
-export function renderWorkerStatus() {
+function watchdogStatus() {
+  const timeoutMs = Math.max(60_000, Number(process.env.RENDER_WATCHDOG_MS || 20 * 60_000));
+  const idleMs = Date.now() - new Date(lastActivityAt).getTime();
+  return {
+    timeoutMs,
+    idleMs,
+    stalled: Boolean(workerBusy && currentJobId && idleMs > timeoutMs),
+    stage: currentStage,
+  };
+}
+
+export async function renderWorkerStatus() {
   return {
     singleWorker: true,
-    lowMemoryMode: true,
+    lowMemoryMode: process.env.LOW_MEMORY_MODE !== 'false',
     paused: workerPaused,
     busy: workerBusy,
     currentJobId,
@@ -142,38 +158,51 @@ export function renderWorkerStatus() {
     completedSinceStart,
     failedSinceStart,
     lastActivityAt,
+    watchdog: watchdogStatus(),
     resources: resourceSnapshot(),
+    storage: await storageSnapshot().catch(() => null),
   };
 }
 
 export function pauseRenderQueue() {
   workerPaused = true;
-  touchActivity();
-  return renderWorkerStatus();
+  touchActivity('paused');
 }
 
 export function resumeRenderQueue() {
   workerPaused = false;
-  touchActivity();
+  touchActivity('resuming');
   void pumpRenderQueue();
-  return renderWorkerStatus();
+}
+
+export async function cleanupRenderOutput() {
+  return cleanupOldOutput(currentJobId ? [currentJobId] : []);
+}
+
+export async function retryRenderJob(id: string) {
+  const previous = renderJobs.find(j => j.id === id);
+  if (!previous) throw new Error('Render job not found');
+  if (previous.status !== 'failed') throw new Error('Only failed render jobs can be retried');
+  const input = renderInputs.get(id);
+  if (!input) throw new Error('Retry data is unavailable after server restart; render again from the draft');
+  return enqueueRender({ ...input });
 }
 
 async function waitWhilePaused() {
-  while (workerPaused) {
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  }
+  while (workerPaused) await new Promise(resolve => setTimeout(resolve, 1000));
 }
 
 async function processRender(job: RenderJob, input: EnqueueRenderInput) {
   try {
     await waitWhilePaused();
+    touchActivity('resource-check');
     await waitForRenderResources();
+    await ensureStorageForRender([job.id]);
     currentJobId = job.id;
     job.status = 'rendering';
     job.progress = 10;
     job.error = undefined;
-    touchActivity();
+    touchActivity('starting');
     save(job);
 
     const base = `output/${job.id}`;
@@ -182,11 +211,12 @@ async function processRender(job: RenderJob, input: EnqueueRenderInput) {
 
     if (input.autoCollectImages !== false && input.sourceUrl) {
       try {
+        touchActivity('collecting-media');
         const article = await importArticleFromUrl(input.sourceUrl);
         discovered = article.imageUrls || [];
         publishedAt = publishedAt || article.publishedAt;
         job.progress = 18;
-        touchActivity();
+        touchActivity('media-collected');
         save(job);
       } catch (e) {
         console.warn('Auto image collection skipped:', e);
@@ -201,31 +231,25 @@ async function processRender(job: RenderJob, input: EnqueueRenderInput) {
 
     for (let i = 0; i < urls.length; i++) {
       await waitWhilePaused();
+      touchActivity(`downloading-image-${i + 1}`);
       const url = urls[i];
       try {
-        downloaded.push({
-          path: await downloadRemoteImage(url, `${base}-image-${i + 1}`),
-          url,
-          manual: manualUrls.includes(url),
-        });
+        downloaded.push({ path: await downloadRemoteImage(url, `${base}-image-${i + 1}`), url, manual: manualUrls.includes(url) });
       } catch (e) {
         console.warn(`Image ${i + 1} download skipped:`, e);
       }
       job.progress = Math.min(36, 20 + Math.round(((i + 1) / Math.max(1, urls.length)) * 16));
-      touchActivity();
       save(job);
     }
 
+    touchActivity('selecting-media');
     const media = await selectBestMedia(downloaded, process.env.LOW_MEMORY_MODE === 'false' ? 10 : 8);
-    for (const r of media.rejected) {
-      console.warn(`Smart Media rejected ${r.url || r.path}: ${r.width}x${r.height} — ${r.reason}`);
-    }
+    for (const r of media.rejected) console.warn(`Smart Media rejected ${r.url || r.path}: ${r.width}x${r.height} — ${r.reason}`);
 
     let selected = media.selected;
     if (manualUrls.length) {
       selected = [...selected].sort((a, b) => {
-        const ai = manualUrls.indexOf(a.url || '');
-        const bi = manualUrls.indexOf(b.url || '');
+        const ai = manualUrls.indexOf(a.url || ''), bi = manualUrls.indexOf(b.url || '');
         if (ai >= 0 && bi >= 0) return ai - bi;
         if (ai >= 0) return -1;
         if (bi >= 0) return 1;
@@ -236,16 +260,13 @@ async function processRender(job: RenderJob, input: EnqueueRenderInput) {
     const imagePaths = selected.map(x => x.path);
     let scenes: VideoScene[] | undefined;
     if (input.smartScenes !== false) {
-      const valid = (input.scenes || []).filter(
-        s => s.imageIndex >= 0 && s.imageIndex < imagePaths.length && s.startRatio >= 0 && s.endRatio <= 1 && s.endRatio > s.startRatio,
-      );
+      const valid = (input.scenes || []).filter(s => s.imageIndex >= 0 && s.imageIndex < imagePaths.length && s.startRatio >= 0 && s.endRatio <= 1 && s.endRatio > s.startRatio);
       scenes = valid.length ? valid : directScenes(input.text, imagePaths.length);
     }
 
     job.progress = 42;
-    touchActivity();
+    touchActivity('tts');
     save(job);
-
     await waitWhilePaused();
     await generateSpeech({
       text: input.text,
@@ -257,11 +278,12 @@ async function processRender(job: RenderJob, input: EnqueueRenderInput) {
     });
 
     job.progress = 60;
-    touchActivity();
+    touchActivity('pre-ffmpeg-check');
     save(job);
-
     await waitWhilePaused();
     await waitForRenderResources();
+    await ensureStorageForRender([job.id]);
+    touchActivity('ffmpeg');
     job.output = await renderNewsVideo({
       audioPath: `${base}.mp3`,
       srtPath: `${base}.srt`,
@@ -283,23 +305,25 @@ async function processRender(job: RenderJob, input: EnqueueRenderInput) {
     job.progress = 100;
     job.status = 'ready';
     completedSinceStart++;
-    touchActivity();
+    touchActivity('completed');
     save(job);
+    await cleanupOldOutput([job.id]).catch(() => undefined);
   } catch (e) {
     job.status = 'failed';
     job.error = e instanceof Error ? e.message : String(e);
     failedSinceStart++;
-    touchActivity();
+    touchActivity('failed');
     save(job);
   } finally {
     currentJobId = null;
+    currentStage = 'idle';
   }
 }
 
 async function pumpRenderQueue() {
   if (workerBusy || workerPaused) return;
   workerBusy = true;
-  touchActivity();
+  touchActivity('worker-start');
   try {
     while (pendingRenders.length) {
       if (workerPaused) break;
@@ -310,7 +334,7 @@ async function pumpRenderQueue() {
   } finally {
     workerBusy = false;
     currentJobId = null;
-    touchActivity();
+    touchActivity('idle');
     if (pendingRenders.length && !workerPaused) void pumpRenderQueue();
   }
 }
@@ -325,9 +349,10 @@ export function enqueueRender(input: EnqueueRenderInput) {
     createdAt: new Date().toISOString(),
   };
   renderJobs.unshift(job);
+  renderInputs.set(job.id, input);
   save(job);
   pendingRenders.push({ job, input });
-  touchActivity();
+  touchActivity('queued');
   void pumpRenderQueue();
   return job;
 }

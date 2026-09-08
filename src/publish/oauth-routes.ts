@@ -55,7 +55,33 @@ publishOAuthRouter.post('/publish-oauth/youtube/test', async (_req, res) => {
   const credential = getCredential(ownerId, 'youtube');
   if (!credential) return res.status(404).json({ error: 'YouTube chưa được kết nối', platform: 'youtube', ok: false });
   const readiness = await youtubeReadiness(credential);
-  return res.status(readiness.ok ? 200 : 409).json({
+  const storedChannelId = String(credential.secret.channelId || '');
+  if (readiness.ok && readiness.channelId && storedChannelId && readiness.channelId !== storedChannelId) {
+    return res.status(409).json({
+      platform: 'youtube',
+      liveEnabled: process.env.PUBLISH_LIVE_ENABLED === 'true',
+      ...readiness,
+      ok: false,
+      channelMismatch: true,
+      error: 'Channel ID hiện tại khác kênh đã xác minh. Hãy ngắt kết nối rồi OAuth lại để tránh đăng nhầm kênh.',
+    });
+  }
+  if (readiness.ok && readiness.channelId) {
+    const verifiedAt = new Date().toISOString();
+    saveCredential(ownerId, 'youtube', readiness.channelTitle || readiness.channelId, {
+      ...credential.secret,
+      channelId: readiness.channelId,
+      channelTitle: readiness.channelTitle || readiness.channelId,
+      verifiedAt,
+    });
+    return res.json({
+      platform: 'youtube',
+      liveEnabled: process.env.PUBLISH_LIVE_ENABLED === 'true',
+      ...readiness,
+      verifiedAt,
+    });
+  }
+  return res.status(409).json({
     platform: 'youtube',
     liveEnabled: process.env.PUBLISH_LIVE_ENABLED === 'true',
     ...readiness,

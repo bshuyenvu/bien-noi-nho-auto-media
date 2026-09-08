@@ -1,0 +1,25 @@
+name: Typecheck
+
+on:
+  push:
+    branches: ["wyse-4gb-resource-guard", "main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package.json
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: TypeScript typecheck
+        run: npm run typecheck
+      - name: Persistent queue recovery smoke test
+        run: npm run smoke:recovery

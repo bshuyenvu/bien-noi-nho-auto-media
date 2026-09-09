@@ -47,29 +47,31 @@ export interface ShotCraftPlan{
   principles:string[];
 }
 
-const NUMBER=/(?:\b\d{1,3}(?:[.,]\d+)?\s*(?:%|triệu|tỷ|nghìn|ca|người|giờ|ngày|tháng|năm|mm|mg|ml|kg|km|độ|lần)\b)/iu;
-const RISK=/\b(cảnh báo|nguy cơ|rủi ro|tử vong|nguy hiểm|bùng phát|khẩn cấp|suy|ung thư|đột quỵ|tai nạn|biến chứng)\b/iu;
-const EXPLAIN=/\b(vì sao|tại sao|cách|làm gì|nên|giúp|cơ chế|nguyên nhân|điều gì|do đó|bởi vì)\b/iu;
-const HUMAN=/\b(bác sĩ|chuyên gia|người bệnh|bệnh nhân|trẻ em|phụ nữ|nam giới|gia đình|người dân|cộng đồng)\b/iu;
-const CARE=/\b(sức khỏe|y tế|bệnh|điều trị|dinh dưỡng|thuốc|vaccine|vắc xin|phòng ngừa|chăm sóc)\b/iu;
-const TAKEAWAY=/\b(cần nhớ|điều quan trọng|khuyến cáo|khuyến nghị|hãy|tóm lại|cuối cùng|lưu ý|nên nhớ)\b/iu;
+const NUMBER=/\d{1,3}(?:[.,]\d+)?\s*(?:%|triệu|tỷ|nghìn|ca|người|giờ|ngày|tháng|năm|mm|mg|ml|kg|km|độ|lần)(?=$|[\s,.;:!?])/iu;
+const RISK_TERMS=['cảnh báo','nguy cơ','rủi ro','tử vong','nguy hiểm','bùng phát','khẩn cấp','suy','ung thư','đột quỵ','tai nạn','biến chứng'];
+const EXPLAIN_TERMS=['vì sao','tại sao','cách','làm gì','nên','giúp','cơ chế','nguyên nhân','điều gì','do đó','bởi vì'];
+const HUMAN_TERMS=['bác sĩ','chuyên gia','người bệnh','bệnh nhân','trẻ em','phụ nữ','nam giới','gia đình','người dân','cộng đồng'];
+const CARE_TERMS=['sức khỏe','y tế','bệnh','điều trị','dinh dưỡng','thuốc','vaccine','vắc xin','phòng ngừa','chăm sóc'];
+const TAKEAWAY_TERMS=['cần nhớ','điều quan trọng','khuyến cáo','khuyến nghị','hãy','tóm lại','cuối cùng','lưu ý','nên nhớ'];
 
 function clamp(n:number,min:number,max:number){return Math.max(min,Math.min(max,n))}
 function hash(text:string){let h=2166136261;for(const c of text){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0}
+function fold(text:string){return text.toLocaleLowerCase('vi-VN').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/[^a-z0-9%]+/g,' ').trim()}
+function hasAny(text:string,terms:string[]){const hay=` ${fold(text)} `;return terms.some(term=>hay.includes(` ${fold(term)} `))}
 function motionCharacter(text:string,format:ShotCraftOptions['format'],audience:ShotCraftOptions['audience']):MotionCharacter{
-  if(audience==='medical'||audience==='patient'||CARE.test(text))return'calm-care';
+  if(audience==='medical'||audience==='patient'||hasAny(text,CARE_TERMS))return'calm-care';
   if(format==='breaking')return'energetic';
   if(audience==='social')return'friendly';
   return'professional-trust';
 }
 function storyBeat(scene:ScenePlan,index:number,total:number):StoryBeat{
   if(index===0)return'hook';
-  if(index===total-1)return TAKEAWAY.test(scene.text)?'takeaway':'close';
+  if(index===total-1)return hasAny(scene.text,TAKEAWAY_TERMS)?'takeaway':'close';
   if(NUMBER.test(scene.text))return'evidence';
-  if(RISK.test(scene.text))return'caution';
-  if(TAKEAWAY.test(scene.text))return'takeaway';
-  if(EXPLAIN.test(scene.text))return'explanation';
-  if(HUMAN.test(scene.text))return'human';
+  if(hasAny(scene.text,RISK_TERMS))return'caution';
+  if(hasAny(scene.text,TAKEAWAY_TERMS))return'takeaway';
+  if(hasAny(scene.text,EXPLAIN_TERMS))return'explanation';
+  if(hasAny(scene.text,HUMAN_TERMS))return'human';
   return'setup';
 }
 function timingMultiplier(beat:StoryBeat,character:MotionCharacter){
@@ -89,10 +91,10 @@ function retime(base:ScenePlan[],character:MotionCharacter){
 }
 function candidates(text:string,character:MotionCharacter,beat:StoryBeat):ShotRecipe[]{
   if(beat==='evidence'||NUMBER.test(text))return['still-hold','slow-push','slow-pull'];
-  if(beat==='caution'||RISK.test(text))return character==='calm-care'?['slow-push','still-hold','drift-up']:['slow-push','pan-left','still-hold'];
+  if(beat==='caution'||hasAny(text,RISK_TERMS))return character==='calm-care'?['slow-push','still-hold','drift-up']:['slow-push','pan-left','still-hold'];
   if(beat==='takeaway'||beat==='close')return['still-hold','slow-pull','slow-push'];
-  if(beat==='explanation'||EXPLAIN.test(text))return['pan-right','slow-push','diagonal-drift'];
-  if(beat==='human'||HUMAN.test(text))return['drift-up','slow-push','pan-left'];
+  if(beat==='explanation'||hasAny(text,EXPLAIN_TERMS))return['pan-right','slow-push','diagonal-drift'];
+  if(beat==='human'||hasAny(text,HUMAN_TERMS))return['drift-up','slow-push','pan-left'];
   if(character==='calm-care')return['slow-push','pan-right','drift-up','slow-pull'];
   if(character==='energetic')return['pan-left','pan-right','slow-push','diagonal-drift'];
   if(character==='friendly')return['drift-up','pan-right','slow-pull','diagonal-drift'];

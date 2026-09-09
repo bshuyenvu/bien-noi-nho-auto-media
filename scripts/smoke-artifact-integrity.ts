@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const dir=mkdtempSync(join(tmpdir(),'artifact-integrity-smoke-')),output=join(dir,'output');mkdirSync(output,{recursive:true});
-Object.assign(process.env,{DB_PATH:join(dir,'test.sqlite'),ARTIFACT_MANIFEST_WATCHER:'false',RENDER_QUEUE_PAUSED:'true',LOW_MEMORY_MODE:'true',CI:'true'});
+Object.assign(process.env,{DB_PATH:join(dir,'test.sqlite'),ARTIFACT_MANIFEST_WATCHER:'false',ARTIFACT_MANIFEST_GRACE_MS:'0',RENDER_QUEUE_PAUSED:'true',LOW_MEMORY_MODE:'true',CI:'true'});
 try{
  const {run}=await import('../src/storage/db.js');
  const {setReview,bindReviewRenderProfile}=await import('../src/review/store.js');

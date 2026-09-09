@@ -39,6 +39,7 @@ function shaText(value:unknown){return createHash('sha256').update(stable(value)
 async function shaFile(path:string){const hash=createHash('sha256');let size=0;for await(const chunk of createReadStream(path)){const b=Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk as any);size+=b.length;hash.update(b)}return{sha256:hash.digest('hex'),size}}
 function fromRow(r:ArtifactRow):RenderArtifactManifest{return{renderJobId:r.render_job_id,ownerId:r.owner_id,draftId:r.draft_id,outputPath:r.output_path,payloadSha256:r.payload_sha256,approvalSha256:r.approval_sha256,renderProfileSha256:r.render_profile_sha256,outputSha256:r.output_sha256,outputSize:Number(r.output_size),state:r.state,quarantineReason:r.quarantine_reason||undefined,createdAt:r.created_at,verifiedAt:r.verified_at,updatedAt:r.updated_at}}
 function rowFor(renderJobId:string,ownerId:string){return all<ArtifactRow>('SELECT * FROM render_artifacts WHERE render_job_id=? AND owner_id=? LIMIT 1',renderJobId,ownerId)[0]}
+function renderFor(renderJobId:string,ownerId:string){return all<RenderRow>('SELECT id,owner_id,draft_id,output,payload_json,status FROM render_jobs WHERE id=? AND owner_id=? LIMIT 1',renderJobId,ownerId)[0]}
 function quarantine(renderJobId:string,ownerId:string,reason:string){const now=new Date().toISOString();run("UPDATE render_artifacts SET state='quarantined',quarantine_reason=?,updated_at=? WHERE render_job_id=? AND owner_id=?",String(reason).slice(0,700),now,renderJobId,ownerId)}
 
 export async function recordRenderArtifact(input:{renderJobId:string;ownerId:string;draftId:string;outputPath:string;payload:unknown}){
@@ -50,8 +51,15 @@ export async function recordRenderArtifact(input:{renderJobId:string;ownerId:str
  return fromRow(rowFor(input.renderJobId,input.ownerId));
 }
 
+export async function ensureRenderArtifact(renderJobId:string,ownerId:string){
+ const existing=rowFor(renderJobId,ownerId);if(existing)return fromRow(existing);
+ const render=renderFor(renderJobId,ownerId);if(!render||render.status!=='ready'||!render.output)throw new Error('Render chưa sẵn sàng để tạo Artifact Manifest');
+ let payload:unknown;try{payload=render.payload_json?JSON.parse(render.payload_json):null}catch{throw new Error('Render payload không hợp lệ; không thể tạo Artifact Manifest')}
+ return recordRenderArtifact({renderJobId,ownerId,draftId:render.draft_id,outputPath:render.output,payload});
+}
+
 export async function verifyRenderArtifact(renderJobId:string,ownerId:string):Promise<ArtifactVerification>{
- const checkedAt=new Date().toISOString(),render=all<RenderRow>('SELECT id,owner_id,draft_id,output,payload_json,status FROM render_jobs WHERE id=? AND owner_id=? LIMIT 1',renderJobId,ownerId)[0],row=rowFor(renderJobId,ownerId);
+ const checkedAt=new Date().toISOString(),render=renderFor(renderJobId,ownerId),row=rowFor(renderJobId,ownerId);
  const fail=(reason:string)=>{if(row)quarantine(renderJobId,ownerId,reason);return{ok:false,reason,manifest:row?fromRow(row):undefined,checkedAt} satisfies ArtifactVerification};
  if(!render)return fail('render_job_missing');
  if(!row)return fail('manifest_missing');
@@ -68,6 +76,8 @@ export async function verifyRenderArtifact(renderJobId:string,ownerId:string):Pr
  const now=new Date().toISOString();run("UPDATE render_artifacts SET state='valid',quarantine_reason=NULL,verified_at=?,updated_at=? WHERE render_job_id=? AND owner_id=?",now,now,renderJobId,ownerId);
  return{ok:true,manifest:fromRow(rowFor(renderJobId,ownerId)),checkedAt:now};
 }
+
+export async function ensureAndVerifyRenderArtifact(renderJobId:string,ownerId:string){try{await ensureRenderArtifact(renderJobId,ownerId)}catch(e){return{ok:false,reason:e instanceof Error?e.message:String(e),checkedAt:new Date().toISOString()} satisfies ArtifactVerification}return verifyRenderArtifact(renderJobId,ownerId)}
 
 export function recordArtifactPublishLink(input:{renderJobId:string;publishJobId:string;ownerId:string;platform:string;remoteId?:string;remoteUrl?:string;publishedAt:string}){
  const manifest=rowFor(input.renderJobId,input.ownerId);if(!manifest)throw new Error('Render Manifest missing while linking published artifact');
@@ -86,6 +96,11 @@ export function artifactIntegritySnapshot(ownerId:string){
  const manifests=Number(all<{n:number}>('SELECT COUNT(*) n FROM render_artifacts WHERE owner_id=?',ownerId)[0]?.n||0),quarantined=Number(all<{n:number}>("SELECT COUNT(*) n FROM render_artifacts WHERE owner_id=? AND state='quarantined'",ownerId)[0]?.n||0);
  const activeLiveMissing=Number(all<{n:number}>(`SELECT COUNT(*) n FROM publish_jobs p LEFT JOIN render_artifacts a ON a.render_job_id=p.render_job_id AND a.owner_id=p.owner_id WHERE p.owner_id=? AND p.dry_run=0 AND p.status IN ('pending','scheduled','publishing','needs_reconcile') AND a.render_job_id IS NULL`,ownerId)[0]?.n||0);
  const activeLiveQuarantined=Number(all<{n:number}>(`SELECT COUNT(*) n FROM publish_jobs p JOIN render_artifacts a ON a.render_job_id=p.render_job_id AND a.owner_id=p.owner_id WHERE p.owner_id=? AND p.dry_run=0 AND p.status IN ('pending','scheduled','publishing','needs_reconcile') AND a.state!='valid'`,ownerId)[0]?.n||0);
- return{enabled:true,algorithm:'sha256',streamingHash:true,manifests,quarantined,activeLiveMissing,activeLiveQuarantined,activeLiveInvalid:activeLiveMissing+activeLiveQuarantined};
+ return{enabled:true,algorithm:'sha256',streamingHash:true,autoCapture:true,verifyBeforeProvider:true,manifests,quarantined,activeLiveMissing,activeLiveQuarantined,activeLiveInvalid:activeLiveMissing+activeLiveQuarantined};
 }
 export function deleteRenderArtifact(renderJobId:string,ownerId?:string){if(ownerId){run('DELETE FROM artifact_publish_links WHERE render_job_id=? AND owner_id=?',renderJobId,ownerId);run('DELETE FROM render_artifacts WHERE render_job_id=? AND owner_id=?',renderJobId,ownerId)}else{run('DELETE FROM artifact_publish_links WHERE render_job_id=?',renderJobId);run('DELETE FROM render_artifacts WHERE render_job_id=?',renderJobId)}}
+
+let captureBusy=false;
+export async function captureReadyArtifactsOnce(){if(captureBusy)return{captured:0};captureBusy=true;let captured=0;try{const rows=all<RenderRow>(`SELECT r.id,r.owner_id,r.draft_id,r.output,r.payload_json,r.status FROM render_jobs r LEFT JOIN render_artifacts a ON a.render_job_id=r.id AND a.owner_id=r.owner_id WHERE r.status='ready' AND r.output IS NOT NULL AND a.render_job_id IS NULL ORDER BY r.updated_at DESC LIMIT 3`);for(const r of rows){try{let payload:unknown;try{payload=r.payload_json?JSON.parse(r.payload_json):null}catch{continue}await recordRenderArtifact({renderJobId:r.id,ownerId:r.owner_id,draftId:r.draft_id,outputPath:String(r.output),payload});captured++}catch(e){console.warn(`[artifact] auto-capture skipped ${r.id}: ${e instanceof Error?e.message:String(e)}`)}}return{captured}}finally{captureBusy=false}}
+const watcherMs=Math.max(3000,Number(process.env.ARTIFACT_MANIFEST_POLL_MS||5000));
+if(process.env.ARTIFACT_MANIFEST_WATCHER!=='false'){const timer=setInterval(()=>void captureReadyArtifactsOnce(),watcherMs);timer.unref();queueMicrotask(()=>void captureReadyArtifactsOnce())}

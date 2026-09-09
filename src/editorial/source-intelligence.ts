@@ -36,7 +36,7 @@ export function sourceAuthorityScore(url:string,sourceName=''){
   if(/(bộ |sở |cục |bệnh viện|university|institute|journal)/i.test(sourceName))return 86;
   return h?72:55;
 }
-function freshnessScore(publishedAt?:string){if(!publishedAt)return 65;const t=Date.parse(publishedAt);if(!Number.isFinite(t))return 60;const hours=Math.max(0,(Date.now()-t)/3600000);if(hours<=6)return100;if(hours<=24)return95;if(hours<=72)return88;if(hours<=168)return78;if(hours<=720)return65;return50}
+function freshnessScore(publishedAt?:string){if(!publishedAt)return 65;const t=Date.parse(publishedAt);if(!Number.isFinite(t))return 60;const hours=Math.max(0,(Date.now()-t)/3600000);if(hours<=6)return 100;if(hours<=24)return 95;if(hours<=72)return 88;if(hours<=168)return 78;if(hours<=720)return 65;return 50}
 function overallScore(authority:number,freshness:number,corroboration:number){const corroborationScore=Math.min(100,corroboration*28);return Math.round(authority*.62+freshness*.23+corroborationScore*.15)}
 function sentences(text:string){return clean(text,30000).split(/(?<=[.!?。！？])\s+/u).map(x=>x.trim()).filter(x=>x.length>18)}
 function localFacts(text:string):SourceFact[]{const ss=sentences(text),out:SourceFact[]=[];const add=(kind:FactKind,s?:string,confidence=.7)=>{if(!s||out.some(x=>x.text===s))return;out.push({kind,text:s.slice(0,500),sourceExcerpt:s.slice(0,240),confidence,corroboratedBy:0,support:'primary'})};add('event',ss[0],.78);for(const s of ss.slice(0,18)){if(/\b\d+(?:[.,]\d+)?\b|%|USD|EUR|triệu|tỷ|million|billion/i.test(s))add('number',s,.82);if(/\b(today|yesterday|tomorrow|ngày|tháng|năm|hôm nay|hôm qua|sáng|chiều|tối|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/i.test(s))add('time',s,.74)}return out.slice(0,16)}

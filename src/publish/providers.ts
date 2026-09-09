@@ -1,5 +1,7 @@
 import type { PublishJob, PublishPlatform } from './queue.js';
 import { uploadYouTubeVideo, YOUTUBE_REQUIRED_SCOPES, youtubeReadiness } from './youtube.js';
+import { engageProductionKillSwitch } from './activation-state.js';
+import { ensureAndVerifyRenderArtifact,recordArtifactPublishLink } from '../video/provenance.js';
 
 export interface PublishCredential{platform:PublishPlatform;accountLabel:string;secret:Record<string,string>}
 export interface PublishRequest{job:PublishJob;videoPath:string;credential?:PublishCredential}
@@ -21,10 +23,14 @@ class YouTubeProvider implements PublisherProvider{
   async publish(input:PublishRequest){
     if(input.job.dryRun)return dryRunResult(this.platform,input.job);
     this.validateCredential(input.credential);
+    const artifact=await ensureAndVerifyRenderArtifact(input.job.renderJobId,input.job.ownerId);
+    if(!artifact.ok){const reason=`Artifact Integrity chặn upload: ${artifact.reason||'verification_failed'}`;engageProductionKillSwitch('system:artifact-integrity',reason);throw new Error(reason)}
     const readiness=await youtubeReadiness(input.credential);
     if(!readiness.ok)throw new Error(readiness.error||'YouTube readiness check thất bại trước khi upload');
     if(input.credential?.secret.channelId&&readiness.channelId!==input.credential.secret.channelId)throw new Error('Kênh YouTube hiện tại khác channel ID đã xác minh; dừng xuất bản để tránh đăng nhầm kênh');
-    return uploadYouTubeVideo(input.job,input.videoPath,input.credential);
+    const result=await uploadYouTubeVideo(input.job,input.videoPath,input.credential);
+    try{recordArtifactPublishLink({renderJobId:input.job.renderJobId,publishJobId:input.job.id,ownerId:input.job.ownerId,platform:'youtube',remoteId:result.remoteId,remoteUrl:result.remoteUrl,publishedAt:result.publishedAt})}catch(e){console.error(`[artifact] remote link persistence failed for ${input.job.id}: ${e instanceof Error?e.message:String(e)}`)}
+    return result;
   }
 }
 class FacebookProvider implements PublisherProvider{

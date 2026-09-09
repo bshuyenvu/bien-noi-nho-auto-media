@@ -31,7 +31,7 @@ for(const sql of[
 
 const emptyLocks=():ReviewLocks=>({script:false,media:false,voice:false,scenes:false});
 function sha(value:string){return createHash('sha256').update(value).digest('hex')}
-function stable(value:unknown):string{if(value===null||typeof value!=='object')return JSON.stringify(value);if(Array.isArray(value))return `[${value.map(stable).join(',')}]`;return `{${Object.entries(value as Record<string,unknown>).sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${JSON.stringify(k)}:${stable(v)}`).join(',')}}`}
+function stable(value:unknown):string{if(value===undefined)return'null';if(value===null||typeof value!=='object')return JSON.stringify(value)??'null';if(Array.isArray(value))return `[${value.map(stable).join(',')}]`;return `{${Object.entries(value as Record<string,unknown>).sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${JSON.stringify(k)}:${stable(v)}`).join(',')}}`}
 function draftRow(draftId:string,ownerId?:string){const sql='SELECT id,owner_id,title,body,source_url,source_name,image_url,format,status FROM drafts WHERE id=?'+(ownerId?' AND owner_id=?':'')+' LIMIT 1';return ownerId?all<DraftRow>(sql,draftId,ownerId)[0]:all<DraftRow>(sql,draftId)[0]}
 function draftHash(row:DraftRow|undefined){return row?sha(stable({title:row.title,body:row.body,sourceUrl:row.source_url||null,sourceName:row.source_name||null,imageUrl:row.image_url||null,format:row.format})):undefined}
 function locksFromRow(r:ReviewRow):ReviewLocks{return{script:Boolean(r.script_locked),media:Boolean(r.media_locked),voice:Boolean(r.voice_locked),scenes:Boolean(r.scenes_locked)}}

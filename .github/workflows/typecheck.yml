@@ -47,7 +47,12 @@ jobs:
         run: npm run smoke:shotcraft-lite
       - name: ShotCraft Lite real FFmpeg render smoke test
         run: |
-          if ! command -v ffmpeg >/dev/null 2>&1; then sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-dejavu-core; fi
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -exec sed -i '/dl.google.com/d' {} +
+            sudo apt-get update -qq -o Acquire::Retries=3
+            sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+          fi
+          ffmpeg -version | head -n 1
           npm run smoke:shotcraft-render
       - name: Wyse deploy backup rollback smoke test
         run: npm run smoke:wyse-ops

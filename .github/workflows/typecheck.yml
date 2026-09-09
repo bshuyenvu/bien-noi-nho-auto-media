@@ -43,6 +43,8 @@ jobs:
         run: npm run smoke:editorial-intelligence
       - name: Editorial Professional V2 canonical/provider/media-credit smoke test
         run: npm run smoke:editorial-professional
+      - name: ShotCraft Lite cinematic scene planning smoke test
+        run: npm run smoke:shotcraft-lite
       - name: Wyse deploy backup rollback smoke test
         run: npm run smoke:wyse-ops
       - name: V1 private-first deployment safety smoke test

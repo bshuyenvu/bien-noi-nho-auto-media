@@ -173,7 +173,7 @@ services:
     init: true
     stop_grace_period: 15s
     environment:
-      VIENEU_MODE: ${VIENEU_MODE:-v3nano}
+      VIENEU_MODE: ${VIENEU_MODE:-v3turbo}
       HF_HOME: /models
     volumes:
       - vieneu-models:/models

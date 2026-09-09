@@ -16,6 +16,7 @@ const child=spawn(process.execPath,['dist/server.js'],{
     PORT:String(port),
     DB_PATH:join(dir,'smoke.sqlite'),
     RENDER_OUTPUT_DIR:output,
+    RENDER_API_KEY:'smoke-auth-required',
     APP_REVISION:revision,
     RELEASE_CHANNEL:'stable',
     AUTOPILOT_ENABLED:'false',
@@ -45,7 +46,11 @@ try{
   if(health.version!==pkg.version)throw new Error(`health version drift: expected ${pkg.version}, got ${health.version}`);
   if(health.revision!==revision)throw new Error(`health revision drift: expected ${revision}, got ${health.revision}`);
   if(health.releaseChannel!=='stable')throw new Error(`health release channel drift: ${health.releaseChannel}`);
-  console.log(`compiled production server smoke OK • health v${health.version} • ${health.revision}`);
+  const callback=await fetch(`http://127.0.0.1:${port}/api/publish-oauth/youtube/callback`,{redirect:'manual'});
+  if(callback.status!==400)throw new Error(`YouTube OAuth callback must bypass login and validate signed callback data; got HTTP ${callback.status}`);
+  const callbackText=await callback.text();
+  if(!callbackText.includes('Thiếu dữ liệu OAuth'))throw new Error(`unexpected public OAuth callback response: ${callbackText.slice(0,200)}`);
+  console.log(`compiled production server smoke OK • health v${health.version} • ${health.revision} • OAuth callback public/signed`);
 }finally{
   if(child.exitCode===null){
     child.kill('SIGTERM');

@@ -20,6 +20,7 @@ export async function prepareAutoNews(input: {
   url: string;
   length: ScriptLength;
   format: 'breaking' | 'latest' | 'standard';
+  audience?: 'general'|'medical'|'investor'|'patient'|'social';
   fallback?: { title: string; summary?: string; sourceName?: string; imageUrl?: string };
 }) {
   const ownerId = effectiveOwnerId(input.ownerId);
@@ -76,7 +77,7 @@ export async function prepareAutoNews(input: {
   ].filter(Boolean).join('\n\n');
 
   const sourceName = [article.sourceName, ...research.sources.map((x) => x.name)].filter(Boolean).join(' • ').slice(0, 120);
-  const edited = await editNews({ title: intelligence.vietnameseTitle, body: editorialBody, sourceName, length: input.length });
+  const edited = await editNews({ title: intelligence.vietnameseTitle, body: editorialBody, sourceName, length: input.length, ownerId, facts: intelligence.facts, sourceScore: intelligence.sourceScore, audience: input.audience });
   const studio = await analyzeMediaStudio({
     sourceUrl: article.sourceUrl,
     imageUrl: article.imageUrl,

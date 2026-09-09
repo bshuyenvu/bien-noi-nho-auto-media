@@ -37,6 +37,8 @@ jobs:
         run: npm run smoke:safe-export-handoff
       - name: Claim to Source Matrix and Evidence Review smoke test
         run: npm run smoke:claim-source-matrix
+      - name: Phase 7 Editorial Intelligence OS smoke test
+        run: npm run smoke:editorial-intelligence
       - name: Wyse deploy backup rollback smoke test
         run: npm run smoke:wyse-ops
       - name: V1 private-first deployment safety smoke test

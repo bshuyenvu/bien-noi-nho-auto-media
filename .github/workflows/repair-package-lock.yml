@@ -2,15 +2,13 @@ name: Repair package lock
 
 on:
   push:
-    branches:
-      - phase6-2-claim-source-matrix
+    branches: [phase6-2-claim-source-matrix]
 
 permissions:
   contents: write
 
 jobs:
   repair-lock:
-    if: github.event.head_commit.message != 'chore: regenerate package lock'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -20,19 +18,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Regenerate deterministic package lock
+      - name: Regenerate package lock
         run: |
           rm -f package-lock.json
           npm install --package-lock-only --ignore-scripts --no-audit --no-fund
           node -e "JSON.parse(require('node:fs').readFileSync('package-lock.json','utf8'))"
       - name: Commit repaired lock
         run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package-lock.json
-          if git diff --cached --quiet; then
-            echo 'package-lock.json already canonical'
-            exit 0
-          fi
-          git commit -m 'chore: regenerate package lock'
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: regenerate package lock"
           git push origin HEAD:phase6-2-claim-source-matrix

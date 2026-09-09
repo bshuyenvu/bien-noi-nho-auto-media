@@ -13,6 +13,7 @@ Object.assign(process.env,{
 
 try{
   const {run}=await import('../src/storage/db.js');
+  const {setReview}=await import('../src/review/store.js');
   const {saveCredential}=await import('../src/publish/vault.js');
   const {YOUTUBE_REQUIRED_SCOPES}=await import('../src/publish/youtube.js');
   const {enqueuePublish}=await import('../src/publish/queue.js');
@@ -20,11 +21,11 @@ try{
     activationWizardSnapshot,confirmActivationBackup,armProductionActivation,authorizeUnlistedTest,verifyUnlistedTest,verifyRemoteCanary,approvePublicActivation,engageActivationKillSwitch,clearActivationKillSwitch,abortActivationWizard,
   }=await import('../src/publish/activation-wizard.js');
   const {productionPublishGuard}=await import('../src/publish/activation-state.js');
-  const owner='activation-owner',now=new Date().toISOString();
+  const owner='activation-owner',now=new Date().toISOString(),reviewLocks={script:true,media:true,voice:true,scenes:true};
   run('INSERT INTO accounts(id,clerk_user_id,email,role,plan,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)',owner,'clerk-activation','activation@example.test','admin','pro','active',now,now);
   saveCredential(owner,'youtube','Activation Smoke',{refreshToken:'refresh',scope:YOUTUBE_REQUIRED_SCOPES.join(' '),channelId:'UC_ACTIVATION',channelTitle:'Activation Smoke',verifiedAt:now,privateTestPassedAt:now,privateTestVideoId:'private-test-video'});
 
-  const liveInput=(renderJobId:string)=>({ownerId:owner,renderJobId,draftId:`draft-${renderJobId}`,platform:'youtube' as const,title:`Live ${renderJobId}`,dryRun:false});
+  const liveInput=(renderJobId:string)=>{const draftId=`draft-${renderJobId}`;run('INSERT OR IGNORE INTO drafts(id,owner_id,title,body,format,status,created_at) VALUES(?,?,?,?,?,?,?)',draftId,owner,`Activation ${renderJobId}`,`Nội dung kiểm thử activation ${renderJobId} có durable Review evidence để Release Gate xác minh an toàn trước LIVE publish.`,'latest','draft',now);setReview(draftId,{status:'approved',locks:reviewLocks},{ownerId:owner,actor:'smoke:activation'});return{ownerId:owner,renderJobId,draftId,platform:'youtube' as const,title:`Live ${renderJobId}`,dryRun:false}};
   let blockedBeforeArm=false;try{enqueuePublish(liveInput('before-arm'))}catch(e){blockedBeforeArm=String(e).includes('Activation')}
   if(!blockedBeforeArm)throw new Error('normal LIVE was not blocked before ARM');
   const privateTest=enqueuePublish({...liveInput('deployment-test'),deploymentTest:true});

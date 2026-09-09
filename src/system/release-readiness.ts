@@ -1,6 +1,7 @@
 import { all } from '../storage/db.js';
 import '../queue/production.js';
 import './audit.js';
+import { getReview } from '../review/store.js';
 import { contentSafetyStats } from '../publish/content-safety.js';
 import { publisherDeploymentReadiness } from '../publish/deployment-readiness.js';
 import { publicRampState } from '../publish/public-ramp.js';
@@ -10,7 +11,7 @@ import { runtimeReleaseMetadata } from './version.js';
 export type ReleaseCheckStatus='pass'|'warn'|'fail';
 export interface ReleaseCheck{id:string;label:string;status:ReleaseCheckStatus;detail:string}
 
-const REQUIRED_TABLES=['render_jobs','production_queue','publish_jobs','publish_content_fingerprints','youtube_upload_sessions','publish_credentials','system_incidents','system_audit_events'];
+const REQUIRED_TABLES=['render_jobs','production_queue','review_states','review_events','publish_jobs','publish_content_fingerprints','youtube_upload_sessions','publish_credentials','system_incidents','system_audit_events'];
 function check(id:string,label:string,status:ReleaseCheckStatus,detail:string):ReleaseCheck{return{id,label,status,detail}}
 function count(sql:string,...params:any[]){return Number(all<{n:number}>(sql,...params)[0]?.n||0)}
 
@@ -28,6 +29,8 @@ export async function releaseCandidateSnapshot(ownerId:string){
   const needsReconcile=count("SELECT COUNT(*) AS n FROM publish_jobs WHERE owner_id=? AND status='needs_reconcile'",ownerId);
   const uncertainSessions=count("SELECT COUNT(*) AS n FROM youtube_upload_sessions WHERE owner_id=? AND state='needs_reconcile'",ownerId);
   const activeUploads=count("SELECT COUNT(*) AS n FROM youtube_upload_sessions WHERE owner_id=? AND state='active'",ownerId);
+  const activeLiveDrafts=all<{draft_id:string}>("SELECT DISTINCT draft_id FROM publish_jobs WHERE owner_id=? AND dry_run=0 AND status IN ('pending','scheduled','publishing','needs_reconcile')",ownerId).map(x=>x.draft_id);
+  const staleReviewDrafts=activeLiveDrafts.filter(id=>!getReview(id,ownerId).approvalCurrent);
   const credentialReady=Boolean(deployment.credential?.liveReadyCached);
   const privateTestReady=!deployment.productionPrivacyNeedsPrivateTest||Boolean(deployment.privateTest?.passed);
   const productionRevisionReady=release.environment!=='production'||release.revision!=='unknown';
@@ -38,6 +41,7 @@ export async function releaseCandidateSnapshot(ownerId:string){
     check('sqlite-integrity','SQLite quick_check',database.quickCheckOk?'pass':'fail',database.quickCheck),
     check('sqlite-schema','Required SQLite schema',database.missingTables.length?'fail':'pass',database.missingTables.length?`Thiếu: ${database.missingTables.join(', ')}`:`${database.requiredTables.length} bảng bắt buộc`),
     check('sqlite-wal','SQLite WAL',database.journalMode.toLowerCase()==='wal'?'pass':'warn',database.journalMode),
+    check('review-gate','Durable Review Gate',staleReviewDrafts.length?'fail':'pass',staleReviewDrafts.length?`${staleReviewDrafts.length} LIVE draft có approval stale: ${staleReviewDrafts.slice(0,5).join(', ')}`:`${activeLiveDrafts.length} LIVE draft đang hoạt động có approval current`),
     check('monitor','Production Monitor',monitor.overall==='red'?'fail':monitor.overall==='yellow'?'warn':'pass',String(monitor.overall).toUpperCase()),
     check('maintenance','Maintenance Mode',maintenanceActive?'fail':'pass',maintenanceActive?`ACTIVE đến ${monitor.maintenance?.endsAt||'?'}`:'OFF'),
     check('reconcile','Ambiguous publish jobs',needsReconcile||uncertainSessions?'fail':'pass',`${needsReconcile} job • ${uncertainSessions} upload session`),
@@ -65,6 +69,7 @@ export async function releaseCandidateSnapshot(ownerId:string){
     warnings:warnings.map(x=>`${x.label}: ${x.detail}`),
     database,
     queues:{needsReconcile,uncertainSessions,activeUploads},
+    reviewGate:{activeLiveDrafts:activeLiveDrafts.length,staleReviewDrafts},
     deployment,
     monitor:{overall:monitor.overall,maintenance:monitor.maintenance},
     publicRamp:{stage:ramp.stage,circuitOpen:ramp.circuitOpen,circuitReason:ramp.circuitReason,cooldownUntil:ramp.cooldownUntil},

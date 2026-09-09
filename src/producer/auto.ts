@@ -6,12 +6,14 @@ import { matchImagesToScenes } from '../video/matching.js';
 import { castVietnameseVoice } from '../tts/casting.js';
 import { findForeignSources } from '../research/foreign.js';
 import { analyzeSourceIntelligence } from '../editorial/source-intelligence.js';
+import { all } from '../storage/db.js';
 
+function effectiveOwnerId(ownerId?:string){return ownerId||all<{id:string}>("SELECT id FROM accounts WHERE role='admin' AND status='active' ORDER BY created_at LIMIT 1")[0]?.id||'legacy-admin'}
 export async function prepareAutoNews(input:{ownerId?:string;url:string;length:ScriptLength;format:'breaking'|'latest'|'standard';fallback?:{title:string;summary?:string;sourceName?:string;imageUrl?:string}}){
- let article;
+ const ownerId=effectiveOwnerId(input.ownerId);let article;
  try{article=await importArticleFromUrl(input.url)}catch(error){const summary=input.fallback?.summary?.trim()||'';if(summary.length<120)throw error;article={title:input.fallback!.title,body:summary,sourceName:input.fallback?.sourceName,sourceUrl:input.url,imageUrl:input.fallback?.imageUrl,imageUrls:input.fallback?.imageUrl?[input.fallback.imageUrl]:[],language:undefined,publishedAt:undefined}}
  const research=await findForeignSources(article.title,3);
- const intelligence=await analyzeSourceIntelligence({ownerId:input.ownerId,sourceUrl:article.sourceUrl,sourceName:article.sourceName,title:article.title,body:article.body,languageHint:article.language,publishedAt:article.publishedAt,corroboration:research.sources.map(x=>({name:x.name,title:x.title,summary:x.summary,url:x.url}))});
+ const intelligence=await analyzeSourceIntelligence({ownerId,sourceUrl:article.sourceUrl,sourceName:article.sourceName,title:article.title,body:article.body,languageHint:article.language,publishedAt:article.publishedAt,corroboration:research.sources.map(x=>({name:x.name,title:x.title,summary:x.summary,url:x.url}))});
  if(!intelligence.readyForEditorial)throw new Error('Nguồn chưa sẵn sàng cho biên tập tiếng Việt: '+intelligence.warnings.join(' | '));
  const factBasis=intelligence.facts.filter(x=>x.support!=='uncertain').slice(0,14).map(x=>x.text).filter(Boolean);
  const editorialBody=[intelligence.vietnameseBrief,factBasis.length?'DỮ KIỆN ĐÃ KHÓA:\n- '+factBasis.join('\n- '):''].filter(Boolean).join('\n\n');

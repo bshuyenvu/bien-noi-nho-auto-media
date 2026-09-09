@@ -20,19 +20,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply exact tested patch
+      - name: Apply tested product patch
         run: |
-          git apply --check .github/rss-source-resilience.patch
-          git apply .github/rss-source-resilience.patch
+          git apply --check --exclude=.github/workflows/typecheck.yml .github/rss-source-resilience.patch
+          git apply --exclude=.github/workflows/typecheck.yml .github/rss-source-resilience.patch
           npm ci --no-audit --no-fund
           npm run typecheck
           npm run smoke:rss-resilience
           npm run smoke:v1-acceptance
-      - name: Commit clean branch
+      - name: Commit product files
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git rm .github/rss-source-resilience.patch .github/workflows/apply-rss-source-resilience.yml
-          git add -A
+          git add docs/PHASE-7-RSS-SOURCE-RESILIENCE.md package.json scripts/smoke-rss-source-resilience.ts src/rss/curator.ts src/rss/manager.ts src/server.ts
           git commit -m "Fix foreign RSS source resilience"
           git push origin HEAD:phase7-rss-source-resilience

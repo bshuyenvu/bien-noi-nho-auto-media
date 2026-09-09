@@ -1,0 +1,38 @@
+name: Apply RSS Source Resilience
+
+on:
+  push:
+    branches: ["phase7-rss-source-resilience"]
+    paths: [".github/workflows/apply-rss-source-resilience.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase7-rss-source-resilience
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply exact tested patch
+        run: |
+          git apply --check .github/rss-source-resilience.patch
+          git apply .github/rss-source-resilience.patch
+          npm ci --no-audit --no-fund
+          npm run typecheck
+          npm run smoke:rss-resilience
+          npm run smoke:v1-acceptance
+      - name: Commit clean branch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm .github/rss-source-resilience.patch .github/workflows/apply-rss-source-resilience.yml
+          git add -A
+          git commit -m "Fix foreign RSS source resilience"
+          git push origin HEAD:phase7-rss-source-resilience

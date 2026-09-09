@@ -1,4 +1,5 @@
 import { all,run } from '../storage/db.js';
+import { canRender } from '../review/store.js';
 import { publisherFor } from './providers.js';
 import { getCredential,saveCredential } from './vault.js';
 import type { PublishJob,PublishPlatform,PublishStatus } from './queue.js';
@@ -28,7 +29,7 @@ export function recoverInterruptedPublishing(){
     if(Boolean(row.dry_run)){const now=new Date().toISOString();run("UPDATE publish_jobs SET status='pending',error='Recovered dry-run after server restart',updated_at=? WHERE id=? AND status='publishing'",now,row.id);resumable++;continue}
     const session=row.platform==='youtube'?getYouTubeUploadSession(row.id,row.owner_id):undefined;
     if(row.platform==='youtube'&&session&&(session.state==='active'||session.state==='completed')){
-      const now=new Date().toISOString();run("UPDATE publish_jobs SET status='pending',error='Recovered persisted YouTube resumable session; remote status will be checked before continuing',updated_at=? WHERE id=? AND status='publishing'",now,row.id);resumable++;continue;
+      const now=new Date().toISOString();run("UPDATE publish_jobs SET status='pending',error='Recovered persisted YouTube resumable session; remote status will be checked before continuing',updated_at=? WHERE id=? AND status='publishing'",now,row.id);resumable++;continue
     }
     quarantineInterrupted(row);reconcile++;
   }
@@ -42,6 +43,12 @@ export async function processPublishJob(job:PublishJob){
   const render=all<RenderRow>('SELECT id,output FROM render_jobs WHERE id=? AND owner_id=? LIMIT 1',job.renderJobId,job.ownerId)[0];
   if(!render?.output)throw new Error('Không tìm thấy file video render để xuất bản');
   if(!job.dryRun&&process.env.PUBLISH_LIVE_ENABLED!=='true')throw new Error('Live publishing đang bị khóa bởi PUBLISH_LIVE_ENABLED');
+  if(!job.dryRun&&!canRender(job.draftId,job.ownerId)){
+    const now=new Date().toISOString(),message='Review approval đã hết hiệu lực sau khi job được xếp hàng; LIVE publish bị chặn trước provider';
+    run("UPDATE publish_jobs SET status='failed',error=?,updated_at=? WHERE id=? AND owner_id=? AND status IN ('pending','scheduled')",message,now,job.id,job.ownerId);
+    if(job.publicCanary)failPublicCanary(job.ownerId,message);
+    throw new Error(message);
+  }
   if(!job.dryRun&&job.platform==='youtube'){
     const privacy=job.publishPrivacy||envYouTubePrivacy(),activation=productionPublishGuard(job.ownerId,{deploymentTest:job.deploymentTest,publicCanary:job.publicCanary,privacy});
     if(!activation.allowed)throw new Error(`Production Activation chặn publish: ${activation.reason}`);

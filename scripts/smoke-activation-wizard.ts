@@ -8,7 +8,8 @@ Object.assign(process.env,{
   CREDENTIAL_VAULT_KEY:'activation-smoke-vault-key-1234567890',OAUTH_STATE_SECRET:'activation-smoke-oauth-key-1234567890',
   YOUTUBE_CLIENT_ID:'client',YOUTUBE_CLIENT_SECRET:'secret',YOUTUBE_REDIRECT_URI:'http://localhost:8787/api/publish-oauth/youtube/callback',
   YOUTUBE_PRIVACY_STATUS:'private',YOUTUBE_READINESS_MAX_AGE_MS:'900000',PUBLISH_LIVE_ENABLED:'true',PUBLISH_STARTUP_DIAGNOSTICS:'false',
-  ACTIVATION_BACKUP_MAX_AGE_HOURS:'24',ACTIVATION_REMOTE_CANARY_MAX_AGE_MINUTES:'60',RENDER_QUEUE_PAUSED:'false',LOW_MEMORY_MODE:'true'
+  ACTIVATION_BACKUP_MAX_AGE_HOURS:'24',ACTIVATION_REMOTE_CANARY_MAX_AGE_MINUTES:'60',RENDER_QUEUE_PAUSED:'false',LOW_MEMORY_MODE:'true',
+  ARTIFACT_MANIFEST_WATCHER:'false',CONSISTENCY_AUDITOR_ENABLED:'false'
 });
 
 try{
@@ -25,7 +26,7 @@ try{
   run('INSERT INTO accounts(id,clerk_user_id,email,role,plan,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)',owner,'clerk-activation','activation@example.test','admin','pro','active',now,now);
   saveCredential(owner,'youtube','Activation Smoke',{refreshToken:'refresh',scope:YOUTUBE_REQUIRED_SCOPES.join(' '),channelId:'UC_ACTIVATION',channelTitle:'Activation Smoke',verifiedAt:now,privateTestPassedAt:now,privateTestVideoId:'private-test-video'});
 
-  const liveInput=(renderJobId:string)=>{const draftId=`draft-${renderJobId}`;run('INSERT OR IGNORE INTO drafts(id,owner_id,title,body,format,status,created_at) VALUES(?,?,?,?,?,?,?)',draftId,owner,`Activation ${renderJobId}`,`Nội dung kiểm thử activation ${renderJobId} có durable Review evidence để Release Gate xác minh an toàn trước LIVE publish.`,'latest','draft',now);setReview(draftId,{status:'approved',locks:reviewLocks},{ownerId:owner,actor:'smoke:activation'});return{ownerId:owner,renderJobId,draftId,platform:'youtube' as const,title:`Live ${renderJobId}`,dryRun:false}};
+  const liveInput=(renderJobId:string)=>{const draftId=`draft-${renderJobId}`,body=`Nội dung kiểm thử activation ${renderJobId} có durable Review evidence để Release Gate xác minh an toàn trước LIVE publish.`;run('INSERT OR IGNORE INTO drafts(id,owner_id,title,body,format,status,created_at) VALUES(?,?,?,?,?,?,?)',draftId,owner,`Activation ${renderJobId}`,body,'latest','draft',now);setReview(draftId,{status:'approved',locks:reviewLocks},{ownerId:owner,actor:'smoke:activation'});run('INSERT OR IGNORE INTO render_jobs(id,draft_id,owner_id,status,progress,output,error,created_at,payload_json,attempts,max_attempts,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',renderJobId,draftId,owner,'ready',100,join(output,`${renderJobId}.mp4`),null,now,JSON.stringify({draftId,ownerId:owner,text:body,headline:`Activation ${renderJobId}`}),1,3,now);return{ownerId:owner,renderJobId,draftId,platform:'youtube' as const,title:`Live ${renderJobId}`,dryRun:false}};
   let blockedBeforeArm=false;try{enqueuePublish(liveInput('before-arm'))}catch(e){blockedBeforeArm=String(e).includes('Activation')}
   if(!blockedBeforeArm)throw new Error('normal LIVE was not blocked before ARM');
   const privateTest=enqueuePublish({...liveInput('deployment-test'),deploymentTest:true});

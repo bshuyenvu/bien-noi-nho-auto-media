@@ -1,6 +1,7 @@
 import { all } from '../storage/db.js';
 import '../queue/production.js';
 import './audit.js';
+import { consistencySnapshot } from './consistency.js';
 import { getReview } from '../review/store.js';
 import { artifactIntegritySnapshot } from '../video/provenance.js';
 import { contentSafetyStats } from '../publish/content-safety.js';
@@ -12,7 +13,7 @@ import { runtimeReleaseMetadata } from './version.js';
 export type ReleaseCheckStatus='pass'|'warn'|'fail';
 export interface ReleaseCheck{id:string;label:string;status:ReleaseCheckStatus;detail:string}
 
-const REQUIRED_TABLES=['render_jobs','production_queue','review_states','review_events','render_artifacts','artifact_publish_links','publish_jobs','publish_content_fingerprints','youtube_upload_sessions','publish_credentials','system_incidents','system_audit_events'];
+const REQUIRED_TABLES=['render_jobs','production_queue','review_states','review_events','render_artifacts','artifact_publish_links','publish_jobs','publish_content_fingerprints','youtube_upload_sessions','publish_credentials','system_incidents','system_audit_events','system_consistency_runs','system_consistency_issues'];
 function check(id:string,label:string,status:ReleaseCheckStatus,detail:string):ReleaseCheck{return{id,label,status,detail}}
 function count(sql:string,...params:any[]){return Number(all<{n:number}>(sql,...params)[0]?.n||0)}
 
@@ -26,7 +27,7 @@ function sqliteChecks(){
 }
 
 export async function releaseCandidateSnapshot(ownerId:string){
-  const release=runtimeReleaseMetadata(),database=sqliteChecks(),monitor=await productionMonitorSnapshot(ownerId),deployment=publisherDeploymentReadiness(ownerId),ramp=publicRampState(ownerId),contentSafety=contentSafetyStats(ownerId),artifactIntegrity=artifactIntegritySnapshot(ownerId);
+  const release=runtimeReleaseMetadata(),database=sqliteChecks(),consistency=consistencySnapshot(ownerId),monitor=await productionMonitorSnapshot(ownerId),deployment=publisherDeploymentReadiness(ownerId),ramp=publicRampState(ownerId),contentSafety=contentSafetyStats(ownerId),artifactIntegrity=artifactIntegritySnapshot(ownerId);
   const needsReconcile=count("SELECT COUNT(*) AS n FROM publish_jobs WHERE owner_id=? AND status='needs_reconcile'",ownerId);
   const uncertainSessions=count("SELECT COUNT(*) AS n FROM youtube_upload_sessions WHERE owner_id=? AND state='needs_reconcile'",ownerId);
   const activeUploads=count("SELECT COUNT(*) AS n FROM youtube_upload_sessions WHERE owner_id=? AND state='active'",ownerId);
@@ -42,6 +43,7 @@ export async function releaseCandidateSnapshot(ownerId:string){
     check('sqlite-integrity','SQLite quick_check',database.quickCheckOk?'pass':'fail',database.quickCheck),
     check('sqlite-schema','Required SQLite schema',database.missingTables.length?'fail':'pass',database.missingTables.length?`Thiếu: ${database.missingTables.join(', ')}`:`${database.requiredTables.length} bảng bắt buộc`),
     check('sqlite-wal','SQLite WAL',database.journalMode.toLowerCase()==='wal'?'pass':'warn',database.journalMode),
+    check('consistency','End-to-End Consistency',consistency.blockers?'fail':consistency.warnings?'warn':'pass',consistency.blockers?`${consistency.blockers} blocker • ${consistency.warnings} warning`:consistency.warnings?`${consistency.warnings} warning • không có blocker`:'Draft → Review → Queue → Render → Artifact → Publish nhất quán'),
     check('review-gate','Durable Review Gate',staleReviewDrafts.length?'fail':'pass',staleReviewDrafts.length?`${staleReviewDrafts.length} LIVE draft có approval stale: ${staleReviewDrafts.slice(0,5).join(', ')}`:`${activeLiveDrafts.length} LIVE draft đang hoạt động có approval current`),
     check('artifact-integrity','Immutable Render Artifact',artifactIntegrity.activeLiveInvalid?'fail':artifactIntegrity.quarantined?'warn':'pass',artifactIntegrity.activeLiveInvalid?`${artifactIntegrity.activeLiveInvalid} LIVE artifact thiếu manifest/quarantined`:artifactIntegrity.quarantined?`${artifactIntegrity.quarantined} artifact đang quarantine; không có LIVE target bị ảnh hưởng`:`${artifactIntegrity.manifests} manifest SHA-256 • verify trước provider`),
     check('monitor','Production Monitor',monitor.overall==='red'?'fail':monitor.overall==='yellow'?'warn':'pass',String(monitor.overall).toUpperCase()),
@@ -70,6 +72,7 @@ export async function releaseCandidateSnapshot(ownerId:string){
     blockers:failChecks.map(x=>`${x.label}: ${x.detail}`),
     warnings:warnings.map(x=>`${x.label}: ${x.detail}`),
     database,
+    consistency:{ok:consistency.ok,blockers:consistency.blockers,warnings:consistency.warnings,issues:consistency.issues.slice(0,20)},
     queues:{needsReconcile,uncertainSessions,activeUploads},
     reviewGate:{activeLiveDrafts:activeLiveDrafts.length,staleReviewDrafts},
     artifactIntegrity,

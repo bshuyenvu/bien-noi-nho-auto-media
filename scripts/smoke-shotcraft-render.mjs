@@ -3,9 +3,15 @@ import { mkdtemp, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { renderNewsVideo } from '../dist/video/ffmpeg.js';
+import { renderNewsVideo, shotMotionCap } from '../dist/video/ffmpeg.js';
 
 function cmd(bin,args){const r=spawnSync(bin,args,{encoding:'utf8'});if(r.error)throw new Error(`${bin} unavailable: ${r.error.message}`);if(r.status!==0)throw new Error(`${bin} failed (${r.status}): ${r.stderr||r.stdout||'no output'}`);return r.stdout}
+
+assert.equal(shotMotionCap('off',.9),1);
+assert.ok(shotMotionCap('light',.9)>shotMotionCap('light',.2),'high energy must increase camera amplitude within the same motion level');
+assert.ok(shotMotionCap('strong',.9)>shotMotionCap('medium',.9),'global motion level must remain the upper-level control');
+assert.ok(shotMotionCap('light',0)>1&&shotMotionCap('light',1)<1.06,'light motion must stay restrained');
+
 const dir=await mkdtemp(join(tmpdir(),'shotcraft-render-'));
 const colors=['0x174a72','0x6b3b67','0x24613f','0x73501f'];
 const images=[];
@@ -17,10 +23,10 @@ for(let i=0;i<colors.length;i++){
 const audio=join(dir,'audio.m4a');
 cmd('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i','sine=frequency=440:sample_rate=44100:duration=8','-c:a','aac','-b:a','96k','-y',audio]);
 const scenes=[
-  {imageIndex:0,startRatio:0,endRatio:.25,shotRecipe:'slow-push',transition:'cut',holdRatio:.15,energy:.3,sourceCredit:'Nature Medicine'},
+  {imageIndex:0,startRatio:0,endRatio:.25,shotRecipe:'slow-push',transition:'cut',holdRatio:.15,energy:.2,sourceCredit:'Nature Medicine'},
   {imageIndex:1,startRatio:.25,endRatio:.5,shotRecipe:'pan-right',transition:'cut',holdRatio:.15,energy:.45,sourceCredit:'ECDC'},
-  {imageIndex:2,startRatio:.5,endRatio:.75,shotRecipe:'drift-up',transition:'soft-dip',holdRatio:.16,energy:.5,sourceCredit:'EMA'},
-  {imageIndex:3,startRatio:.75,endRatio:1,shotRecipe:'still-hold',transition:'cut',holdRatio:.28,energy:.25,sourceCredit:'Minh họa'},
+  {imageIndex:2,startRatio:.5,endRatio:.75,shotRecipe:'drift-up',transition:'soft-dip',holdRatio:.16,energy:.8,sourceCredit:'EMA'},
+  {imageIndex:3,startRatio:.75,endRatio:1,shotRecipe:'still-hold',transition:'cut',holdRatio:.28,energy:.2,sourceCredit:'Minh họa'},
 ];
 const output=join(dir,'shotcraft-lite.mp4');
 await renderNewsVideo({audioPath:audio,outputPath:output,duration:8,headline:'ShotCraft Lite render smoke',imagePaths:images,scenes,template:'clean',motion:'light',tickerMode:'off',channelName:'VietNewsFlow AI'});
@@ -29,4 +35,4 @@ const video=info.streams.find(x=>x.codec_name==='h264');
 assert.ok(video,'H.264 stream missing');
 assert.equal(video.width,1080);assert.equal(video.height,1920);
 assert.ok(Number(info.format.duration)>=7.5);assert.ok(Number((await stat(output)).size)>10_000);
-console.log('ShotCraft Lite FFmpeg render smoke OK',JSON.stringify({duration:info.format.duration,size:info.format.size,recipes:scenes.map(x=>x.shotRecipe)}));
+console.log('ShotCraft energy-aware FFmpeg render smoke OK',JSON.stringify({duration:info.format.duration,size:info.format.size,caps:{low:shotMotionCap('light',.2),high:shotMotionCap('light',.8)},recipes:scenes.map(x=>x.shotRecipe)}));

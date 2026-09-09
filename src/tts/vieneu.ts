@@ -12,7 +12,7 @@ function subtitle(text:string,duration:number){const sentences=text.match(/[^.!?
 export async function generateVieNeuSpeech(input:{text:string;audioPath:string;srtPath?:string;voiceId:string}){
  if(!enabled())return undefined;
  const base=(process.env.VIENEU_TTS_URL||'http://vieneu-tts:7861').replace(/\/$/,'');
- const voice=input.voiceId.includes('female')||input.voiceId.includes('ava')?'Mai Anh':'Minh Quân';
+ const voice=input.voiceId.includes('female')||input.voiceId.includes('ava')?'Mai Anh':'Adam';
  const response=await fetch(`${base}/synthesize`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:input.text,voice}),signal:AbortSignal.timeout(Number(process.env.VIENEU_TTS_TIMEOUT_MS||240000))});
  if(!response.ok)throw new Error(`VieNeu HTTP ${response.status}: ${(await response.text()).slice(0,300)}`);
  const wav=`${input.audioPath}.vieneu.wav`;

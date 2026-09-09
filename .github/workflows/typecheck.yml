@@ -27,6 +27,8 @@ jobs:
         run: docker compose config -q
       - name: Wyse deploy backup rollback smoke test
         run: npm run smoke:wyse-ops
+      - name: V1 private-first deployment safety smoke test
+        run: npm run smoke:v1-private-deploy
       - name: Production monitoring incident lifecycle smoke test
         run: npm run smoke:monitoring
       - name: Safe self-heal and external alert smoke test

@@ -9,11 +9,12 @@ import { publisherDeploymentReadiness } from '../publish/deployment-readiness.js
 import { publicRampState } from '../publish/public-ramp.js';
 import { productionMonitorSnapshot } from './monitor.js';
 import { runtimeReleaseMetadata } from './version.js';
+import { sourceIntelligenceStats } from '../editorial/source-intelligence.js';
 
 export type ReleaseCheckStatus='pass'|'warn'|'fail';
 export interface ReleaseCheck{id:string;label:string;status:ReleaseCheckStatus;detail:string}
 
-const REQUIRED_TABLES=['render_jobs','production_queue','review_states','review_events','render_artifacts','artifact_publish_links','publish_jobs','publish_content_fingerprints','youtube_upload_sessions','publish_credentials','system_incidents','system_audit_events','system_consistency_runs','system_consistency_issues'];
+const REQUIRED_TABLES=['render_jobs','production_queue','review_states','review_events','render_artifacts','artifact_publish_links','publish_jobs','publish_content_fingerprints','youtube_upload_sessions','publish_credentials','system_incidents','system_audit_events','system_consistency_runs','system_consistency_issues','source_intelligence'];
 function check(id:string,label:string,status:ReleaseCheckStatus,detail:string):ReleaseCheck{return{id,label,status,detail}}
 function count(sql:string,...params:any[]){return Number(all<{n:number}>(sql,...params)[0]?.n||0)}
 
@@ -27,7 +28,7 @@ function sqliteChecks(){
 }
 
 export async function releaseCandidateSnapshot(ownerId:string){
-  const release=runtimeReleaseMetadata(),database=sqliteChecks(),consistency=consistencySnapshot(ownerId),monitor=await productionMonitorSnapshot(ownerId),deployment=publisherDeploymentReadiness(ownerId),ramp=publicRampState(ownerId),contentSafety=contentSafetyStats(ownerId),artifactIntegrity=artifactIntegritySnapshot(ownerId);
+  const release=runtimeReleaseMetadata(),database=sqliteChecks(),consistency=consistencySnapshot(ownerId),monitor=await productionMonitorSnapshot(ownerId),deployment=publisherDeploymentReadiness(ownerId),ramp=publicRampState(ownerId),contentSafety=contentSafetyStats(ownerId),artifactIntegrity=artifactIntegritySnapshot(ownerId),sourceIntelligence=sourceIntelligenceStats(ownerId);
   const needsReconcile=count("SELECT COUNT(*) AS n FROM publish_jobs WHERE owner_id=? AND status='needs_reconcile'",ownerId);
   const uncertainSessions=count("SELECT COUNT(*) AS n FROM youtube_upload_sessions WHERE owner_id=? AND state='needs_reconcile'",ownerId);
   const activeUploads=count("SELECT COUNT(*) AS n FROM youtube_upload_sessions WHERE owner_id=? AND state='active'",ownerId);
@@ -51,6 +52,7 @@ export async function releaseCandidateSnapshot(ownerId:string){
     check('reconcile','Ambiguous publish jobs',needsReconcile||uncertainSessions?'fail':'pass',`${needsReconcile} job • ${uncertainSessions} upload session`),
     check('public-ramp','Public Ramp Circuit',ramp.circuitOpen?'fail':'pass',ramp.circuitOpen?`OPEN • ${ramp.circuitReason||'operator review required'}`:`CLOSED • Stage ${ramp.stage}`),
     check('content-safety','Content Safety duplicate window',contentSafety.config.windowHours<24?'warn':'pass',`${contentSafety.config.windowHours}h • title ≥${contentSafety.config.titleSimilarity} • body ≥${contentSafety.config.bodySimilarity} • ${contentSafety.recentFingerprints} fingerprint gần đây`),
+    check('source-intelligence','Multilingual Source + Fact Engine','pass',`${sourceIntelligence.ready}/${sourceIntelligence.total} nguồn sẵn sàng Editorial • ${sourceIntelligence.translated} đã Việt hóa • score TB ${sourceIntelligence.averageSourceScore}/100`),
     check('publisher-config','Publisher configuration',deployment.configurationReady?'pass':'fail',deployment.configurationReady?'Configured':deployment.blockers.filter(x=>!x.includes('PUBLISH_LIVE_ENABLED')).join(' | ')||'Incomplete'),
     check('youtube-credential','YouTube cached readiness',credentialReady?'pass':'fail',credentialReady?String(deployment.credential?.channelTitle||deployment.credential?.channelId||'Verified'):'Cần OAuth + TEST KẾT NỐI gần đây'),
     check('private-test','Private Live Test',privateTestReady?'pass':'fail',deployment.productionPrivacyNeedsPrivateTest?(deployment.privateTest?.passed?`PASS • ${deployment.privateTest.videoId||'video recorded'}`:'Bắt buộc trước Public/Unlisted'):'Không bắt buộc khi privacy=private'),
@@ -80,5 +82,6 @@ export async function releaseCandidateSnapshot(ownerId:string){
     monitor:{overall:monitor.overall,maintenance:monitor.maintenance},
     publicRamp:{stage:ramp.stage,circuitOpen:ramp.circuitOpen,circuitReason:ramp.circuitReason,cooldownUntil:ramp.cooldownUntil},
     contentSafety,
+    sourceIntelligence,
   };
 }

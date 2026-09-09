@@ -1,0 +1,37 @@
+name: Sync Editorial Professional V2
+on:
+  push:
+    branches: ["phase7-editorial-professional-v2"]
+permissions:
+  contents: write
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase7-editorial-professional-v2
+      - name: Download and verify exact source patch
+        run: |
+          curl -fsSL --retry 3 'https://media.huyenvu.cloud/output/editorial-pro-v2-sync-2a5b9227.b64' -o /tmp/prov2.b64
+          echo '2a5b922735b6751fd7a94f4afa0b75759c83756381c5ef83c8cec6ab8dae980d  /tmp/prov2.b64' | sha256sum -c -
+          base64 -d /tmp/prov2.b64 | gzip -d > /tmp/prov2.patch
+          echo 'd2f5602920e8c1d95a4ff77c87bab1ec7405653b35c5e05ef103d969d8d21c9e  /tmp/prov2.patch' | sha256sum -c -
+      - name: Apply Professional V2 product patch
+        run: |
+          git apply --check /tmp/prov2.patch
+          git apply /tmp/prov2.patch
+          npm ci --no-audit --no-fund
+          npm run typecheck
+          npm run smoke:editorial-intelligence
+          npm run smoke:editorial-professional
+          npm run smoke:ui
+      - name: Commit synchronized product source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Sync Editorial Professional V2 product source'
+          git push origin HEAD:phase7-editorial-professional-v2

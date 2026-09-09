@@ -6,17 +6,25 @@ const CATALOG=[
  ['CDC Emerging Infectious Diseases','https://wwwnc.cdc.gov/eid/rss/ahead-of-print.xml'],
  ['CDC Expedited Articles','https://wwwnc.cdc.gov/eid/rss/expedited.xml'],
  ['FDA MedWatch','https://www.fda.gov/AboutFDA/ContactFDA/StayInformed/RSSFeeds/MedWatch/rss.xml'],
- ['NIH News Releases','https://www.nih.gov/news-events/news-releases/rss.xml'],
- ['BMJ Recent','https://www.bmj.com/rss/recent.xml'],
+ ['Nature Medicine','https://www.nature.com/nm.rss'],
+ ['ECDC News','https://www.ecdc.europa.eu/en/taxonomy/term/1307/feed'],
  ['NEJM','https://www.nejm.org/action/showFeed?jc=nejm&type=etoc&feed=rss'],
  ['ScienceDaily Health','https://www.sciencedaily.com/rss/health_medicine.xml'],
  ['Medical Xpress','https://medicalxpress.com/rss-feed/'],
- ['NHS England','https://www.england.nhs.uk/feed/'],
+ ['EMA News','https://www.ema.europa.eu/en/news.xml'],
  ['VnExpress Sức khỏe','https://vnexpress.net/rss/suc-khoe.rss'],
  ['Tuổi Trẻ Sức khỏe','https://tuoitre.vn/rss/suc-khoe.rss'],
  ['Sức khỏe & Đời sống','https://suckhoedoisong.vn/rss/home.rss'],
  ['VietnamNet Sức khỏe','https://vietnamnet.vn/rss/suc-khoe.rss']
 ] as const;
+
+const RETIRED_MANAGED_URLS=new Set([
+ 'https://www.nih.gov/news-events/news-releases/rss.xml',
+ 'https://www.nih.gov/news-releases/feed.xml',
+ 'https://www.bmj.com/rss/recent.xml',
+ 'https://www.bmj.com/bmj/legacyrss/recent.xml',
+ 'https://www.england.nhs.uk/feed/',
+]);
 
 const TARGET=15,MAX=20;
 export function curateTrustedRss(ownerId='legacy-admin'){
@@ -24,7 +32,7 @@ export function curateTrustedRss(ownerId='legacy-admin'){
  const managedSources=()=>rssSources.filter(x=>x.ownerId===ownerId);
  // Google News hides the publisher URL behind an intermediary page. Remove
  // these feeds even when they were previously locked.
- const unsafe=managedSources().filter(x=>x.url.includes('news.google.com/rss/')||(x.managed&&!x.locked&&Boolean(x.lastError)));
+ const unsafe=managedSources().filter(x=>x.url.includes('news.google.com/rss/')||RETIRED_MANAGED_URLS.has(x.url)||(x.managed&&!x.locked&&Boolean(x.lastError)));
  for(const x of unsafe){deleteRssSource(x.id,true);removed++}
  const excess=Math.max(0,managedSources().length-MAX);
  for(const x of managedSources().filter(x=>!x.locked).sort((a,b)=>(a.managed===b.managed?0:a.managed?1:-1)).slice(0,excess)){deleteRssSource(x.id,true);removed++}
@@ -32,5 +40,5 @@ export function curateTrustedRss(ownerId='legacy-admin'){
  for(const[name,url]of CATALOG){if(managedSources().length>=TARGET)break;if(existing.has(url))continue;addRssSource({ownerId,name,url,managed:true});existing.add(url);added++}
  const current=managedSources();return{added,removed,total:current.length,locked:current.filter(x=>x.locked).length,managed:current.filter(x=>x.managed).length,target:TARGET,max:MAX}
 }
-export function migrateGoogleNewsRss(){const owners=new Set(rssSources.filter(x=>x.url.includes('news.google.com/rss/')).map(x=>x.ownerId));let removed=0;for(const ownerId of owners){for(const source of rssSources.filter(x=>x.ownerId===ownerId&&x.url.includes('news.google.com/rss/'))){if(deleteRssSource(source.id,true))removed++}curateTrustedRss(ownerId)}return{owners:owners.size,removed}}
+export function migrateGoogleNewsRss(){const obsolete=(x:{url:string})=>x.url.includes('news.google.com/rss/')||RETIRED_MANAGED_URLS.has(x.url);const owners=new Set(rssSources.filter(obsolete).map(x=>x.ownerId));let removed=0;for(const ownerId of owners){for(const source of rssSources.filter(x=>x.ownerId===ownerId&&obsolete(x))){if(deleteRssSource(source.id,true))removed++}curateTrustedRss(ownerId)}return{owners:owners.size,removed}}
 export const trustedRssCatalog=CATALOG.map(([name,url])=>({name,url}));

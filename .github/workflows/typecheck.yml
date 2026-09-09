@@ -25,6 +25,8 @@ jobs:
         run: npm run smoke:production
       - name: Docker Compose production config validation
         run: docker compose config -q
+      - name: VieNeu v3turbo and Adam configuration smoke test
+        run: npm run smoke:vieneu-config
       - name: Wyse deploy backup rollback smoke test
         run: npm run smoke:wyse-ops
       - name: V1 private-first deployment safety smoke test

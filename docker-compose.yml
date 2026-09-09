@@ -89,6 +89,7 @@ services:
       VIENEU_TTS_ENABLED: ${VIENEU_TTS_ENABLED:-false}
       VIENEU_TTS_URL: ${VIENEU_TTS_URL:-http://vieneu-tts:7861}
       VIENEU_TTS_TIMEOUT_MS: ${VIENEU_TTS_TIMEOUT_MS:-240000}
+      VIENEU_MODE: ${VIENEU_MODE:-v3turbo}
 
       LOW_MEMORY_MODE: ${LOW_MEMORY_MODE:-true}
       RENDER_QUEUE_PAUSED: ${RENDER_QUEUE_PAUSED:-false}
@@ -173,7 +174,7 @@ services:
     init: true
     stop_grace_period: 15s
     environment:
-      VIENEU_MODE: ${VIENEU_MODE:-v3nano}
+      VIENEU_MODE: ${VIENEU_MODE:-v3turbo}
       HF_HOME: /models
     volumes:
       - vieneu-models:/models

@@ -14,7 +14,7 @@ def engine():
     global _engine
     with _lock:
         if _engine is None:
-            _engine = Vieneu(mode=os.getenv("VIENEU_MODE", "v3nano"), backend="onnx")
+            _engine = Vieneu(mode=os.getenv("VIENEU_MODE", "v3turbo"), backend="onnx")
         return _engine
 
 
@@ -30,7 +30,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path != "/health":
             return self.send_json(404, {"error": "not found"})
-        self.send_json(200, {"ok": True, "provider": "VieNeu v3", "mode": os.getenv("VIENEU_MODE", "v3nano"), "license": "Apache-2.0"})
+        self.send_json(200, {"ok": True, "provider": "VieNeu v3", "mode": os.getenv("VIENEU_MODE", "v3turbo"), "license": "Apache-2.0"})
 
     def do_POST(self):
         if self.path != "/synthesize":
@@ -41,7 +41,7 @@ class Handler(BaseHTTPRequestHandler):
             text = str(data.get("text", "")).strip()
             if not 1 <= len(text) <= 12000:
                 raise ValueError("text length must be 1..12000")
-            voice = str(data.get("voice", "Minh Quân"))
+            voice = str(data.get("voice", "Adam"))
             with _lock:
                 audio = engine().infer(text, voice=voice)
                 handle, path = tempfile.mkstemp(suffix=".wav")

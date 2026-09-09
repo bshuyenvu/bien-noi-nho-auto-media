@@ -65,3 +65,18 @@ npm start
 ```
 
 Mặc định backend chạy ở `PORT=8787`.
+
+## Phase 7 — Editorial Intelligence OS
+
+Biên tập nguồn hiện đi qua Newsworthiness → Story Blueprint → Hook Studio → Master Story → Editorial Quality → Platform Adapter → Learning Loop.
+
+Điểm chính:
+- Hook Memory chống lặp theo owner và chấm Novelty/Truth/Retention/Clickbait Risk.
+- AUTO duration tự chọn 45/60/90/120 giây theo mandatory claims.
+- Không cắt script cơ học giữa câu; semantic compression phải giữ số liệu.
+- Quality Gate kiểm tra mandatory claim coverage và ending completeness.
+- Audience profiles: công chúng, y khoa, người bệnh, nhà đầu tư, social.
+- Learning Loop dùng `storyId` server-side; client không được tự khai Hook strategy/angle.
+- LLM lỗi/quota tự fallback về bản claim-safe.
+
+Kiểm tra lõi: `npm run smoke:editorial-intelligence`. Kiểm tra provider thật tùy chọn: `EDITORIAL_LIVE_ENV_FILE=/path/to/.env npm run smoke:editorial-llm-live`.

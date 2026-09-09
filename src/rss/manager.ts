@@ -16,9 +16,29 @@ const seen=new Set(rssItems.map(i=>i.ownerId+'|'+i.link));
 
 function privateIp(ip:string){if(ip.includes(':'))return ip==='::1'||ip.startsWith('fc')||ip.startsWith('fd')||ip.startsWith('fe80:');const p=ip.split('.').map(Number);return p[0]===10||p[0]===127||(p[0]===169&&p[1]===254)||(p[0]===172&&p[1]>=16&&p[1]<=31)||(p[0]===192&&p[1]===168);}
 async function assertPublicUrl(raw:string){const u=new URL(raw);if(!['http:','https:'].includes(u.protocol))throw new Error('RSS chỉ hỗ trợ HTTP/HTTPS');if(isIP(u.hostname)){if(privateIp(u.hostname))throw new Error('RSS private/internal host bị chặn');}else{const rows=await lookup(u.hostname,{all:true});if(!rows.length||rows.some(x=>privateIp(x.address)))throw new Error('RSS private/internal host bị chặn');}return u;}
-function text($:cheerio.CheerioAPI,node:any,selector:string){return $(node).find(selector).first().text().replace(/\s+/g,' ').trim();}
-function attr($:cheerio.CheerioAPI,node:any,selector:string,name:string){return $(node).find(selector).first().attr(name)?.trim()||'';}
+function firstNode($:cheerio.CheerioAPI,node:any,selector:string){const wanted=selector.replace(/\\/g,'').toLowerCase();if(wanted.includes(':'))return $(node).find('*').filter((_,el:any)=>String(el?.name||'').toLowerCase()===wanted).first();return $(node).find(selector).first();}
+function text($:cheerio.CheerioAPI,node:any,selector:string){return firstNode($,node,selector).text().replace(/\s+/g,' ').trim();}
+function attr($:cheerio.CheerioAPI,node:any,selector:string,name:string){return firstNode($,node,selector).attr(name)?.trim()||'';}
 function directRssUrl(raw:string){const url=new URL(raw);if(url.hostname==='news.google.com'&&url.pathname.startsWith('/rss'))throw new Error('Không dùng RSS trung gian Google News. Hãy dùng RSS trực tiếp của cơ quan phát hành.');return url.toString();}
+
+export const RSS_REQUEST_HEADERS={
+ 'user-agent':'VietNewsFlowAI/6.4 (+https://media.huyenvu.cloud/; RSS reader)',
+ 'accept':'application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.5',
+ 'accept-language':'en-US,en;q=0.9,vi;q=0.7',
+ 'cache-control':'no-cache',
+} as const;
+
+export function rssResponseProblem(status:number,contentType:string,bodySample:string){
+ const sample=bodySample.slice(0,8192);
+ const challenge=/(just a moment|cloudflare|access denied|cf-chl|attention required)/i.test(sample);
+ if((status===401||status===403)&&challenge)return `RSS_SOURCE_BLOCKED_BY_WAF: Nguồn chặn truy cập tự động (HTTP ${status})`;
+ if(status===429)return 'RSS_SOURCE_RATE_LIMITED: Nguồn tạm giới hạn truy cập (HTTP 429)';
+ if(status<200||status>=300)return `RSS HTTP ${status}`;
+ if(!sample.trim())return 'RSS_EMPTY_RESPONSE: Nguồn không trả dữ liệu';
+ const feedLike=/<(?:rss|feed)\b/i.test(sample)||/<rdf:RDF\b/i.test(sample)||/<channel\b/i.test(sample);
+ if(/text\/html/i.test(contentType)&&!feedLike)return 'RSS_NOT_XML: Nguồn trả về HTML thay vì feed XML';
+ return '';
+}
 
 export function addRssSource(input:{ownerId?:string;name?:string;url:string;locked?:boolean;managed?:boolean}){const ownerId=input.ownerId||'legacy-admin',url=directRssUrl(input.url),existing=rssSources.find(s=>s.ownerId===ownerId&&s.url===url);if(existing)return existing;const host=new URL(url).hostname.replace(/^www\./,'');const source:RssSource={id:crypto.randomUUID(),ownerId,name:(input.name||host).slice(0,120),url,createdAt:new Date().toISOString(),locked:Boolean(input.locked),managed:Boolean(input.managed)};rssSources.unshift(source);run('INSERT INTO rss_sources_tenant(id,owner_id,name,url,created_at,locked,managed) VALUES(?,?,?,?,?,?,?)',source.id,source.ownerId,source.name,source.url,source.createdAt,source.locked?1:0,source.managed?1:0);return source;}
 
@@ -32,5 +52,31 @@ export function deleteRssItem(id:string){const index=rssItems.findIndex(x=>x.id=
 
 export function deleteRssItems(input:{ownerId?:string;sourceId?:string;ids?:string[];all?:boolean}){let targets:RssItem[]=[];const available=input.ownerId?rssItems.filter(x=>x.ownerId===input.ownerId):rssItems;if(input.all)targets=[...available];else if(input.ids?.length){const set=new Set(input.ids);targets=available.filter(x=>set.has(x.id))}else if(input.sourceId)targets=available.filter(x=>x.sourceId===input.sourceId);if(!targets.length)return 0;const ids=new Set(targets.map(x=>x.id));for(const item of targets)seen.delete(item.ownerId+'|'+item.link);for(let i=rssItems.length-1;i>=0;i--)if(ids.has(rssItems[i].id))rssItems.splice(i,1);if(input.all&&!input.ownerId)run('DELETE FROM rss_items_tenant');else if(input.sourceId&&!input.ids?.length)run('DELETE FROM rss_items_tenant WHERE source_id=?',input.sourceId);else for(const id of ids)run('DELETE FROM rss_items_tenant WHERE id=?',id);return targets.length;}
 
-export async function scanRssSource(source:RssSource){await assertPublicUrl(source.url);try{const r=await fetch(source.url,{headers:{'user-agent':'Mozilla/5.0 (compatible; BienNoiNhoAutoMedia/1.3)'},signal:AbortSignal.timeout(15000)});if(!r.ok)throw new Error(`RSS HTTP ${r.status}`);const xml=await r.text();if(xml.length>5_000_000)throw new Error('RSS quá lớn');const $=cheerio.load(xml,{xmlMode:true});const nodes=$('item').length?$('item').toArray():$('entry').toArray();let added=0;for(const n of nodes.slice(0,50)){const title=text($,n,'title');let link=text($,n,'link')||attr($,n,'link','href');const guid=text($,n,'guid')||text($,n,'id');const rawSummary=text($,n,'content\\:encoded')||text($,n,'description')||text($,n,'summary');const summary=rawSummary.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,6000)||undefined;const rawImage=attr($,n,'media\\:content','url')||attr($,n,'media\\:thumbnail','url')||attr($,n,'enclosure','url');let imageUrl:string|undefined;try{if(rawImage)imageUrl=new URL(rawImage,source.url).toString()}catch{}const publishedAt=text($,n,'pubDate')||text($,n,'published')||text($,n,'updated')||undefined;if(!title||!link)continue;try{link=new URL(link,source.url).toString();}catch{continue;}const key=source.ownerId+'|'+(guid||link);if(seen.has(key)||rssItems.some(i=>i.ownerId===source.ownerId&&i.link===link))continue;seen.add(key);const item:RssItem={id:crypto.randomUUID(),ownerId:source.ownerId,sourceId:source.id,sourceName:source.name,title:title.slice(0,180),link,summary,imageUrl,publishedAt,discoveredAt:new Date().toISOString()};rssItems.unshift(item);run('INSERT OR IGNORE INTO rss_items_tenant(id,owner_id,source_id,source_name,title,link,summary,image_url,published_at,discovered_at) VALUES(?,?,?,?,?,?,?,?,?,?)',item.id,item.ownerId,item.sourceId,item.sourceName,item.title,item.link,item.summary||null,item.imageUrl||null,item.publishedAt||null,item.discoveredAt);added++;}rssItems.splice(300);source.lastScanAt=new Date().toISOString();source.lastError=undefined;run('UPDATE rss_sources_tenant SET last_scan_at=?,last_error=NULL WHERE id=?',source.lastScanAt,source.id);return {added,total:nodes.length};}catch(e){source.lastScanAt=new Date().toISOString();source.lastError=e instanceof Error?e.message:String(e);run('UPDATE rss_sources_tenant SET last_scan_at=?,last_error=? WHERE id=?',source.lastScanAt,source.lastError,source.id);throw e;}}
+export async function scanRssSource(source:RssSource){
+ await assertPublicUrl(source.url);
+ try{
+  const r=await fetch(source.url,{headers:RSS_REQUEST_HEADERS,redirect:'follow',signal:AbortSignal.timeout(15000)});
+  const xml=await r.text();
+  const problem=rssResponseProblem(r.status,r.headers.get('content-type')||'',xml);
+  if(problem)throw new Error(problem);
+  if(xml.length>5_000_000)throw new Error('RSS quá lớn');
+  const $=cheerio.load(xml,{xmlMode:true});
+  const nodes=$('item').length?$('item').toArray():$('entry').toArray();
+  if(!nodes.length)throw new Error('RSS_NO_ITEMS: Feed không có item/entry hợp lệ');
+  let added=0;
+  for(const n of nodes.slice(0,50)){
+   const title=text($,n,'title');let link=text($,n,'link')||attr($,n,'link','href');const guid=text($,n,'guid')||text($,n,'id');
+   const rawSummary=text($,n,'content\:encoded')||text($,n,'description')||text($,n,'summary');
+   const summary=rawSummary.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,6000)||undefined;
+   const rawImage=attr($,n,'media\:content','url')||attr($,n,'media\:thumbnail','url')||attr($,n,'enclosure','url');
+   let imageUrl:string|undefined;try{if(rawImage)imageUrl=new URL(rawImage,source.url).toString()}catch{}
+   const publishedAt=text($,n,'pubDate')||text($,n,'published')||text($,n,'updated')||undefined;
+   if(!title||!link)continue;try{link=new URL(link,source.url).toString()}catch{continue}
+   const key=source.ownerId+'|'+(guid||link);if(seen.has(key)||rssItems.some(i=>i.ownerId===source.ownerId&&i.link===link))continue;
+   seen.add(key);const item:RssItem={id:crypto.randomUUID(),ownerId:source.ownerId,sourceId:source.id,sourceName:source.name,title:title.slice(0,180),link,summary,imageUrl,publishedAt,discoveredAt:new Date().toISOString()};
+   rssItems.unshift(item);run('INSERT OR IGNORE INTO rss_items_tenant(id,owner_id,source_id,source_name,title,link,summary,image_url,published_at,discovered_at) VALUES(?,?,?,?,?,?,?,?,?,?)',item.id,item.ownerId,item.sourceId,item.sourceName,item.title,item.link,item.summary||null,item.imageUrl||null,item.publishedAt||null,item.discoveredAt);added++;
+  }
+  source.lastScanAt=new Date().toISOString();source.lastError=undefined;run('UPDATE rss_sources_tenant SET last_scan_at=?,last_error=NULL WHERE id=?',source.lastScanAt,source.id);return {added,total:nodes.length};
+ }catch(e){source.lastScanAt=new Date().toISOString();source.lastError=e instanceof Error?e.message:String(e);run('UPDATE rss_sources_tenant SET last_scan_at=?,last_error=? WHERE id=?',source.lastScanAt,source.lastError,source.id);throw e}
+}
 export async function scanAllRss(ownerId?:string){let added=0;const sources=ownerId?rssSources.filter(x=>x.ownerId===ownerId):rssSources;for(const s of sources){try{added+=(await scanRssSource(s)).added}catch{}}return {added,sources:sources.length,items:ownerId?rssItems.filter(x=>x.ownerId===ownerId).length:rssItems.length};}

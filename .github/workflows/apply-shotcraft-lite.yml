@@ -1,0 +1,38 @@
+name: Apply ShotCraft Lite
+
+on:
+  push:
+    branches: ["phase8-shotcraft-lite"]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase8-shotcraft-lite
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply deterministic integration
+        run: python3 scripts/apply-shotcraft-lite.py
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Verify ShotCraft Lite
+        run: |
+          npm run typecheck
+          npm run smoke:shotcraft-lite
+          npm run smoke:editorial-professional
+          npm run smoke:ui
+      - name: Commit runtime integration
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src public
+          git commit -m 'Integrate ShotCraft Lite with scene planning and FFmpeg'
+          git push origin HEAD:phase8-shotcraft-lite

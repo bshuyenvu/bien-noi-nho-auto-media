@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { renderNewsVideo, type VideoScene } from '../src/video/ffmpeg.js';
 
-function cmd(bin:string,args:string[]){const r=spawnSync(bin,args,{encoding:'utf8'});if(r.status!==0)throw new Error(`${bin} failed: ${r.stderr||r.stdout}`);return r.stdout}
+function cmd(bin:string,args:string[]){const r=spawnSync(bin,args,{encoding:'utf8'});if(r.error)throw new Error(`${bin} unavailable: ${r.error.message}`);if(r.status!==0)throw new Error(`${bin} failed (${r.status}): ${r.stderr||r.stdout||'no output'}`);return r.stdout}
 const dir=await mkdtemp(join(tmpdir(),'shotcraft-render-'));
 const colors=['0x174a72','0x6b3b67','0x24613f','0x73501f'];
 const images:string[]=[];

@@ -40,8 +40,8 @@ class FacebookProvider implements PublisherProvider{
 }
 class TikTokProvider implements PublisherProvider{
   platform='tiktok' as const;
-  validateCredential(c?:PublishCredential){if(!c?.secret.accessToken)throw new Error('TikTok credential chưa được cấu hình')}
-  async publish(input:PublishRequest){if(input.job.dryRun)return dryRunResult(this.platform,input.job);this.validateCredential(input.credential);throw new Error('TikTok provider đang ở chế độ placeholder')}
+  validateCredential(_c?:PublishCredential){throw new Error('TikTok Direct Post bị khóa cho workflow auto-media; dùng Safe Export Handoff')}
+  async publish(input:PublishRequest){if(input.job.dryRun)return dryRunResult(this.platform,input.job);this.validateCredential(input.credential);throw new Error('TikTok Direct Post bị khóa')}
 }
 const providers:Record<PublishPlatform,PublisherProvider>={youtube:new YouTubeProvider(),facebook:new FacebookProvider(),tiktok:new TikTokProvider()};
 export function publisherFor(platform:PublishPlatform){return providers[platform]}

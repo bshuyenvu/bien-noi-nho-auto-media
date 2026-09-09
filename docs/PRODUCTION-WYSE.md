@@ -252,3 +252,10 @@ docker compose up -d --force-recreate auto-media
 ```
 
 This disables new real publish work while leaving the application, Review Gate and render workflow available.
+
+
+## Private-first deploy check scope
+
+`deploy-v1-private.sh` runs the strict operator check with `PROD_CHECK_SCOPE=runtime`. This deliberately allows the application revision to be deployed while YouTube OAuth is still disconnected, because LIVE activation is a later operator step. Runtime scope still fails on RED monitoring, consistency blockers, missing durable resumable support, failed rollout/circuit state or missing content-safety guard.
+
+Before any LIVE activation, run the normal/default `PROD_CHECK_SCOPE=activation` check and resolve Publisher configuration + Release Candidate blockers. Runtime deployment scope never arms Activation Wizard, never approves PUBLIC and never bypasses Canary/Public Ramp.

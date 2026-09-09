@@ -151,7 +151,7 @@ done
 [[ "$healthy" == "true" ]] || { echo "[deploy] ERROR: health check failed: $HEALTH_URL" >&2; false; }
 
 echo "[deploy] Running in-container production readiness check..."
-docker compose exec -T -e PROD_CHECK_STRICT="$STRICT_CHECK" auto-media npm run prod:check
+docker compose exec -T -e PROD_CHECK_STRICT="$STRICT_CHECK" -e PROD_CHECK_SCOPE="${DEPLOY_CHECK_SCOPE:-activation}" auto-media npm run prod:check
 
 if [[ "$MAINTENANCE_STARTED" == "true" ]]; then
   if maintenance_api end; then echo "[deploy] Maintenance window ended.";else echo "[deploy] WARNING: maintenance window could not be cleared; it will auto-expire." >&2; fi

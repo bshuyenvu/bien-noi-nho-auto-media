@@ -1,8 +1,6 @@
 import { mkdtemp,writeFile,rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { makeYouTubeOAuthState,parseYouTubeOAuthState,uploadYouTubeVideo,youtubeAuthorizationUrl,youtubeReadiness,youtubePrivacyFor,YOUTUBE_REQUIRED_SCOPES } from '../src/publish/youtube.js';
-import { publisherFor } from '../src/publish/providers.js';
 import type { PublishJob } from '../src/publish/queue.js';
 
 process.env.YOUTUBE_CLIENT_ID='test-client';
@@ -13,6 +11,11 @@ process.env.YOUTUBE_UPLOAD_CHUNK_BYTES='262144';
 process.env.YOUTUBE_READINESS_MAX_AGE_MS='900000';
 process.env.YOUTUBE_PRIVACY_STATUS='public';
 
+const dir=await mkdtemp(join(tmpdir(),'youtube-smoke-'));
+process.env.DB_PATH=join(dir,'youtube-smoke.sqlite');
+process.env.RENDER_OUTPUT_DIR=join(dir,'output');
+const { makeYouTubeOAuthState,parseYouTubeOAuthState,uploadYouTubeVideo,youtubeAuthorizationUrl,youtubeReadiness,youtubePrivacyFor,YOUTUBE_REQUIRED_SCOPES }=await import('../src/publish/youtube.js');
+const { publisherFor }=await import('../src/publish/providers.js');
 const ownerId='owner-smoke';
 const state=makeYouTubeOAuthState(ownerId);
 const parsed=parseYouTubeOAuthState(state);
@@ -22,7 +25,6 @@ for(const scope of YOUTUBE_REQUIRED_SCOPES)if(!scopes.includes(scope))throw new 
 if(auth.searchParams.get('access_type')!=='offline')throw new Error('OAuth offline access missing');
 if(!auth.searchParams.get('state'))throw new Error('OAuth state missing');
 
-const dir=await mkdtemp(join(tmpdir(),'youtube-smoke-'));
 const video=join(dir,'video.mp4');
 await writeFile(video,Buffer.alloc(1024,7));
 const originalFetch=globalThis.fetch;
@@ -75,7 +77,7 @@ try{
   if(youtubePrivacyFor({...job,deploymentTest:true})!=='private')throw new Error('deployment test must always force private privacy');
   const result=await uploadYouTubeVideo(job,video,credential);
   if(result.remoteId!=='video-smoke-123'||result.dryRun)throw new Error('Upload result mismatch');
-  if(!channelChecked||!initChecked||!putChecked||tokenRefreshes<2)throw new Error('YouTube readiness/upload flow incomplete');
+  if(!channelChecked||!initChecked||!putChecked||tokenRefreshes<2)throw new Error(`YouTube readiness/upload flow incomplete: channel=${channelChecked} init=${initChecked} put=${putChecked} refreshes=${tokenRefreshes}`);
   console.log('YouTube OAuth/readiness/private-gate/upload smoke OK');
 }finally{
   globalThis.fetch=originalFetch;

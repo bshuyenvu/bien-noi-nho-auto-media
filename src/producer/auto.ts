@@ -7,6 +7,8 @@ import { castVietnameseVoice } from '../tts/casting.js';
 import { findForeignSources } from '../research/foreign.js';
 import { analyzeSourceIntelligence } from '../editorial/source-intelligence.js';
 import { evaluateSourceEvidence } from '../editorial/evidence-gate.js';
+import { buildClaimSourceMatrix } from '../editorial/claim-source-matrix.js';
+import { createPreparedEvidenceBundle } from '../review/evidence-store.js';
 import { all } from '../storage/db.js';
 
 function effectiveOwnerId(ownerId?: string) {
@@ -59,6 +61,9 @@ export async function prepareAutoNews(input: {
     throw new Error('Evidence Gate chặn Editorial: ' + evidenceGate.reasons.join(' | '));
   }
 
+  const claimSourceMatrix = buildClaimSourceMatrix(intelligence, research.sources.map((x) => ({ name: x.name, title: x.title, summary: x.summary, url: x.url })));
+  const evidenceBundle = createPreparedEvidenceBundle(ownerId,{sourceIntelligenceId:intelligence.id,evidenceGate, matrix:claimSourceMatrix});
+
   const factBasis = intelligence.facts
     .filter((x) => x.support !== 'uncertain' && Number(x.confidence || 0) >= 0.6)
     .slice(0, 14)
@@ -110,6 +115,9 @@ export async function prepareAutoNews(input: {
       readyForEditorial: intelligence.readyForEditorial,
     },
     evidenceGate,
+    claimSourceMatrix,
+    evidenceBundleId:evidenceBundle.id,
+    evidenceBundleExpiresAt:evidenceBundle.expiresAt,
     research: { sources: research.sources.map((x) => ({ name: x.name, url: x.url, title: x.title })), count: research.sources.length },
     edited,
     media: { images: chosen.map((x) => ({ url: x.url, score: x.score, width: x.width, height: x.height, metadata: x.metadata })), summary: studio.summary },

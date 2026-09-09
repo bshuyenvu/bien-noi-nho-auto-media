@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import type { MotionLevel, VideoScene, VideoTemplate } from './ffmpeg.js';
+import { shotMotionCap, type MotionLevel, type VideoScene, type VideoTemplate } from './ffmpeg.js';
 
 export interface ShotCraftRenderManifestInput{
   outputPath:string;
@@ -11,6 +11,7 @@ export interface ShotCraftRenderManifestInput{
 
 export async function writeShotCraftRenderManifest(input:ShotCraftRenderManifestInput){
   const path=input.outputPath.replace(/\.mp4$/i,'-shotcraft.json');
+  const motion=input.motion||'light';
   const manifest={
     schema:'vietnewsflow.shotcraft-render.v1',
     generatedAt:new Date().toISOString(),
@@ -19,7 +20,7 @@ export async function writeShotCraftRenderManifest(input:ShotCraftRenderManifest
     aspectRatio:'9:16',
     frame:{width:1080,height:1920,fps:30},
     template:input.template||'classic',
-    motion:input.motion||'light',
+    motion,
     scenes:input.scenes.map((scene,index)=>({
       index,
       imageIndex:scene.imageIndex,
@@ -30,6 +31,7 @@ export async function writeShotCraftRenderManifest(input:ShotCraftRenderManifest
       transition:scene.transition||'cut',
       holdRatio:scene.holdRatio??.14,
       energy:scene.energy??.4,
+      motionCap:shotMotionCap(motion,scene.energy??.4),
       sourceCredit:scene.sourceCredit||null
     }))
   };

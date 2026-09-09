@@ -49,7 +49,8 @@
     "smoke:editorial-llm-live": "tsx scripts/smoke-editorial-llm-live.ts",
     "smoke:rss-resilience": "tsx scripts/smoke-rss-source-resilience.ts",
     "smoke:editorial-professional": "tsx scripts/smoke-editorial-professional-v2.ts",
-    "smoke:shotcraft-lite": "tsx scripts/smoke-shotcraft-lite.ts"
+    "smoke:shotcraft-lite": "tsx scripts/smoke-shotcraft-lite.ts",
+    "smoke:shotcraft-render": "tsx scripts/smoke-shotcraft-render.ts"
   },
   "dependencies": {
     "@clerk/express": "^2.1.66",

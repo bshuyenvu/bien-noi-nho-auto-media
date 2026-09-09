@@ -43,6 +43,8 @@ jobs:
         run: npm run smoke:durable-queue
       - name: Durable Review Gate and approval version smoke test
         run: npm run smoke:review-gate
+      - name: Immutable render artifact integrity smoke test
+        run: npm run smoke:artifact-integrity
       - name: YouTube resumable upload retry and restart smoke test
         run: npm run smoke:youtube-resumable
       - name: Release candidate GO NO-GO and backup restore smoke test

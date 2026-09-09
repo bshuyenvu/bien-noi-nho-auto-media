@@ -7,8 +7,8 @@ const compose=read('docker-compose.yml');
 const workflow=read('.github/workflows/typecheck.yml');
 const requiredDocs=[
   'docs/DURABLE-REVIEW-GATE.md',
-  'docs/IMMUTABLE-RENDER-PROVENANCE.md',
-  'docs/END-TO-END-CONSISTENCY-RECOVERY.md',
+  'docs/IMMUTABLE-ARTIFACT-PROVENANCE.md',
+  'docs/END-TO-END-CONSISTENCY.md',
   'docs/PRODUCTION-ACTIVATION-WIZARD.md',
   'docs/REMOTE-CANARY-PUBLIC-PROMOTION.md',
   'docs/CONTROLLED-PUBLIC-ROLLOUT.md',

@@ -53,6 +53,8 @@ jobs:
         run: npm run smoke:public-rollout
       - name: Gradual Public Ramp and circuit breaker smoke test
         run: npm run smoke:public-ramp
+      - name: Content Safety and duplicate publish guard smoke test
+        run: npm run smoke:content-safety
       - name: Production cutover and Unlisted canary smoke test
         run: npm run smoke:cutover
       - name: Production operator check syntax

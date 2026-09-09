@@ -1,5 +1,6 @@
 import { all, run } from '../storage/db.js';
 import { envYouTubePrivacy,productionPublishGuard,type ActivationPrivacy } from './activation-state.js';
+import { assertContentSafety,evaluateContentSafety,recordContentFingerprint,type ContentSafetySnapshot } from './content-safety.js';
 import { assertPublicRampAllowed } from './public-ramp.js';
 
 export type PublishPlatform='youtube'|'facebook'|'tiktok';
@@ -36,17 +37,25 @@ export function getPublishJob(id:string,ownerId:string){const row=all<Row>('SELE
 export function enqueuePublish(input:{ownerId:string;renderJobId:string;draftId:string;platform:PublishPlatform;title:string;description?:string;scheduledAt?:string;dryRun?:boolean;maxAttempts?:number;deploymentTest?:boolean;publicCanary?:boolean}){
   const dryRun=input.dryRun!==false,deploymentTest=Boolean(input.deploymentTest),publicCanary=Boolean(input.publicCanary),publishPrivacy:ActivationPrivacy|undefined=!dryRun&&input.platform==='youtube'?envYouTubePrivacy():undefined;
   if(publicCanary&&(dryRun||input.platform!=='youtube'||deploymentTest))throw new Error('publicCanary chỉ hợp lệ cho YouTube LIVE production job');
+  const duplicate=all<Row>("SELECT * FROM publish_jobs WHERE owner_id=? AND render_job_id=? AND platform=? AND status IN ('pending','scheduled','publishing','needs_reconcile') LIMIT 1",input.ownerId,input.renderJobId,input.platform)[0];
+  if(duplicate)throw new Error(duplicate.status==='needs_reconcile'?'Video đang có publish job cần Reconcile trước khi tạo job mới':'Video đã có tác vụ xuất bản đang hoạt động trên nền tảng này');
+  let contentSafety:ContentSafetySnapshot|undefined;
   if(!dryRun&&input.platform==='youtube'){
     const guard=productionPublishGuard(input.ownerId,{deploymentTest,publicCanary,privacy:publishPrivacy});
     if(!guard.allowed)throw new Error(`Production Activation chặn publish: ${guard.reason}`);
-    if(publishPrivacy==='public'&&!publicCanary)assertPublicRampAllowed(input.ownerId,{targetAt:input.scheduledAt});
+    if(publishPrivacy==='public'){
+      if(publicCanary)contentSafety=evaluateContentSafety({ownerId:input.ownerId,draftId:input.draftId,renderJobId:input.renderJobId,publishTitle:input.title});
+      else{
+        contentSafety=assertContentSafety({ownerId:input.ownerId,draftId:input.draftId,renderJobId:input.renderJobId,publishTitle:input.title});
+        assertPublicRampAllowed(input.ownerId,{targetAt:input.scheduledAt});
+      }
+    }
   }
-  const duplicate=all<Row>("SELECT * FROM publish_jobs WHERE owner_id=? AND render_job_id=? AND platform=? AND status IN ('pending','scheduled','publishing','needs_reconcile') LIMIT 1",input.ownerId,input.renderJobId,input.platform)[0];
-  if(duplicate)throw new Error(duplicate.status==='needs_reconcile'?'Video đang có publish job cần Reconcile trước khi tạo job mới':'Video đã có tác vụ xuất bản đang hoạt động trên nền tảng này');
   const now=new Date().toISOString();
   const status:PublishStatus=input.scheduledAt&&new Date(input.scheduledAt).getTime()>Date.now()?'scheduled':'pending';
   const job:PublishJob={id:crypto.randomUUID(),ownerId:input.ownerId,renderJobId:input.renderJobId,draftId:input.draftId,platform:input.platform,status,title:input.title.trim(),description:input.description?.trim()||undefined,scheduledAt:input.scheduledAt,dryRun,deploymentTest,publicCanary,publishPrivacy,attempts:0,maxAttempts:Math.max(1,input.maxAttempts||3),createdAt:now,updatedAt:now};
   run('INSERT INTO publish_jobs(id,owner_id,render_job_id,draft_id,platform,status,title,description,scheduled_at,attempts,max_attempts,dry_run,deployment_test,public_canary,publish_privacy,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',job.id,job.ownerId,job.renderJobId,job.draftId,job.platform,job.status,job.title,job.description||null,job.scheduledAt||null,job.attempts,job.maxAttempts,job.dryRun?1:0,job.deploymentTest?1:0,job.publicCanary?1:0,job.publishPrivacy||null,job.createdAt,job.updatedAt);
+  if(contentSafety)recordContentFingerprint(job.id,contentSafety);
   return job;
 }
 

@@ -45,6 +45,8 @@ jobs:
         run: npm run smoke:editorial-professional
       - name: ShotCraft Lite cinematic scene planning smoke test
         run: npm run smoke:shotcraft-lite
+      - name: ShotCraft Lite real FFmpeg render smoke test
+        run: npm run smoke:shotcraft-render
       - name: Wyse deploy backup rollback smoke test
         run: npm run smoke:wyse-ops
       - name: V1 private-first deployment safety smoke test

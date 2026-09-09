@@ -35,6 +35,7 @@ echo "[v1-deploy] Enforcing first-start safety: LIVE OFF • YouTube PRIVATE •
 PUBLISH_LIVE_ENABLED=false \
 YOUTUBE_PRIVACY_STATUS=private \
 DEPLOY_STRICT_CHECK=true \
+DEPLOY_CHECK_SCOPE=runtime \
 APP_REVISION="$TARGET_COMMIT" \
 bash scripts/deploy-wyse.sh
 

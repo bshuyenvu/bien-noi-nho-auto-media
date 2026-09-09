@@ -7,6 +7,7 @@ import { getYouTubeUploadSession } from './upload-session.js';
 import { YouTubeUploadNeedsReconcileError } from './youtube-resumable.js';
 import { engageProductionKillSwitch,envYouTubePrivacy,productionPublishGuard,updateProductionActivation,type ActivationPrivacy } from './activation-state.js';
 import { assertPublicRampAllowed,PublicRampGuardError,recordPublicRampFailure,recordPublicRampSuccess } from './public-ramp.js';
+import { assertLivePlatformAllowed } from './capabilities.js';
 
 type Row={id:string;owner_id:string;render_job_id:string;draft_id:string;platform:PublishPlatform;status:PublishStatus;title:string;description?:string;scheduled_at?:string;published_at?:string;remote_id?:string;remote_url?:string;error?:string;attempts:number;max_attempts:number;dry_run:number;deployment_test?:number;public_canary?:number;publish_privacy?:ActivationPrivacy;created_at:string;updated_at:string};
 type RenderRow={id:string;output?:string};
@@ -42,7 +43,7 @@ export function recoverInterruptedPublishing(){
 export async function processPublishJob(job:PublishJob){
   const render=all<RenderRow>('SELECT id,output FROM render_jobs WHERE id=? AND owner_id=? LIMIT 1',job.renderJobId,job.ownerId)[0];
   if(!render?.output)throw new Error('Không tìm thấy file video render để xuất bản');
-  if(!job.dryRun&&process.env.PUBLISH_LIVE_ENABLED!=='true')throw new Error('Live publishing đang bị khóa bởi PUBLISH_LIVE_ENABLED');
+  if(!job.dryRun)assertLivePlatformAllowed(job.platform);
   if(!job.dryRun&&!canRender(job.draftId,job.ownerId)){
     const now=new Date().toISOString(),message='Review approval đã hết hiệu lực sau khi job được xếp hàng; LIVE publish bị chặn trước provider';
     run("UPDATE publish_jobs SET status='failed',error=?,updated_at=? WHERE id=? AND owner_id=? AND status IN ('pending','scheduled')",message,now,job.id,job.ownerId);

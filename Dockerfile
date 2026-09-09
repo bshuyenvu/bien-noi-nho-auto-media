@@ -1,30 +1,30 @@
 FROM node:22-bookworm-slim AS builder
 WORKDIR /app
-COPY package*.json tsconfig.json ./
-RUN npm install
+COPY package.json package-lock.json tsconfig.json ./
+RUN npm ci --no-audit --no-fund
 COPY src ./src
 RUN npm run build
 
 FROM node:22-bookworm-slim AS runner
-ARG APP_REVISION=unknown
-LABEL org.opencontainers.image.title="bien-noi-nho-auto-media" \
-      org.opencontainers.image.revision="$APP_REVISION"
 WORKDIR /app
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core ca-certificates \
   && rm -rf /var/lib/apt/lists/*
-COPY package*.json ./
-RUN npm install --omit=dev \
-  && npm cache clean --force
-COPY --from=builder /app/dist ./dist
-COPY public ./public
-COPY scripts/production-check.mjs ./scripts/production-check.mjs
-COPY scripts/sqlite-backup.mjs ./scripts/sqlite-backup.mjs
-COPY scripts/cutover-client.mjs ./scripts/cutover-client.mjs
-COPY scripts/public-rollout-client.mjs ./scripts/public-rollout-client.mjs
-RUN mkdir -p /app/data /app/output \
-  && chown -R node:node /app
+RUN chown node:node /app
 USER node
+COPY --chown=node:node package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund \
+  && npm cache clean --force
+COPY --chown=node:node --from=builder /app/dist ./dist
+COPY --chown=node:node public ./public
+COPY --chown=node:node scripts/production-check.mjs ./scripts/production-check.mjs
+COPY --chown=node:node scripts/sqlite-backup.mjs ./scripts/sqlite-backup.mjs
+COPY --chown=node:node scripts/cutover-client.mjs ./scripts/cutover-client.mjs
+COPY --chown=node:node scripts/public-rollout-client.mjs ./scripts/public-rollout-client.mjs
+RUN mkdir -p /app/data /app/output
+ARG APP_REVISION=unknown
+LABEL org.opencontainers.image.title="bien-noi-nho-auto-media" \
+      org.opencontainers.image.revision="$APP_REVISION"
 ENV NODE_ENV=production
 ENV PORT=8787
 ENV DB_PATH=/app/data/auto-media.sqlite

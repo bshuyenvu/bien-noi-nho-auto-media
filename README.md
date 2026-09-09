@@ -1,6 +1,6 @@
 # VietNewsFlow AI
 
-**V1 Production • v6.5.0 • stable**
+**V1 Production • v6.4.0 • stable**
 
 Nền tảng tự động hóa bản tin/video tiếng Việt với Multilingual Source Intelligence, Cross-Source Evidence Gate, Durable Review Gate, Production Queue, Stable Control, Autopilot, TTS, Smart Media, FFmpeg, Artifact Integrity, Consistency Audit và YouTube production gates.
 

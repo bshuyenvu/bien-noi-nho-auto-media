@@ -11,11 +11,15 @@ try{
   const owner='ramp-owner',now=new Date().toISOString();
   run('INSERT INTO accounts(id,clerk_user_id,email,role,plan,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)',owner,'clerk-ramp','ramp@example.test','admin','pro','active',now,now);
   updateProductionActivation(owner,{status:'armed',armed:true,maxPrivacy:'public',publicApprovedAt:now,publicRolloutStatus:'completed',publicRolloutCompletedAt:now},'smoke');
-  const addSource=(n:number)=>{const draft=`draft-${n}`,render=`render-${n}`,video=join(output,`${render}.mp4`),body=`Nội dung kiểm thử Public Ramp số ${n}. `.repeat(8)+`Chi tiết riêng cho bản tin ${n}.`;writeFileSync(video,Buffer.from(`video-${n}-`.repeat(200)));run('INSERT INTO drafts(id,owner_id,title,body,source_url,format,status,created_at) VALUES(?,?,?,?,?,?,?,?)',draft,owner,`Public story ${n}`,body,`https://example.test/news/${n}`,'latest','approved',now);run('INSERT INTO render_jobs(id,draft_id,owner_id,status,progress,output,created_at,updated_at,attempts,max_attempts) VALUES(?,?,?,?,?,?,?,?,?,?)',render,draft,owner,'ready',100,video,now,now,1,3);return{draft,render}};
+  const stories=[
+    {title:'Giá vàng trong nước biến động',body:'Thị trường vàng trong nước ghi nhận thay đổi ở giá mua và bán. Nhà đầu tư theo dõi diễn biến quốc tế, tỷ giá, nhu cầu thị trường và quản trị rủi ro trước khi ra quyết định. '.repeat(3),source:'https://example.test/finance/gold',video:'gold-market-'},
+    {title:'Thời tiết miền Tây cuối tuần',body:'Dự báo cuối tuần tại khu vực miền Tây có mưa rào cục bộ, nhiệt độ dao động nhẹ và độ ẩm tăng. Người dân nên chuẩn bị áo mưa, theo dõi cảnh báo dông và chủ động khi di chuyển. '.repeat(3),source:'https://example.test/weather/mekong',video:'mekong-weather-'}
+  ];
+  const addSource=(n:number)=>{const story=stories[n-1],draft=`draft-${n}`,render=`render-${n}`,video=join(output,`${render}.mp4`);writeFileSync(video,Buffer.from(story.video.repeat(200)));run('INSERT INTO drafts(id,owner_id,title,body,source_url,format,status,created_at) VALUES(?,?,?,?,?,?,?,?)',draft,owner,story.title,story.body,story.source,'latest','approved',now);run('INSERT INTO render_jobs(id,draft_id,owner_id,status,progress,output,created_at,updated_at,attempts,max_attempts) VALUES(?,?,?,?,?,?,?,?,?,?)',render,draft,owner,'ready',100,video,now,now,1,3);return{draft,render,title:story.title}};
   const one=addSource(1),two=addSource(2);
-  const first=queue.enqueuePublish({ownerId:owner,renderJobId:one.render,draftId:one.draft,platform:'youtube',title:'Public story 1',dryRun:false});
+  const first=queue.enqueuePublish({ownerId:owner,renderJobId:one.render,draftId:one.draft,platform:'youtube',title:one.title,dryRun:false});
   if(first.publishPrivacy!=='public')throw new Error('publish_privacy was not persisted on enqueue object');
-  let burstBlocked=false;try{queue.enqueuePublish({ownerId:owner,renderJobId:two.render,draftId:two.draft,platform:'youtube',title:'Public story 2',dryRun:false})}catch(e){burstBlocked=String(e).includes('Public Ramp')}
+  let burstBlocked=false;try{queue.enqueuePublish({ownerId:owner,renderJobId:two.render,draftId:two.draft,platform:'youtube',title:two.title,dryRun:false})}catch(e){burstBlocked=String(e).includes('Public Ramp')}
   if(!burstBlocked)throw new Error('Stage 1 did not block immediate second PUBLIC enqueue');
   const snap=ramp.publicRampSnapshot(owner);if(snap.limits.hourly!==1||snap.usage.hour!==1)throw new Error(`unexpected Stage 1 snapshot: ${JSON.stringify(snap)}`);
   ramp.recordPublicRampFailure(owner,'YouTube HTTP 429 quotaExceeded');

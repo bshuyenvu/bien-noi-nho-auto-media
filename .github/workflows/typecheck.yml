@@ -73,3 +73,5 @@ jobs:
         run: npm run smoke:youtube-oauth
       - name: Frontend dashboard syntax smoke test
         run: npm run smoke:ui
+      - name: V1 Production final acceptance contract
+        run: npm run smoke:v1-acceptance

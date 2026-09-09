@@ -24,7 +24,7 @@ saveCredential(owner,'youtube','Release Smoke Channel',{refreshToken:'refresh',s
 try{
   const good=await releaseCandidateSnapshot(owner);
   if(!good.candidateReady||good.verdict!=='GO')throw new Error(`expected GO release candidate: ${JSON.stringify(good.blockers)}`);
-  if(good.release.version!=='6.3.0'||good.release.revision!=='release-smoke-rev')throw new Error('release metadata mismatch');
+  if(good.release.version!=='6.4.0'||good.release.revision!=='release-smoke-rev')throw new Error('release metadata mismatch');
   if(!good.database.quickCheckOk||good.database.missingTables.length)throw new Error('database acceptance checks failed');
   if(!good.deployment.config.durableResumableSessions)throw new Error('durable resumable capability missing');
 

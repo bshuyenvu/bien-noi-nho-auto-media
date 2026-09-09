@@ -1,6 +1,23 @@
 # VietNewsFlow AI
 
-Nền tảng tự động hóa bản tin/video tiếng Việt với Review Gate, Production Queue, Stable Control, Autopilot, TTS, Smart Media và FFmpeg.
+**V1 Production • v6.4.0 • stable**
+
+Nền tảng tự động hóa bản tin/video tiếng Việt với Durable Review Gate, Production Queue, Stable Control, Autopilot, TTS, Smart Media, FFmpeg, Artifact Integrity, Consistency Audit và YouTube production gates.
+
+> Safe-by-default: `PUBLISH_LIVE_ENABLED=false` và `YOUTUBE_PRIVACY_STATUS=private`. Việc bật LIVE/PUBLIC thật luôn phải đi qua Activation Wizard, Canary và Public Ramp.
+
+## V1 Production chain
+
+Draft → Durable Review → Render/Profile binding → Immutable MP4 SHA-256 Manifest → Content Safety → Activation Gate → Public Ramp → Publish Queue → YouTube resumable upload → Remote Canary/Provenance → Monitoring/Consistency Audit.
+
+- Review approval gắn với đúng phiên bản nội dung và render profile.
+- File video bị sửa sau render sẽ bị quarantine trước provider.
+- Trạng thái remote mơ hồ chuyển `needs_reconcile`, không retry mù.
+- Public Canary/rollout, Kill Switch và Circuit Breaker chặn việc mở PUBLIC ngoài kiểm soát.
+- Consistency Auditor chỉ tự sửa deterministic local state; lỗi remote-dependent giữ Release Gate `NO_GO`.
+- Facebook/TikTok LIVE chưa thuộc V1 production-approved path.
+
+Runbook phát hành: `docs/V1-PRODUCTION-RELEASE.md`.
 
 ## Dell Wyse 5060 / RAM 4 GB
 
@@ -18,8 +35,6 @@ Nhánh tối ưu hiện dùng một render worker duy nhất, Resource Guard, Di
 
 ### Hard Recovery
 
-Phase 2.3 bổ sung:
-
 - `checkpoint_stage` và `interrupted_at` được lưu trong SQLite.
 - `SIGTERM` / `SIGINT` chuyển job đang chạy về `queued` trước khi tiến trình thoát.
 - FFmpeg có hard timeout và bị `SIGTERM`, sau đó `SIGKILL` nếu không thoát.
@@ -27,25 +42,13 @@ Phase 2.3 bổ sung:
 - Watchdog có thể cắt FFmpeg khi stage `ffmpeg` bị stalled.
 - Job được phục hồi từ payload đã persist khi container khởi động lại.
 
-Biến môi trường quan trọng:
-
-```env
-LOW_MEMORY_MODE=true
-RENDER_MIN_AVAILABLE_MB=512
-RENDER_MIN_FREE_DISK_MB=2048
-RENDER_MAX_OUTPUT_MB=8192
-RENDER_MAX_ATTEMPTS=3
-RENDER_RETRY_BASE_MS=15000
-TTS_TIMEOUT_MS=300000
-FFMPEG_TIMEOUT_MS=1800000
-SHUTDOWN_GRACE_MS=5000
-```
-
-## Chạy dự án
+## Chạy và kiểm tra
 
 ```bash
-npm install
+npm install --no-audit --no-fund
 npm run typecheck
+npm run build
+npm run smoke:v1-acceptance
 npm start
 ```
 

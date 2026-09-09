@@ -32,8 +32,7 @@ publishOAuthRouter.get('/publish-oauth/youtube/callback',async(req,res)=>{
   if(oauthError)return res.status(400).type('html').send(resultPage(false,'YouTube OAuth bị từ chối','Google không cấp quyền. Bạn có thể quay lại và thử kết nối lại.'));
   if(!code||!state)return res.status(400).type('html').send(resultPage(false,'Thiếu dữ liệu OAuth','Callback từ Google không có đủ code/state. Hãy bắt đầu lại từ nút KẾT NỐI YOUTUBE.'));
   try{
-    const parsed=parseYouTubeOAuthState(state),current=accessOf(res).accountId;
-    if(parsed.ownerId!==current)return res.status(403).type('html').send(resultPage(false,'OAuth không khớp tài khoản','Phiên OAuth không thuộc tài khoản hiện tại.'));
+    const parsed=parseYouTubeOAuthState(state),current=parsed.ownerId;
     const token=await exchangeYouTubeCode(code);
     if(!token.refreshToken)throw new Error('Google không trả refresh token; hãy kết nối lại và cho phép quyền offline');
     const tempCredential:PublishCredential={platform:'youtube',accountLabel:'YouTube',secret:{refreshToken:token.refreshToken,...(token.accessToken?{accessToken:token.accessToken}:{}),scope:token.scope,tokenType:token.tokenType}};

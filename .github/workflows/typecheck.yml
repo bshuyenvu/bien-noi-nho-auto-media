@@ -41,6 +41,8 @@ jobs:
         run: npm run smoke:claim-source-matrix
       - name: Phase 7 Editorial Intelligence OS smoke test
         run: npm run smoke:editorial-intelligence
+      - name: Editorial Professional V2 canonical/provider/media-credit smoke test
+        run: npm run smoke:editorial-professional
       - name: Wyse deploy backup rollback smoke test
         run: npm run smoke:wyse-ops
       - name: V1 private-first deployment safety smoke test

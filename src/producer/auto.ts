@@ -77,13 +77,21 @@ export async function prepareAutoNews(input: {
   ].filter(Boolean).join('\n\n');
 
   const sourceName = [article.sourceName, ...research.sources.map((x) => x.name)].filter(Boolean).join(' • ').slice(0, 120);
-  const edited = await editNews({ title: intelligence.vietnameseTitle, body: editorialBody, sourceName, length: input.length, ownerId, facts: intelligence.facts, sourceScore: intelligence.sourceScore, audience: input.audience });
+  const edited = await editNews({ title: intelligence.vietnameseTitle, body: editorialBody, sourceName, length: input.length, ownerId, facts: intelligence.facts, sourceScore: intelligence.sourceScore, audience: input.audience, factProvider: intelligence.provider });
   const studio = await analyzeMediaStudio({
     sourceUrl: article.sourceUrl,
     imageUrl: article.imageUrl,
     imageUrls: [...(article.imageUrls || []), ...research.imageUrls].slice(0, 19),
   });
   const chosen = studio.candidates.filter((x) => x.selected && x.url).slice(0, 10);
+  const primaryImages=new Set([article.imageUrl,...(article.imageUrls||[])].filter(Boolean));
+  const provenanceFor=(url:string)=>{
+    const foreign=research.sources.find(src=>(src.imageUrls||[]).includes(url));
+    if(foreign)return{url,sourceName:foreign.name,sourceUrl:foreign.url,kind:'image' as const};
+    if(primaryImages.has(url))return{url,sourceName:article.sourceName,sourceUrl:article.sourceUrl,kind:'image' as const};
+    return{url,kind:'image' as const};
+  };
+  const mediaProvenance=chosen.map(x=>provenanceFor(x.url!));
   const images = chosen.map((x) => ({
     url: x.url!,
     label: [x.metadata.caption, ...(x.metadata.keywords || [])].join(' '),
@@ -121,7 +129,7 @@ export async function prepareAutoNews(input: {
     evidenceBundleExpiresAt:evidenceBundle.expiresAt,
     research: { sources: research.sources.map((x) => ({ name: x.name, url: x.url, title: x.title })), count: research.sources.length },
     edited,
-    media: { images: chosen.map((x) => ({ url: x.url, score: x.score, width: x.width, height: x.height, metadata: x.metadata })), summary: studio.summary },
+    media: { images: chosen.map((x) => ({ ...provenanceFor(x.url!), score: x.score, width: x.width, height: x.height, metadata: x.metadata })), provenance:mediaProvenance, summary: studio.summary },
     scenes,
     voice,
     reviewRequired: true,

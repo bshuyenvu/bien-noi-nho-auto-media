@@ -1,4 +1,4 @@
-import type { StoryBlueprint, RankedClaim } from './newsroom.js';
+import type { StoryBlueprint, RankedClaim, NarrativePattern } from './newsroom.js';
 
 export type EditorialDuration=30|45|60|90|120;
 export interface ScriptVersion{seconds:EditorialDuration;script:string;claimIds:string[];wordCount:number;estimatedSeconds:number;overflow:boolean;omittedClaimIds:string[]}
@@ -6,13 +6,52 @@ export interface MasterStory{hook:string;body:string;closing:string;script:strin
 const clean=(s:string)=>s.replace(/\s+/g,' ').trim();
 const words=(s:string)=>clean(s).split(/\s+/).filter(Boolean);
 const sentence=(s:string)=>{const x=clean(s).replace(/^[•\-–—]\s*/,'');return /[.!?…]$/.test(x)?x:x+'.'};
+const lowerFirst=(s:string)=>s?s[0].toLocaleLowerCase('vi-VN')+s.slice(1):s;
 const fingerprint=(s:string)=>clean(s).toLocaleLowerCase('vi-VN').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/[^a-z0-9\s]/g,' ');
 function similarity(a:string,b:string){const A=new Set(fingerprint(a).split(/\s+/).filter(x=>x.length>3)),B=new Set(fingerprint(b).split(/\s+/).filter(x=>x.length>3));if(!A.size||!B.size)return 0;let n=0;for(const x of A)if(B.has(x))n++;return n/Math.min(A.size,B.size)}
 export function semanticCompressClaim(text:string){const original=clean(text),markers=original.match(/\b\d+(?:[.,]\d+)?(?:%|\s*(?:triệu|tỷ|nghìn|USD|EUR|km|giờ|phút))?\b/gi)||[];let s=original.replace(/\bhiện đang\b/gi,'đang').replace(/\bđã tiến hành\b/gi,'đã').replace(/\bnhằm mục đích\b/gi,'nhằm').replace(/\bcó khả năng sẽ\b/gi,'có thể').replace(/\bđược cho biết rằng\b/gi,'cho biết').replace(/\bvào thời điểm hiện tại\b/gi,'hiện tại').replace(/\btrong vòng thời gian\b/gi,'trong').replace(/\s+/g,' ').trim();const preserved=markers.every(m=>s.toLocaleLowerCase('vi-VN').includes(m.toLocaleLowerCase('vi-VN')));if(!preserved||similarity(original,s)<.78||words(original).length-words(s).length<2)return original;return s}
-function uniqueClaims(claims:RankedClaim[]){const seen:string[]=[];return claims.filter(c=>{const f=fingerprint(c.fact.text);if(seen.some(x=>x===f||x.includes(f)||f.includes(x)))return false;seen.push(f);return true})}
-function orderedClaims(b:StoryBlueprint){const all=b.rankedClaims,find=(id:string)=>all.find(x=>x.claimId===id),required=b.requiredClaimIds.map(find).filter(Boolean) as RankedClaim[],supporting=b.supportingClaimIds.map(find).filter(Boolean) as RankedClaim[];return uniqueClaims([...required,...supporting])}
-function closingFor(b:StoryBlueprint,claims:RankedClaim[]){const advice=claims.find(x=>x.fact.kind==='advice'),effect=claims.find(x=>x.fact.kind==='effect'),context=claims.find(x=>x.fact.kind==='context');if(advice)return{text:sentence(semanticCompressClaim(advice.fact.text)),claimId:advice.claimId};if(b.narrative==='analysis'&&effect)return{text:'Điểm cần theo dõi tiếp theo là mức độ của hệ quả này trong các cập nhật chính thức.'};if(b.narrative==='explainer'&&context)return{text:sentence(semanticCompressClaim(context.fact.text)),claimId:context.claimId};return{text:'Thông tin tiếp theo cần được đối chiếu với cập nhật từ nguồn chính thức.'}}
+function uniqueClaims(claims:RankedClaim[]){const seen:string[]=[];return claims.filter(c=>{const f=fingerprint(c.fact.text);if(seen.some(x=>x===f||x.includes(f)||f.includes(x)||similarity(x,f)>=.7))return false;seen.push(f);return true})}
+const ORDER:Record<NarrativePattern,string[]>={
+ breaking:['event','time','place','number','effect','context','cause','person','quote','advice'],
+ explainer:['event','context','cause','number','effect','time','place','person','quote','advice'],
+ analysis:['event','effect','cause','context','number','time','place','person','quote','advice'],
+ story:['person','event','effect','context','cause','number','time','place','quote','advice'],
+};
+function orderedClaims(b:StoryBlueprint){
+ const all=b.rankedClaims,find=(id:string)=>all.find(x=>x.claimId===id),required=b.requiredClaimIds.map(find).filter(Boolean) as RankedClaim[],supporting=b.supportingClaimIds.map(find).filter(Boolean) as RankedClaim[],order=ORDER[b.narrative];
+ return uniqueClaims([...required,...supporting]).sort((a,b2)=>{const ai=order.indexOf(a.fact.kind),bi=order.indexOf(b2.fact.kind);return(ai<0?99:ai)-(bi<0?99:bi)||b2.score-a.score})
+}
+function narrativeSentence(c:RankedClaim,index:number,b:StoryBlueprint){
+ const raw=semanticCompressClaim(c.fact.text),text=raw.replace(/[.!?]+$/,'');
+ if(index===0)return sentence(text);
+ if(c.fact.kind==='context'&&b.narrative==='explainer'&&index===1)return sentence(`Thực tế, ${lowerFirst(text)}`);
+ if(c.fact.kind==='cause')return sentence(`Lý do nằm ở việc ${lowerFirst(text)}`);
+ if(c.fact.kind==='effect'&&b.narrative==='analysis')return sentence(`Hệ quả rõ nhất là ${lowerFirst(text)}`);
+ if(c.fact.kind==='number'&&!/^\s*(?:chỉ|khoảng|hơn|gần|từ|\d)/i.test(text))return sentence(`Về số liệu, ${lowerFirst(text)}`);
+ if(c.fact.kind==='time')return sentence(`Về thời điểm, ${lowerFirst(text)}`);
+ return sentence(text)
+}
+function closingFor(_b:StoryBlueprint,claims:RankedClaim[]){
+ const closing=claims.find(x=>x.fact.kind==='advice')||claims.find(x=>x.fact.kind==='context')||claims.find(x=>x.fact.kind==='effect')||claims.find(x=>x.fact.kind==='number')||claims.at(-1);
+ if(closing)return{text:sentence(semanticCompressClaim(closing.fact.text)),claimId:closing.claimId};
+ return{text:''}
+}
 function budget(seconds:EditorialDuration){return Math.round(seconds*2.35)}
-function buildVersion(hook:string,hookClaimId:string|undefined,closing:{text:string;claimId?:string},b:StoryBlueprint,claims:RankedClaim[],seconds:EditorialDuration):ScriptVersion{const max=budget(seconds),mandatory=new Set(b.requiredClaimIds),selected:RankedClaim[]=[],usedIds=new Set<string>();if(hookClaimId)usedIds.add(hookClaimId);if(closing.claimId)usedIds.add(closing.claimId);let used=words(hook).length+words(closing.text).length;for(const c of claims.filter(x=>mandatory.has(x.claimId)&&x.claimId!==closing.claimId&&x.claimId!==hookClaimId)){selected.push(c);usedIds.add(c.claimId);used+=words(semanticCompressClaim(c.fact.text)).length}for(const c of claims.filter(x=>!mandatory.has(x.claimId)&&x.claimId!==closing.claimId&&x.claimId!==hookClaimId&&x.claimId!==hookClaimId)){const n=words(semanticCompressClaim(c.fact.text)).length;if(used+n>max)continue;selected.push(c);usedIds.add(c.claimId);used+=n}const body=selected.map(x=>sentence(semanticCompressClaim(x.fact.text))).join(' '),script=clean(`${sentence(hook)} ${body} ${sentence(closing.text)}`),wordCount=words(script).length,estimatedSeconds=Math.max(1,Math.round(wordCount/2.35)),overflow=wordCount>Math.round(max*1.12),omittedClaimIds=claims.filter(x=>!usedIds.has(x.claimId)).map(x=>x.claimId);return{seconds,script,claimIds:[...usedIds],wordCount,estimatedSeconds,overflow,omittedClaimIds}}
-export function composeMasterStory(input:{hook:string;blueprint:StoryBlueprint}){const claims=orderedClaims(input.blueprint),hookClaim=claims.find(x=>similarity(input.hook,x.fact.text)>=.62),closing=closingFor(input.blueprint,claims),bodyClaims=claims.filter(x=>x.claimId!==closing.claimId&&x.claimId!==hookClaim?.claimId),body=bodyClaims.map(x=>sentence(semanticCompressClaim(x.fact.text))).join(' '),script=clean(`${sentence(input.hook)} ${body} ${sentence(closing.text)}`),claimIds=claims.map(x=>x.claimId),versions={} as Record<string,ScriptVersion>;for(const d of [30,45,60,90,120] as EditorialDuration[])versions[String(d)]=buildVersion(input.hook,hookClaim?.claimId,closing,input.blueprint,claims,d);return{hook:sentence(input.hook),body,closing:sentence(closing.text),script,claimIds,versions,recommendedSeconds:input.blueprint.recommendedSeconds} satisfies MasterStory}
-export function chooseScriptVersion(master:MasterStory,requested:'auto'|'30'|'45'|'60'|'90'|'120'){const desired=requested==='auto'?master.recommendedSeconds:Number(requested) as EditorialDuration;let version=master.versions[String(desired)];if(!version)return master.versions[String(master.recommendedSeconds)];if(version.overflow){for(const d of [45,60,90,120] as EditorialDuration[]){const v=master.versions[String(d)];if(d>=desired&&!v.overflow){version=v;break}}}return version}
+function buildVersion(hook:string,hookClaimId:string|undefined,closing:{text:string;claimId?:string},b:StoryBlueprint,claims:RankedClaim[],seconds:EditorialDuration):ScriptVersion{
+ const max=budget(seconds),mandatory=new Set(b.requiredClaimIds),selected:RankedClaim[]=[],usedIds=new Set<string>();if(hookClaimId)usedIds.add(hookClaimId);if(closing.claimId)usedIds.add(closing.claimId);let used=words(hook).length+words(closing.text).length;
+ for(const c of claims.filter(x=>mandatory.has(x.claimId)&&x.claimId!==closing.claimId&&x.claimId!==hookClaimId)){selected.push(c);usedIds.add(c.claimId);used+=words(semanticCompressClaim(c.fact.text)).length}
+ for(const c of claims.filter(x=>!mandatory.has(x.claimId)&&x.claimId!==closing.claimId&&x.claimId!==hookClaimId)){const n=words(semanticCompressClaim(c.fact.text)).length;if(used+n>max)continue;selected.push(c);usedIds.add(c.claimId);used+=n}
+ const body=selected.map((x,i)=>narrativeSentence(x,i,b)).join(' '),tail=closing.text?sentence(closing.text):'',script=clean(`${sentence(hook)} ${body} ${tail}`),wordCount=words(script).length,estimatedSeconds=Math.max(1,Math.round(wordCount/2.35)),overflow=wordCount>Math.round(max*1.12),omittedClaimIds=claims.filter(x=>!usedIds.has(x.claimId)).map(x=>x.claimId);
+ return{seconds,script,claimIds:[...usedIds],wordCount,estimatedSeconds,overflow,omittedClaimIds}
+}
+export function composeMasterStory(input:{hook:string;blueprint:StoryBlueprint}){
+ const claims=orderedClaims(input.blueprint),hookClaim=claims.find(x=>similarity(input.hook,x.fact.text)>=.55),closing=closingFor(input.blueprint,claims),bodyClaims=claims.filter(x=>x.claimId!==closing.claimId&&x.claimId!==hookClaim?.claimId),body=bodyClaims.map((x,i)=>narrativeSentence(x,i,input.blueprint)).join(' '),tail=closing.text?sentence(closing.text):'',script=clean(`${sentence(input.hook)} ${body} ${tail}`),claimIds=claims.map(x=>x.claimId),versions={} as Record<string,ScriptVersion>;
+ for(const d of [30,45,60,90,120] as EditorialDuration[])versions[String(d)]=buildVersion(input.hook,hookClaim?.claimId,closing,input.blueprint,claims,d);
+ return{hook:sentence(input.hook),body,closing:closing.text?sentence(closing.text):'',script,claimIds,versions,recommendedSeconds:input.blueprint.recommendedSeconds} satisfies MasterStory
+}
+export function chooseScriptVersion(master:MasterStory,requested:'auto'|'30'|'45'|'60'|'90'|'120'){
+ const desired=requested==='auto'?master.recommendedSeconds:Number(requested) as EditorialDuration;let version=master.versions[String(desired)];
+ if(!version)return master.versions[String(master.recommendedSeconds)];
+ if(version.overflow){for(const d of [45,60,90,120] as EditorialDuration[]){const v=master.versions[String(d)];if(d>=desired&&!v.overflow){version=v;break}}}
+ return version
+}

@@ -43,6 +43,13 @@ jobs:
         run: npm run smoke:editorial-intelligence
       - name: Editorial Professional V2 canonical/provider/media-credit smoke test
         run: npm run smoke:editorial-professional
+      - name: ShotCraft Lite cinematic scene planning smoke test
+        run: npm run smoke:shotcraft-lite
+      - name: ShotCraft Lite production Docker render smoke test
+        run: |
+          docker build -t shotcraft-ci --build-arg APP_REVISION=shotcraft-ci .
+          docker run --rm --entrypoint sh shotcraft-ci -lc 'ffmpeg -version | head -n 1'
+          docker run --rm -v "$PWD/scripts/smoke-shotcraft-render.mjs:/app/scripts/smoke-shotcraft-render.mjs:ro" --entrypoint node shotcraft-ci /app/scripts/smoke-shotcraft-render.mjs
       - name: Wyse deploy backup rollback smoke test
         run: npm run smoke:wyse-ops
       - name: V1 private-first deployment safety smoke test

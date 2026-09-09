@@ -37,6 +37,7 @@ function apiKeyAccount(token:string){
 }
 export function authMiddleware(req:Request,res:Response,next:NextFunction){return clerkGuard(req,res,next)}
 export function requireAccess(req:Request,res:Response,next:NextFunction){
+ if(req.method==='GET'&&req.path==='/publish-oauth/youtube/callback')return next();
  const token=req.header('authorization')?.replace(/^Bearer\s+/i,'')||'';
  if(legacyKey&&safeEqual(token,legacyKey)){res.locals.access={accountId:'legacy-admin',role:'admin',plan:'pro',authType:'legacy'} satisfies AccessContext;return next()}
  const keyed=apiKeyAccount(token);

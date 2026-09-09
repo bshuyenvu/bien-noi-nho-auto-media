@@ -1,8 +1,7 @@
 import { importArticleFromUrl } from '../import/url.js';
 import { editNews, type ScriptLength } from '../ai/editor.js';
 import { analyzeMediaStudio } from '../media/studio.js';
-import { directScenes } from '../video/scenes.js';
-import { matchImagesToScenes } from '../video/matching.js';
+import { craftShotPlan } from '../video/shotcraft.js';
 import { castVietnameseVoice } from '../tts/casting.js';
 import { findForeignSources } from '../research/foreign.js';
 import { analyzeSourceIntelligence } from '../editorial/source-intelligence.js';
@@ -97,8 +96,8 @@ export async function prepareAutoNews(input: {
     label: [x.metadata.caption, ...(x.metadata.keywords || [])].join(' '),
     score: x.score,
   }));
-  let scenes = directScenes(`${edited.headline}. ${edited.script}`, Math.max(1, images.length));
-  if (images.length) scenes = matchImagesToScenes(scenes, images);
+  const shotPlan = craftShotPlan({text:`${edited.headline}. ${edited.script}`,imageCount:Math.max(1,images.length),images,smartMatch:true,format:input.format,audience:input.audience,durationSeconds:input.length==='auto'?undefined:Number(input.length)});
+  const scenes = shotPlan.scenes;
   const voice = castVietnameseVoice({ title: edited.headline, text: edited.script, format: input.format });
 
   return {
@@ -131,6 +130,7 @@ export async function prepareAutoNews(input: {
     edited,
     media: { images: chosen.map((x) => ({ ...provenanceFor(x.url!), score: x.score, width: x.width, height: x.height, metadata: x.metadata })), provenance:mediaProvenance, summary: studio.summary },
     scenes,
+    shotCraft:{version:shotPlan.version,motionCharacter:shotPlan.motionCharacter,qa:shotPlan.qa},
     voice,
     reviewRequired: true,
   };

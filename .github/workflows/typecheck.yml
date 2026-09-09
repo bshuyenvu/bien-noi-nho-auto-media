@@ -29,6 +29,8 @@ jobs:
         run: npm run smoke:vieneu-config
       - name: Multilingual Source and Fact Engine smoke test
         run: npm run smoke:multilingual-source
+      - name: Cross-source Evidence Gate smoke test
+        run: npm run smoke:evidence-gate
       - name: Wyse deploy backup rollback smoke test
         run: npm run smoke:wyse-ops
       - name: V1 private-first deployment safety smoke test

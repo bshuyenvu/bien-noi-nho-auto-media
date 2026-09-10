@@ -1,0 +1,40 @@
+name: One-time Phase 10 Health Studio sync
+
+on:
+  push:
+    paths:
+      - '.github/workflows/phase10-one-time-sync.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Download verified Phase 10 patch
+        run: |
+          curl --fail --location --silent --show-error https://media.huyenvu.cloud/output/phase10-sync.patch --output /tmp/phase10-sync.patch
+          echo '14909f4d073726c3df451bbb577069e2f1ec1a235954982068c04e7bb4eb3f7c  /tmp/phase10-sync.patch' | sha256sum --check
+      - name: Apply Health Studio Main V2
+        run: git apply --index /tmp/phase10-sync.patch
+      - name: Validate
+        run: |
+          npm ci --no-audit --no-fund
+          npm run typecheck
+          npm run smoke:ui
+          npm run smoke:health-studio
+          npm run smoke:review-gate
+          npm run smoke:copyright-safe
+      - name: Commit synchronized source
+        run: |
+          git config user.name 'VietNewsFlow Release Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git commit -m 'Phase 10: make Health Studio the canonical main app'
+          git push origin HEAD:main

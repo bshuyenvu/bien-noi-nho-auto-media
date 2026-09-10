@@ -29,6 +29,8 @@ jobs:
         run: npm run smoke:vieneu-config
       - name: Multilingual Source and Fact Engine smoke test
         run: npm run smoke:multilingual-source
+      - name: Source title-body coherence smoke test
+        run: npm run smoke:source-coherence
       - name: RSS source resilience and catalog migration smoke test
         run: npm run smoke:rss-resilience
       - name: Cross-source Evidence Gate smoke test
@@ -43,6 +45,8 @@ jobs:
         run: npm run smoke:editorial-intelligence
       - name: Editorial Professional V2 canonical/provider/media-credit smoke test
         run: npm run smoke:editorial-professional
+      - name: Copyright Safe Health content and media gate smoke test
+        run: npm run smoke:copyright-safe
       - name: ShotCraft Lite cinematic scene planning smoke test
         run: npm run smoke:shotcraft-lite
       - name: ShotCraft render manifest smoke test

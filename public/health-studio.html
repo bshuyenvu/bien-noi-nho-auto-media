@@ -36,10 +36,18 @@
     </section>
 
     <aside class="panel side-panel">
-      <div class="step">AN TOÀN MẶC ĐỊNH</div><h2>Production policy</h2>
-      <ul class="policy"><li>Autopilot công khai: <b>OFF</b></li><li>Media bên thứ ba: <b>BLOCK</b> nếu chưa xác minh quyền</li><li>Liều thuốc/chỉ dẫn điều trị: <b>Medical Review</b></li><li>Render không media: <b>Original visual cards</b></li></ul>
-      <details><summary>API key legacy</summary><div class="api-row"><input id="apiKey" type="password" placeholder="Bearer API key"><button id="saveKey" class="btn small">LƯU</button></div></details>
+      <div class="step">TÀI KHOẢN</div>
+      <div id="accountCard" class="account-card loading">
+        <div id="accountAvatar" class="account-avatar">…</div>
+        <div class="account-copy"><h2 id="accountName">Đang tải tài khoản…</h2><div id="accountEmail" class="muted"></div><div class="account-badges"><span id="accountRole" class="badge">—</span><span id="accountPlan" class="badge">—</span></div></div>
+      </div>
+      <div id="accountUsage" class="account-usage muted"></div>
+      <div class="account-actions"><button id="manageAccount" class="btn ghost">QUẢN LÝ TÀI KHOẢN</button><button id="signOut" class="btn ghost hidden">ĐĂNG XUẤT</button></div>
       <div id="authStatus" class="status-line muted">Đang kiểm tra quyền truy cập…</div>
+      <div class="policy-divider"></div>
+      <div class="step">AN TOÀN MẶC ĐỊNH</div><h2 class="policy-title">Production policy</h2>
+      <ul class="policy"><li>Autopilot công khai: <b>OFF</b></li><li>Media bên thứ ba: <b>BLOCK</b> nếu chưa xác minh quyền</li><li>Liều thuốc/chỉ dẫn điều trị: <b>Medical Review</b></li><li>Render không media: <b>Original visual cards</b></li></ul>
+      <details id="legacyAccess"><summary>API key legacy</summary><div class="api-row"><input id="apiKey" type="password" placeholder="Bearer API key"><button id="saveKey" class="btn small">LƯU</button></div></details>
     </aside>
   </main>
 

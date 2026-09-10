@@ -45,11 +45,21 @@
   try{const d=await api('/api/drafts',{method:'POST',body:JSON.stringify(x.draftPayload)});state.draft=d;$('draftStatus').innerHTML=`✓ Đã tạo Draft <b>${esc(d.id)}</b>. Evidence Bundle đã được khóa vào Draft; tiếp tục Evidence Review trên Dashboard.`;$('draftBtn').textContent='✓ ĐÃ CHUYỂN SANG REVIEW'}
   catch(e){$('draftBtn').disabled=false;$('draftStatus').textContent=e.message;alert(e.message)}
  }
+ function initials(v){const x=String(v||'TK').trim().split(/\s+/).filter(Boolean);return (x.length>1?x[0][0]+x[x.length-1][0]:x[0]?.slice(0,2)||'TK').toLocaleUpperCase('vi-VN')}
+ function drawAccount(x,publicConfig){
+  const a=x.account||x,c=x.channel||{},u=x.usage||{},name=c.name||x.channelName||a.email||'Tài khoản';
+  $('accountName').textContent=name;$('accountEmail').textContent=a.email||'Tài khoản quản trị nội bộ';$('accountAvatar').textContent=initials(name);$('accountRole').textContent=a.role==='admin'?'Quản trị viên':'Thành viên';$('accountPlan').textContent=a.role==='admin'?'Không giới hạn':'Gói '+(a.plan||'free');$('accountCard').classList.remove('loading');
+  $('accountUsage').textContent=u.label?`${u.label} • Đã dùng ${u.total??0} tổng • ${u.today??0} hôm nay • Còn ${u.remaining??'không giới hạn'}`:'Tài khoản đã sẵn sàng cho Health Studio.';
+  const clerk=Boolean(publicConfig?.clerkEnabled&&x.account);$('legacyAccess').classList.toggle('hidden',clerk);$('signOut').classList.toggle('hidden',!clerk);$('authStatus').textContent=clerk?'✓ Đăng nhập bằng Clerk • đồng bộ với Dashboard':'✓ Xác thực bằng API legacy';
+ }
+ function loadScript(src,attrs={}){return new Promise((ok,no)=>{const s=document.createElement('script');s.src=src;s.defer=true;s.crossOrigin='anonymous';Object.entries(attrs).forEach(([k,v])=>s.setAttribute(k,v));s.onload=ok;s.onerror=()=>no(Error('Không tải được Clerk'));document.head.append(s)})}
+ async function ensureClerk(c){if(window.Clerk)return window.Clerk;const encoded=c?.clerkPublishableKey?.split('_')[2];if(!encoded)throw Error('Thiếu Clerk Publishable Key');const domain=atob(encoded).slice(0,-1);await loadScript(`https://${domain}/npm/@clerk/ui@1/dist/ui.browser.js`);await loadScript(`https://${domain}/npm/@clerk/clerk-js@6/dist/clerk.browser.js`,{'data-clerk-publishable-key':c.clerkPublishableKey});await window.Clerk.load({ui:{ClerkUI:window.__internal_ClerkUICtor}});return window.Clerk}
  async function boot(){
   $('apiKey').value=apiKey();$('saveKey').onclick=()=>{const v=$('apiKey').value.trim();if(v)sessionStorage.setItem('renderApiKey',v);else sessionStorage.removeItem('renderApiKey');location.reload()};
   $('generateBtn').onclick=generate;$('draftBtn').onclick=createDraft;$('resetBtn').onclick=()=>{state.result=null;state.draft=null;$('result').classList.add('hidden');$('draftBtn').textContent='ĐƯA SANG REVIEW';window.scrollTo({top:0,behavior:'smooth'})};
-  try{const [s,a]=await Promise.all([api('/api/health-studio/status'),api('/api/account/me')]);$('runtimeBadge').textContent=`ONLINE • Health Studio ${s.version} • Copyright Safe ${s.copyrightSafeMode?'ON':'OFF'}`;$('runtimeBadge').className='badge gate-pass';$('authStatus').textContent=`Đã xác thực • ${a.channel?.name||a.channelName||a.account?.email||'tài khoản'}`}
-  catch(e){$('runtimeBadge').textContent='CẦN XÁC THỰC';$('runtimeBadge').className='badge gate-review';$('authStatus').textContent='Không truy cập được API: '+e.message}
+  $('manageAccount').onclick=()=>{sessionStorage.setItem('autoMediaStage','wf-account');location.href='/'};
+  try{const [s,a,c]=await Promise.all([api('/api/health-studio/status'),api('/api/account/me'),fetch('/api/public-config').then(r=>r.json())]);$('runtimeBadge').textContent=`ONLINE • Health Studio ${s.version} • Copyright Safe ${s.copyrightSafeMode?'ON':'OFF'}`;$('runtimeBadge').className='badge gate-pass';drawAccount(a,c);$('signOut').onclick=async()=>{try{const clerk=await ensureClerk(c);await clerk.signOut();sessionStorage.removeItem('renderApiKey');location.href='/'}catch(e){alert('Không thể đăng xuất: '+e.message)}}}
+  catch(e){$('runtimeBadge').textContent='CẦN XÁC THỰC';$('runtimeBadge').className='badge gate-review';$('accountName').textContent='Chưa xác thực';$('accountEmail').textContent='Vui lòng quay lại Dashboard để đăng nhập.';$('accountAvatar').textContent='!';$('accountCard').classList.remove('loading');$('authStatus').textContent='Không truy cập được API: '+e.message}
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();

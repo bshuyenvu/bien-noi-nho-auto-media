@@ -47,6 +47,8 @@ jobs:
         run: npm run smoke:editorial-professional
       - name: Copyright Safe Health content and media gate smoke test
         run: npm run smoke:copyright-safe
+      - name: Health Content Studio V1 medical safety smoke test
+        run: npm run smoke:health-studio
       - name: ShotCraft Lite cinematic scene planning smoke test
         run: npm run smoke:shotcraft-lite
       - name: ShotCraft render manifest smoke test

@@ -42,7 +42,7 @@
     "smoke:publish": "tsx scripts/smoke-publish.ts",
     "smoke:youtube-oauth": "tsx scripts/smoke-youtube-oauth.ts",
     "smoke:v1-acceptance": "node scripts/v1-production-acceptance.mjs",
-    "smoke:ui": "node scripts/check-app-inline.mjs && node --check public/system-dashboard.js && node --check public/system-dashboard-core.js && node --check public/production-analytics.js && node --check public/ops-assistant.js && node --check public/production-monitor.js && node --check public/release-gate.js && node --check public/activation-wizard.js && node --check public/public-rollout.js && node --check public/public-ramp.js && node --check public/maintenance-controls.js && node --check public/activity-timeline.js && node --check public/channel-connections.js && node --check public/publish-scheduler.js && node --check public/content-safety.js && node --check public/review.js && node --check public/producer.js && node --check public/ai-provider.js && node --check public/scene-studio.js && node --check public/copyright-safety.js",
+    "smoke:ui": "node scripts/check-app-inline.mjs && node --check public/system-dashboard.js && node --check public/system-dashboard-core.js && node --check public/production-analytics.js && node --check public/ops-assistant.js && node --check public/production-monitor.js && node --check public/release-gate.js && node --check public/activation-wizard.js && node --check public/public-rollout.js && node --check public/public-ramp.js && node --check public/maintenance-controls.js && node --check public/activity-timeline.js && node --check public/channel-connections.js && node --check public/publish-scheduler.js && node --check public/content-safety.js && node --check public/review.js && node --check public/producer.js && node --check public/ai-provider.js && node --check public/scene-studio.js && node --check public/copyright-safety.js && node --check public/health-studio.js && node --check public/health-studio-launcher.js",
     "tts:demo": "tsx src/cli-tts.ts",
     "video:demo": "tsx src/cli-video.ts",
     "smoke:editorial-intelligence": "tsx scripts/smoke-editorial-intelligence.ts",
@@ -53,7 +53,8 @@
     "smoke:shotcraft-render": "node scripts/smoke-shotcraft-render.mjs",
     "smoke:shotcraft-manifest": "tsx scripts/smoke-shotcraft-manifest.ts",
     "smoke:copyright-safe": "tsx scripts/smoke-copyright-safe.ts",
-    "smoke:source-coherence": "tsx scripts/smoke-source-coherence.ts"
+    "smoke:source-coherence": "tsx scripts/smoke-source-coherence.ts",
+    "smoke:health-studio": "tsx scripts/smoke-health-studio.ts"
   },
   "dependencies": {
     "@clerk/express": "^2.1.66",

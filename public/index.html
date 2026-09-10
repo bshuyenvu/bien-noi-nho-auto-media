@@ -5,22 +5,32 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Multi-Content Studio • Nội dung, giọng đọc và video AI</title>
-  <link rel="stylesheet" href="/health-studio.css?v=3.3.0">
+  <link rel="stylesheet" href="/health-studio.css?v=3.4.0">
 </head>
 <body>
 <div class="wrap">
   <header class="hero">
-    <div class="eyebrow">🎬 MULTI-CONTENT STUDIO V3.3.2.1</div>
+    <div class="eyebrow">🎬 MULTI-CONTENT STUDIO V3.4</div>
     <h1>Studio nội dung AI đa chủ đề, có kiểm chứng và an toàn bản quyền</h1>
     <p>Từ một chủ đề, Studio có thể nghiên cứu nguồn, viết kịch bản, chọn media có quyền sử dụng, chọn giọng đọc, tạo audio theo SRT và lồng tiếng video trước khi Review → Render.</p>
     <div class="hero-actions"><span id="runtimeBadge" class="badge muted">Đang kiểm tra hệ thống…</span></div>
   </header>
 
+  <nav id="taskNav" class="task-nav" aria-label="Tác vụ Studio">
+    <button data-task-target="contentPanel">① Nội dung</button>
+    <button data-task-target="uploadMediaPanel">② Media</button>
+    <button data-task-target="voiceStudioPanel">③ Voice</button>
+    <button data-task-target="reviewPanel">④ Review</button>
+    <button data-task-target="renderArea">⑤ Render</button>
+    <button data-task-target="renderHistoryPanel">⑥ Lịch sử</button>
+    <button data-task-target="configPanel">⑦ Cấu hình</button>
+  </nav>
+
   <section class="gate-strip" aria-label="Safety gates">
     <div>① Evidence</div><div>② Translation</div><div>③ Originality</div><div>④ Medical Safety</div><div>⑤ Copyright</div><div>⑥ Human Review</div>
   </section>
   <main class="layout">
-    <section class="panel form-panel">
+    <section id="contentPanel" class="panel form-panel">
       <div class="step">BƯỚC 1</div><h2>Chọn loại nội dung và chủ đề</h2>
       <div id="profileGrid" class="profile-grid">
         <button type="button" class="profile-card active" data-profile="health"><b>🩺 Sức khỏe</b><span>Evidence + Medical Safety</span></button>
@@ -54,12 +64,6 @@
       <div class="step">AN TOÀN MẶC ĐỊNH</div><h2 class="policy-title">Production policy</h2>
       <ul class="policy"><li>Autopilot công khai: <b>OFF</b></li><li>Media bên thứ ba: <b>BLOCK</b> nếu chưa xác minh quyền</li><li>Liều thuốc/chỉ dẫn điều trị: <b>Medical Review</b></li><li>Render không media: <b>Original visual cards</b></li></ul>
 
-      <details id="studioSettings" class="settings-panel" open><summary>⚙ CẤU HÌNH AI & TỰ ĐỘNG THEO TÀI KHOẢN</summary>
-        <div class="settings-grid"><label>AI ưu tiên<select id="aiPreferred"><option value="gemini">Gemini</option><option value="openai">OpenAI-compatible</option></select></label><label>Gemini model<input id="geminiModel" placeholder="gemini-..."></label><label>Gemini API Key<input id="geminiKey" type="password" placeholder="Để trống = giữ key hiện tại"></label><label>OpenAI model<input id="openaiModel" placeholder="gpt-..."></label><label>OpenAI Base URL<input id="openaiBaseUrl" placeholder="https://api.openai.com/v1"></label><label>OpenAI API Key<input id="openaiKey" type="password" placeholder="Để trống = giữ key hiện tại"></label></div>
-        <div id="aiKeyState" class="status-line muted"></div><div class="actions"><button id="saveAiBtn" class="btn small">LƯU AI</button><button id="testAiBtn" class="btn ghost small">TEST AI</button></div>
-        <div class="policy-divider"></div><div class="toggle-grid"><label><input id="setAutoDuration" type="checkbox" checked disabled> Luôn bật: thời lượng video = audio thật</label><label><input id="setAutoScenes" type="checkbox"> Tự tạo scene</label><label><input id="setShotCraft" type="checkbox"> ShotCraft + chuyển cảnh</label><label><input id="setAutoVoice" type="checkbox"> Tự chọn giọng</label><label><input id="setVideoScenes" type="checkbox"> Cho video vào scene</label></div><button id="saveStudioSettingsBtn" class="btn small">LƯU TỰ ĐỘNG HÓA</button><div id="settingsStatus" class="status-line muted"></div>
-      </details>
-      <details id="legacyAccess"><summary>API key legacy</summary><div class="api-row"><input id="apiKey" type="password" placeholder="Bearer API key"><button id="saveKey" class="btn small">LƯU</button></div></details>
     </aside>
   </main>
 
@@ -73,8 +77,8 @@
     </div>
     <div id="openMediaPanel" class="panel media-panel hidden"><div class="section-head media-head"><div><div class="step">MEDIA RIGHTS ENGINE</div><h2>Media giấy phép mở tự động</h2></div><span id="openMediaBadge" class="badge">OPENVERSE</span></div><p class="muted">Chỉ các ảnh có Public Domain / CC0 / CC BY / CC BY-SA và metadata quyền hợp lệ mới được đưa vào render. Có thể bỏ chọn từng ảnh.</p><div id="openMediaGrid" class="media-grid"></div><div id="openMediaStatus" class="status-line muted"></div></div>
 
-    <section id="uploadMediaPanel" class="panel media-panel hidden"><div class="section-head media-head"><div><div class="step">MEDIA UPLOAD</div><h2>Ảnh / video của bạn</h2></div><span class="badge">OWNED / LICENSED</span></div><p class="muted">Upload JPG/PNG/WebP hoặc MP4/WebM. Video có thể được Scene Director dùng trực tiếp trong montage.</p><input id="mediaUploadFile" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"><label class="rights-check"><input id="mediaUploadRights" type="checkbox"> Tôi sở hữu media hoặc có quyền sử dụng media này.</label><div class="actions"><button id="mediaUploadBtn" class="btn success">UPLOAD MEDIA</button><button id="refreshUploadsBtn" class="btn ghost">LÀM MỚI</button></div><div id="uploadedMediaList" class="upload-list"></div><div id="mediaUploadStatus" class="status-line muted"></div></section>
-    <section id="voiceStudioPanel" class="panel voice-studio hidden">
+    <section id="uploadMediaPanel" class="panel media-panel"><div class="section-head media-head"><div><div class="step">MEDIA UPLOAD</div><h2>Ảnh / video của bạn</h2></div><span class="badge">OWNED / LICENSED</span></div><p class="muted">Upload JPG/PNG/WebP hoặc MP4/WebM. Video có thể được Scene Director dùng trực tiếp trong montage.</p><input id="mediaUploadFile" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"><label class="rights-check"><input id="mediaUploadRights" type="checkbox"> Tôi sở hữu media hoặc có quyền sử dụng media này.</label><div class="actions"><button id="mediaUploadBtn" class="btn success">UPLOAD MEDIA</button><button id="refreshUploadsBtn" class="btn ghost">LÀM MỚI</button></div><div id="uploadedMediaList" class="upload-list"></div><div id="mediaUploadStatus" class="status-line muted"></div></section>
+    <section id="voiceStudioPanel" class="panel voice-studio">
       <div class="section-head voice-head"><div><div class="step">VOICE STUDIO</div><h2>Giọng đọc & lồng tiếng</h2></div><span id="voiceStudioBadge" class="badge">LOCAL TTS</span></div>
       <div class="voice-layout">
         <div class="voice-workbench">
@@ -95,7 +99,7 @@ Nội dung câu đầu..."></textarea><div class="actions"><button id="analyzeSr
     </section>
     <div class="panel action-panel"><div><b>Multi-Content Studio là quy trình chính.</b><p>Bản đạt gate sẽ được tạo Draft và tiếp tục Review → Render ngay trên trang này.</p></div><div class="actions"><button id="draftBtn" class="btn success">TẠO DRAFT & REVIEW</button><button id="resetBtn" class="btn ghost">TẠO BẢN KHÁC</button></div><div id="draftStatus" class="status-line"></div></div>
 
-    <section id="reviewPanel" class="hidden">
+    <section id="reviewPanel">
       <div class="section-head"><div><div class="step">BƯỚC 3</div><h2>Evidence Review → Duyệt → Render</h2></div><span id="reviewBadge" class="badge">CHỜ REVIEW</span></div>
       <div class="review-grid">
         <article class="panel">
@@ -104,7 +108,7 @@ Nội dung câu đầu..."></textarea><div class="actions"><button id="analyzeSr
           <div id="claimMatrix" class="claim-matrix"></div>
           <label id="evidenceConfirmWrap" class="evidence-confirm"><input id="evidenceConfirm" type="checkbox"> <span>✓ Tôi đã kiểm tra nguồn và các claim chính.</span></label>
         </article>
-        <aside class="panel">
+        <aside id="renderArea" class="panel">
           <div class="meta-label">DURABLE REVIEW</div>
           <div id="reviewState" class="status-card">Chưa duyệt bản.</div>
           <button id="approveBtn" class="btn primary compact" disabled>KHÓA & DUYỆT BẢN</button>
@@ -125,6 +129,16 @@ Nội dung câu đầu..."></textarea><div class="actions"><button id="analyzeSr
     </section>
   </section>
 
+  <section id="configPanel" class="panel config-panel">
+    <div class="section-head"><div><div class="step">CẤU HÌNH WORKSPACE</div><h2>Kênh, AI và tự động hóa</h2></div><span class="badge">THEO TÀI KHOẢN</span></div>
+    <div class="config-sections">
+      <section class="config-block"><div class="meta-label">HỒ SƠ KÊNH</div><div class="settings-grid"><label>Tên kênh<input id="channelNameInput" maxlength="60" placeholder="Tên kênh hiển thị trên video"></label><label>Tagline<input id="channelTaglineInput" maxlength="120" placeholder="Thông điệp ngắn của kênh"></label></div><button id="saveChannelBtn" class="btn small">LƯU TÊN KÊNH</button><div id="channelStatus" class="status-line muted"></div></section>
+      <section class="config-block"><div class="meta-label">AI PROVIDER</div><div class="settings-grid"><label>AI ưu tiên<select id="aiPreferred"><option value="gemini">Gemini</option><option value="openai">OpenAI-compatible</option></select></label><label>Gemini model<input id="geminiModel" placeholder="gemini-..."></label><label>Gemini API Key<input id="geminiKey" type="password" placeholder="Để trống = giữ key hiện tại"></label><label>OpenAI model<input id="openaiModel" placeholder="gpt-..."></label><label>OpenAI Base URL<input id="openaiBaseUrl" placeholder="https://api.openai.com/v1"></label><label>OpenAI API Key<input id="openaiKey" type="password" placeholder="Để trống = giữ key hiện tại"></label></div><div id="aiKeyState" class="status-line muted"></div><div class="actions"><button id="saveAiBtn" class="btn small">LƯU AI</button><button id="testAiBtn" class="btn ghost small">TEST AI</button></div></section>
+      <section class="config-block"><div class="meta-label">TỰ ĐỘNG HÓA</div><div class="toggle-grid"><label><input id="setAutoDuration" type="checkbox" checked disabled> Luôn bật: thời lượng video = audio thật</label><label><input id="setAutoScenes" type="checkbox"> Tự tạo scene</label><label><input id="setShotCraft" type="checkbox"> ShotCraft + chuyển cảnh</label><label><input id="setAutoVoice" type="checkbox"> Tự chọn giọng</label><label><input id="setVideoScenes" type="checkbox"> Cho video vào scene</label></div><button id="saveStudioSettingsBtn" class="btn small">LƯU TỰ ĐỘNG HÓA</button><div id="settingsStatus" class="status-line muted"></div></section>
+      <details id="legacyAccess" class="config-block"><summary>API key legacy</summary><div class="api-row"><input id="apiKey" type="password" placeholder="Bearer API key"><button id="saveKey" class="btn small">LƯU</button></div></details>
+    </div>
+  </section>
+
   <section id="renderHistoryPanel" class="panel render-history-panel">
     <div class="section-head history-head"><div><div class="step">LỊCH SỬ RENDER</div><h2>Xem lại video đã tạo</h2></div><button id="refreshRenderHistoryBtn" class="btn ghost small">LÀM MỚI</button></div>
     <p class="muted">Hiển thị các render gần đây của đúng tài khoản đang đăng nhập. Có thể xem lại hoặc xóa các render đã hoàn tất/lỗi.</p>
@@ -132,8 +146,8 @@ Nội dung câu đầu..."></textarea><div class="actions"><button id="analyzeSr
     <div id="renderHistoryList" class="render-history-list"></div>
   </section>
 
-  <footer>Multi-Content Studio V3.3.2 • Open-source voices • Personal Voice Clone • Rights-safe • Review → Render</footer>
+  <footer>Multi-Content Studio V3.4 • Open-source voices • Personal Voice Clone • Rights-safe • Review → Render</footer>
 </div>
-<script src="/health-studio.js?v=3.3.2"></script>
+<script src="/health-studio.js?v=3.4.0"></script>
 </body>
 </html>

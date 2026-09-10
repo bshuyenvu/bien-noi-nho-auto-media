@@ -12,5 +12,5 @@ if(!server.includes("app.post('/api/voice-studio/preview'"))throw new Error('Thi
 if(!server.includes("app.post('/api/voice-preview',handleVoicePreview)"))throw new Error('Thiếu alias preview cho client cache cũ');
 if(!client.includes("/api/voice-studio/preview"))throw new Error('Frontend chưa dùng Voice Studio preview API chuẩn');
 if(/voice-pane hidden/.test(ui))throw new Error('Các tác vụ Voice Studio không được ẩn sau tab');
-if(!ui.includes('settings-panel" open')||!ui.includes('personal-voice" open'))throw new Error('Các cấu hình thao tác chính phải mở mặc định');
-console.log('Voice Studio V3.3.1 smoke OK',JSON.stringify({voices:voices.length,openSource:status.openSourceVoices,personal:status.personalClone,srtScore:a.summary.score}));
+if(!ui.includes('id=\"configPanel\" class=\"panel config-panel\"')||!ui.includes('personal-voice\" open'))throw new Error('Cấu hình Workspace và Personal Voice phải mở mặc định');
+console.log('Voice Studio V3.4 smoke OK',JSON.stringify({voices:voices.length,openSource:status.openSourceVoices,personal:status.personalClone,srtScore:a.summary.score}));

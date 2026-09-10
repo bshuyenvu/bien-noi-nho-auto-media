@@ -29,3 +29,24 @@ Optional local translation fallback uses CTranslate2 with the Helsinki-NLP OPUS-
 - Runtime mode: CPU-only INT8; internal Docker network only
 
 Health Content Studio treats this local machine translation as a review-required fallback; it is not considered verified medical translation.
+
+## Openverse media discovery
+
+Rights-cleared third-party image discovery uses the public Openverse search service and follows the architecture of the WordPress Openverse open-source project.
+
+- Project: https://github.com/WordPress/openverse
+- Project license: MIT
+- Purpose: discover openly licensed media only
+- Allowed media rights in this application: Public Domain, CC0, CC BY, CC BY-SA
+
+Each discovered media item keeps its own creator, landing page and license metadata. Openverse discovery does not override the copyright or attribution requirements of an individual media item.
+
+## Optional RevidAPI integration
+
+RevidAPI is an optional external service integration used only when an operator supplies a server-side API key. It is not bundled open-source code and is not required for local Voice Studio, SRT timeline synthesis, or FFmpeg dubbing.
+
+- Service base: https://revidapi.com
+- Confirmed workflow reference supplied by the operator: SRT-to-speech timeline with voice ID `9039`
+- Credentials: server-side environment only (`REVID_API_KEY`)
+
+Use of RevidAPI remains subject to that service's own terms, pricing, model licenses, and media-use rules.

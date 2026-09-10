@@ -4,15 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>Health Studio • Video sức khỏe dựa trên bằng chứng</title>
-  <link rel="stylesheet" href="/health-studio.css?v=2.0.0">
+  <title>Multi-Content Studio • Nội dung, giọng đọc và video AI</title>
+  <link rel="stylesheet" href="/health-studio.css?v=3.1.0">
 </head>
 <body>
 <div class="wrap">
   <header class="hero">
-    <div class="eyebrow">🩺 HEALTH STUDIO MAIN V2</div>
-    <h1>Video sức khỏe dựa trên bằng chứng, an toàn bản quyền</h1>
-    <p>Chỉ cần nhập chủ đề sức khỏe. Hệ thống tự tìm nguồn y khoa uy tín, tạo Evidence Pack, Việt hóa dữ kiện, viết kịch bản nguyên bản và chỉ đưa sang Review khi vượt các safety gate.</p>
+    <div class="eyebrow">🎬 MULTI-CONTENT STUDIO V3.1</div>
+    <h1>Studio nội dung AI đa chủ đề, có kiểm chứng và an toàn bản quyền</h1>
+    <p>Từ một chủ đề, Studio có thể nghiên cứu nguồn, viết kịch bản, chọn media có quyền sử dụng, chọn giọng đọc, tạo audio theo SRT và lồng tiếng video trước khi Review → Render.</p>
     <div class="hero-actions"><span id="runtimeBadge" class="badge muted">Đang kiểm tra hệ thống…</span></div>
   </header>
 
@@ -21,17 +21,23 @@
   </section>
   <main class="layout">
     <section class="panel form-panel">
-      <div class="step">BƯỚC 1</div><h2>Nguồn và mục tiêu truyền thông</h2>
-      <label>Chủ đề sức khỏe <span class="optional">(đầu vào chính)</span></label>
+      <div class="step">BƯỚC 1</div><h2>Chọn loại nội dung và chủ đề</h2>
+      <div id="profileGrid" class="profile-grid">
+        <button type="button" class="profile-card active" data-profile="health"><b>🩺 Sức khỏe</b><span>Evidence + Medical Safety</span></button>
+        <button type="button" class="profile-card" data-profile="life_tips"><b>💡 Mẹo vặt</b><span>Đời sống • an toàn thực hành</span></button>
+        <button type="button" class="profile-card" data-profile="life_truth"><b>🎙 Podcast chân lý sống</b><span>Nguyên bản • giọng kể</span></button>
+        <button type="button" class="profile-card" data-profile="event_commentary"><b>🗞 Bình luận sự kiện</b><span>Đa nguồn • fact/comment</span></button>
+      </div>
+      <label id="topicLabel">Chủ đề sức khỏe <span class="optional">(đầu vào chính)</span></label>
       <input id="topic" maxlength="180" placeholder="Ví dụ: Dấu hiệu cảnh báo đột quỵ">
-      <label>URL nguồn y khoa chính <span class="optional">(tùy chọn)</span></label>
-      <input id="primaryUrl" type="url" placeholder="Để trống để hệ thống tự tìm WHO/CDC/NIH/NHS/PubMed…">
+      <label id="urlLabel">URL nguồn y khoa chính <span class="optional">(tùy chọn)</span></label>
+      <input id="primaryUrl" type="url" placeholder="Tùy chọn: URL nguồn tham khảo chính">
       <div class="row three">
         <div><label>Đối tượng</label><select id="audience"><option value="general">Cộng đồng</option><option value="patient">Người bệnh / người nhà</option><option value="medical">Nhân viên y tế</option><option value="social">Mạng xã hội</option></select></div>
         <div><label>Thời lượng</label><select id="length"><option value="45">45 giây</option><option value="60" selected>60 giây</option><option value="90">90 giây</option><option value="120">120 giây</option></select></div>
         <div><label>Phong cách</label><select id="format"><option value="standard">Giải thích chuẩn</option><option value="latest">Cập nhật mới</option></select></div>
       </div>
-      <div class="notice">Nếu bỏ trống URL, Health Studio tự tìm nguồn chính thống + y văn. Nguồn chỉ dùng cho bằng chứng/nghiên cứu; hệ thống không tự lấy ảnh/video từ nguồn để render trong Copyright Safe Mode.</div>
+      <div class="notice">Nếu bỏ trống URL, Studio tự tìm nguồn phù hợp theo profile. Nguồn chỉ dùng cho bằng chứng/nghiên cứu; hệ thống không tự lấy ảnh/video từ nguồn để render trong Copyright Safe Mode.</div>
       <button id="generateBtn" class="btn primary">TÌM NGUỒN + TẠO KỊCH BẢN</button>
     </section>
 
@@ -59,7 +65,26 @@
       <article class="panel script-panel"><div class="meta-label">HEADLINE</div><h2 id="headline"></h2><div class="meta-label">HOOK</div><p id="hook" class="hook"></p><div class="meta-label">KỊCH BẢN CANONICAL • READ ONLY</div><div id="script" class="script-box"></div></article>
       <aside class="panel"><div class="meta-label">EVIDENCE & SAFETY</div><div id="evidenceSummary"></div><div class="meta-label space">NGUỒN ĐỐI CHIẾU</div><div id="sources"></div><div class="meta-label space">CẢNH BÁO</div><div id="warnings"></div></aside>
     </div>
-    <div class="panel action-panel"><div><b>Health Studio là quy trình chính.</b><p>Bản đạt gate sẽ được tạo Draft và tiếp tục Review → Render ngay trên trang này.</p></div><div class="actions"><button id="draftBtn" class="btn success">TẠO DRAFT & REVIEW</button><button id="resetBtn" class="btn ghost">TẠO BẢN KHÁC</button></div><div id="draftStatus" class="status-line"></div></div>
+    <div id="openMediaPanel" class="panel media-panel hidden"><div class="section-head media-head"><div><div class="step">MEDIA RIGHTS ENGINE</div><h2>Media giấy phép mở tự động</h2></div><span id="openMediaBadge" class="badge">OPENVERSE</span></div><p class="muted">Chỉ các ảnh có Public Domain / CC0 / CC BY / CC BY-SA và metadata quyền hợp lệ mới được đưa vào render. Có thể bỏ chọn từng ảnh.</p><div id="openMediaGrid" class="media-grid"></div><div id="openMediaStatus" class="status-line muted"></div></div>
+    <section id="voiceStudioPanel" class="panel voice-studio hidden">
+      <div class="section-head voice-head"><div><div class="step">VOICE STUDIO</div><h2>Giọng đọc & lồng tiếng</h2></div><span id="voiceStudioBadge" class="badge">LOCAL TTS</span></div>
+      <div class="voice-layout">
+        <div class="voice-workbench">
+          <div class="selected-voice"><div><div class="meta-label">GIỌNG ĐANG CHỌN</div><h3 id="selectedVoiceName">Nam Minh</h3><p id="selectedVoiceDesc" class="muted"></p></div><button id="previewVoiceBtn" class="btn ghost small">▶ NGHE THỬ</button></div>
+          <div class="voice-controls"><label>Phong cách<select id="voiceStyle"><option value="news">Bản tin</option><option value="viral">Viral</option><option value="podcast">Podcast</option><option value="story">Kể chuyện</option><option value="breaking">Tin nóng</option></select></label><label>Tốc độ<select id="voiceRate"><option value="-20%">-20%</option><option value="-10%">-10%</option><option value="+0%" selected>Chuẩn</option><option value="+10%">+10%</option><option value="+20%">+20%</option></select></label></div>
+          <div class="voice-tabs"><button class="voice-tab active" data-voice-tab="text">Văn bản</button><button class="voice-tab" data-voice-tab="srt">SRT → giọng</button><button class="voice-tab" data-voice-tab="dub">Lồng tiếng video</button></div>
+          <div class="voice-pane" data-voice-pane="text"><label>Văn bản đọc</label><textarea id="voiceText" rows="6" maxlength="9000"></textarea><button id="previewTextBtn" class="btn primary compact">TẠO & NGHE THỬ</button></div>
+          <div class="voice-pane hidden" data-voice-pane="srt"><label>SRT timeline</label><input id="srtFile" type="file" accept=".srt,text/plain"><textarea id="srtInput" rows="8" maxlength="30000" placeholder="1
+00:00:00,000 --> 00:00:03,000
+Nội dung câu đầu..."></textarea><div class="actions"><button id="analyzeSrtBtn" class="btn ghost">PHÂN TÍCH TIMELINE</button><button id="srtSpeechBtn" class="btn primary">TẠO AUDIO THEO SRT</button></div><div id="srtStatus" class="status-line muted"></div></div>
+          <div class="voice-pane hidden" data-voice-pane="dub"><label>Direct URL video MP4/WebM đã có quyền sử dụng</label><input id="dubVideoUrl" type="url" placeholder="https://.../video.mp4"><label class="rights-check"><input id="dubRights" type="checkbox"> Tôi sở hữu video hoặc có giấy phép/quyền sử dụng để lồng tiếng.</label><button id="dubBtn" class="btn primary compact">LỒNG TIẾNG VIDEO</button><div id="dubStatus" class="status-line muted"></div><video id="dubVideo" class="render-video hidden" controls playsinline></video></div>
+          <audio id="voicePreviewPlayer" class="voice-player hidden" controls></audio>
+        </div>
+        <aside class="voice-library"><div class="meta-label">THƯ VIỆN GIỌNG</div><input id="voiceSearch" placeholder="Tìm giọng, ví dụ: adam, podcast, nam..."><div class="voice-filters"><select id="voiceLanguage"><option value="all">Tất cả ngôn ngữ</option><option value="vi">Tiếng Việt</option><option value="multilingual">Đa ngôn ngữ</option></select><select id="voiceRegion"><option value="all">Tất cả vùng</option><option value="standard">Việt Nam chuẩn</option><option value="south">Miền Nam</option><option value="international">Quốc tế</option></select><select id="voiceGender"><option value="all">Tất cả giới tính</option><option value="male">Nam</option><option value="female">Nữ</option></select><select id="voiceCategory"><option value="all">Tất cả thể loại</option><option value="viral">Viral</option><option value="podcast">Podcast</option><option value="review">Review</option><option value="news">Tin tức</option><option value="story">Đọc truyện</option><option value="voiceover">Thuyết minh</option></select></div><div id="voiceLibrary" class="voice-list"></div></aside>
+      </div>
+      <div id="voiceStudioStatus" class="status-line muted"></div>
+    </section>
+    <div class="panel action-panel"><div><b>Multi-Content Studio là quy trình chính.</b><p>Bản đạt gate sẽ được tạo Draft và tiếp tục Review → Render ngay trên trang này.</p></div><div class="actions"><button id="draftBtn" class="btn success">TẠO DRAFT & REVIEW</button><button id="resetBtn" class="btn ghost">TẠO BẢN KHÁC</button></div><div id="draftStatus" class="status-line"></div></div>
 
     <section id="reviewPanel" class="hidden">
       <div class="section-head"><div><div class="step">BƯỚC 3</div><h2>Evidence Review → Duyệt → Render</h2></div><span id="reviewBadge" class="badge">CHỜ REVIEW</span></div>
@@ -82,7 +107,7 @@
             <label>Chuyển động<select id="renderMotion"><option value="light" selected>Nhẹ</option><option value="off">Tĩnh</option><option value="medium">Vừa</option></select></label>
             <label>Ticker<select id="renderTicker"><option value="headline" selected>Headline</option><option value="off">Tắt</option></select></label>
           </div>
-          <div class="notice">Render mặc định không tự lấy media bên thứ ba. Visual card nguyên bản + TTS tiếng Việt + ShotCraft.</div>
+          <div class="notice">Render chỉ dùng media đã được Rights Engine xác nhận hoặc visual card nguyên bản. Giọng đọc lấy từ Voice Studio và được khóa cùng Durable Review.</div>
           <button id="renderBtn" class="btn primary compact" disabled>🎬 RENDER VIDEO</button>
           <div id="renderStatus" class="status-line muted">Chờ hoàn tất Evidence Review và Durable Review.</div>
           <video id="renderVideo" class="render-video hidden" controls playsinline></video>
@@ -91,8 +116,8 @@
     </section>
   </section>
 
-  <footer>Health Studio Main V2 • Evidence-first • Vietnamese • Copyright-safe</footer>
+  <footer>Multi-Content Studio V3.1 • Research • Rights-safe media • Voice Studio • Review → Render</footer>
 </div>
-<script src="/health-studio.js?v=2.0.0"></script>
+<script src="/health-studio.js?v=3.1.0"></script>
 </body>
 </html>

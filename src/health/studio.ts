@@ -5,6 +5,7 @@ import { researchHealthTopic } from '../research/health.js';
 import { auditHealthEditorial } from './safety.js';
 import type { ScriptLength } from '../ai/editor.js';
 import { assertOriginalEditorial } from '../compliance/copyright.js';
+import { searchOpenMedia } from '../media/open-media.js';
 import type { SourceFact } from '../editorial/source-intelligence.js';
 
 export interface HealthStudioInput{
@@ -95,6 +96,7 @@ export async function prepareHealthStudio(input:HealthStudioInput){
   const translationGate=localTranslationUsed?'review':'pass';
   const readyForDraft=healthSafety.status!=='block'&&topicGate!=='block'&&prepared.evidenceGate.status!=='block'&&prepared.copyrightSafety.originality.safe;
   const sourceName=prepared.article.sourceName||prepared.research.sources.map(x=>x.name).filter(Boolean).join(' • ').slice(0,120)||undefined;
+  const openMedia=await searchOpenMedia(topic||prepared.edited.headline,6);
   const draftPayload=readyForDraft?{
     title:prepared.edited.headline,
     body:prepared.edited.script,
@@ -102,12 +104,13 @@ export async function prepareHealthStudio(input:HealthStudioInput){
     sourceName,
     format,
     evidenceBundleId:prepared.evidenceBundleId,
-    mediaProvenance:[],
+    mediaProvenance:openMedia.candidates.map(x=>({url:x.url,sourceName:x.sourceName,sourceUrl:x.sourceUrl,kind:x.kind,rights:x.rights,creator:x.creator,licenseUrl:x.licenseUrl,rightsVerified:x.rightsVerified})),
   }:undefined;
   return{
     ...prepared,
     stage:readyForDraft?'draft-ready':'blocked',
-    healthStudio:{version:'2.0',topic:topic||prepared.edited.headline,audience,topicMatch:Number(topicMatch.toFixed(3)),topicGate,translationGate,localTranslationUsed,translationReviewRequired:localTranslationUsed,healthSafety,readyForDraft,medicalReviewRequired:true,visualPolicy:'original-cards-or-rights-verified-media',sourceAccess,researchDiscovery},
+    healthStudio:{version:'3.1',profile:'health',topic:topic||prepared.edited.headline,audience,topicMatch:Number(topicMatch.toFixed(3)),topicGate,translationGate,localTranslationUsed,translationReviewRequired:localTranslationUsed,healthSafety,readyForDraft,medicalReviewRequired:true,visualPolicy:'original-cards-or-rights-verified-media',sourceAccess,researchDiscovery},
+    openMedia,
     draftPayload,
   };
 }

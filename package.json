@@ -51,7 +51,9 @@
     "smoke:editorial-professional": "tsx scripts/smoke-editorial-professional-v2.ts",
     "smoke:shotcraft-lite": "tsx scripts/smoke-shotcraft-lite.ts",
     "smoke:shotcraft-render": "node scripts/smoke-shotcraft-render.mjs",
-    "smoke:shotcraft-manifest": "tsx scripts/smoke-shotcraft-manifest.ts"
+    "smoke:shotcraft-manifest": "tsx scripts/smoke-shotcraft-manifest.ts",
+    "smoke:copyright-safe": "tsx scripts/smoke-copyright-safe.ts",
+    "smoke:source-coherence": "tsx scripts/smoke-source-coherence.ts"
   },
   "dependencies": {
     "@clerk/express": "^2.1.66",

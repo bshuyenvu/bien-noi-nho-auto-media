@@ -4,16 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>Health Content Studio V1.2 • VietNewsFlow AI</title>
-  <link rel="stylesheet" href="/health-studio.css?v=1.2.0">
+  <title>Health Studio • Video sức khỏe dựa trên bằng chứng</title>
+  <link rel="stylesheet" href="/health-studio.css?v=2.0.0">
 </head>
 <body>
 <div class="wrap">
   <header class="hero">
-    <div class="eyebrow">🩺 HEALTH CONTENT STUDIO V1.2</div>
+    <div class="eyebrow">🩺 HEALTH STUDIO MAIN V2</div>
     <h1>Video sức khỏe dựa trên bằng chứng, an toàn bản quyền</h1>
     <p>Chỉ cần nhập chủ đề sức khỏe. Hệ thống tự tìm nguồn y khoa uy tín, tạo Evidence Pack, Việt hóa dữ kiện, viết kịch bản nguyên bản và chỉ đưa sang Review khi vượt các safety gate.</p>
-    <div class="hero-actions"><a class="btn ghost" href="/">← Dashboard</a><span id="runtimeBadge" class="badge muted">Đang kiểm tra hệ thống…</span></div>
+    <div class="hero-actions"><span id="runtimeBadge" class="badge muted">Đang kiểm tra hệ thống…</span></div>
   </header>
 
   <section class="gate-strip" aria-label="Safety gates">
@@ -42,7 +42,7 @@
         <div class="account-copy"><h2 id="accountName">Đang tải tài khoản…</h2><div id="accountEmail" class="muted"></div><div class="account-badges"><span id="accountRole" class="badge">—</span><span id="accountPlan" class="badge">—</span></div></div>
       </div>
       <div id="accountUsage" class="account-usage muted"></div>
-      <div class="account-actions"><button id="manageAccount" class="btn ghost">QUẢN LÝ TÀI KHOẢN</button><button id="signOut" class="btn ghost hidden">ĐĂNG XUẤT</button></div>
+      <div class="account-actions single"><button id="signOut" class="btn ghost hidden">ĐĂNG XUẤT</button></div>
       <div id="authStatus" class="status-line muted">Đang kiểm tra quyền truy cập…</div>
       <div class="policy-divider"></div>
       <div class="step">AN TOÀN MẶC ĐỊNH</div><h2 class="policy-title">Production policy</h2>
@@ -59,11 +59,40 @@
       <article class="panel script-panel"><div class="meta-label">HEADLINE</div><h2 id="headline"></h2><div class="meta-label">HOOK</div><p id="hook" class="hook"></p><div class="meta-label">KỊCH BẢN CANONICAL • READ ONLY</div><div id="script" class="script-box"></div></article>
       <aside class="panel"><div class="meta-label">EVIDENCE & SAFETY</div><div id="evidenceSummary"></div><div class="meta-label space">NGUỒN ĐỐI CHIẾU</div><div id="sources"></div><div class="meta-label space">CẢNH BÁO</div><div id="warnings"></div></aside>
     </div>
-    <div class="panel action-panel"><div><b>Không xuất bản trực tiếp từ Health Studio.</b><p>Bản đạt gate sẽ được chuyển thành Draft và tiếp tục qua Evidence Review + Durable Review trước render.</p></div><div class="actions"><button id="draftBtn" class="btn success">ĐƯA SANG REVIEW</button><button id="resetBtn" class="btn ghost">TẠO BẢN KHÁC</button><a class="btn ghost" href="/">MỞ DASHBOARD</a></div><div id="draftStatus" class="status-line"></div></div>
+    <div class="panel action-panel"><div><b>Health Studio là quy trình chính.</b><p>Bản đạt gate sẽ được tạo Draft và tiếp tục Review → Render ngay trên trang này.</p></div><div class="actions"><button id="draftBtn" class="btn success">TẠO DRAFT & REVIEW</button><button id="resetBtn" class="btn ghost">TẠO BẢN KHÁC</button></div><div id="draftStatus" class="status-line"></div></div>
+
+    <section id="reviewPanel" class="hidden">
+      <div class="section-head"><div><div class="step">BƯỚC 3</div><h2>Evidence Review → Duyệt → Render</h2></div><span id="reviewBadge" class="badge">CHỜ REVIEW</span></div>
+      <div class="review-grid">
+        <article class="panel">
+          <div class="meta-label">CLAIM → SOURCE MATRIX</div>
+          <div id="evidenceState" class="status-card">Đang tải Evidence Bundle…</div>
+          <div id="claimMatrix" class="claim-matrix"></div>
+          <label class="review-label" for="evidenceNote">Ghi chú xác minh của người duyệt</label>
+          <textarea id="evidenceNote" rows="3" maxlength="1000" placeholder="Ví dụ: Đã đối chiếu CDC/NHS và các nguồn y văn; các claim chính phù hợp nguồn."></textarea>
+          <div class="actions review-actions"><button id="evidenceAcceptBtn" class="btn success">XÁC NHẬN EVIDENCE</button><button id="evidenceFixBtn" class="btn ghost">ĐÁNH DẤU CẦN SỬA</button></div>
+        </article>
+        <aside class="panel">
+          <div class="meta-label">DURABLE REVIEW</div>
+          <div id="reviewState" class="status-card">Chưa duyệt bản.</div>
+          <button id="approveBtn" class="btn primary compact" disabled>KHÓA & DUYỆT BẢN</button>
+          <div class="meta-label space">RENDER AN TOÀN BẢN QUYỀN</div>
+          <div class="render-controls">
+            <label>Mẫu<select id="renderTemplate"><option value="clean" selected>Clean Health</option><option value="classic">Classic</option></select></label>
+            <label>Chuyển động<select id="renderMotion"><option value="light" selected>Nhẹ</option><option value="off">Tĩnh</option><option value="medium">Vừa</option></select></label>
+            <label>Ticker<select id="renderTicker"><option value="headline" selected>Headline</option><option value="off">Tắt</option></select></label>
+          </div>
+          <div class="notice">Render mặc định không tự lấy media bên thứ ba. Visual card nguyên bản + TTS tiếng Việt + ShotCraft.</div>
+          <button id="renderBtn" class="btn primary compact" disabled>🎬 RENDER VIDEO</button>
+          <div id="renderStatus" class="status-line muted">Chờ hoàn tất Evidence Review và Durable Review.</div>
+          <video id="renderVideo" class="render-video hidden" controls playsinline></video>
+        </aside>
+      </div>
+    </section>
   </section>
 
-  <footer>VietNewsFlow AI • Health Content Studio V1.2 • Topic Research • Evidence-first • Copyright-safe</footer>
+  <footer>Health Studio Main V2 • Evidence-first • Vietnamese • Copyright-safe</footer>
 </div>
-<script src="/health-studio.js?v=1.2.1"></script>
+<script src="/health-studio.js?v=2.0.0"></script>
 </body>
 </html>

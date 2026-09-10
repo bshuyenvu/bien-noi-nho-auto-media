@@ -1,0 +1,85 @@
+name: Fix voice clone async
+on:
+  push:
+    branches: ["fix/voice-clone-async-20260910"]
+permissions:
+  contents: write
+jobs:
+  patch-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/voice-clone-async-20260910
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply async clone patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/tts/personal-job.ts')
+          p.write_text("""import { randomUUID } from 'node:crypto';
+          import { enrollPersonalVoice } from './personal.js';
+
+          export type PersonalVoiceEnrollState='idle'|'queued'|'processing'|'ready'|'failed';
+          export interface PersonalVoiceEnrollJob{ id:string;status:PersonalVoiceEnrollState;progress:number;message:string;createdAt:string;updatedAt:string;error?:string;result?:unknown }
+          type InternalJob=PersonalVoiceEnrollJob&{ownerId:string};
+          const jobs=new Map<string,InternalJob>();
+          let queue:Promise<void>=Promise.resolve();
+          const publicJob=(j?:InternalJob):PersonalVoiceEnrollJob=>j?{id:j.id,status:j.status,progress:j.progress,message:j.message,createdAt:j.createdAt,updatedAt:j.updatedAt,error:j.error,result:j.result}:{id:'',status:'idle',progress:0,message:'Chưa có tác vụ clone giọng.',createdAt:'',updatedAt:''};
+          function update(j:InternalJob,patch:Partial<InternalJob>){Object.assign(j,patch,{updatedAt:new Date().toISOString()})}
+          export function personalVoiceEnrollStatus(ownerId:string){return publicJob(jobs.get(ownerId))}
+          export function startPersonalVoiceEnroll(input:{ownerId:string;audio:Buffer}){
+            if(!input.audio.length||input.audio.length>12_000_000)throw new Error('Mẫu giọng không hợp lệ hoặc vượt 12 MB.');
+            const existing=jobs.get(input.ownerId);if(existing&&(existing.status==='queued'||existing.status==='processing'))return publicJob(existing);
+            const now=new Date().toISOString(),job:InternalJob={id:randomUUID(),ownerId:input.ownerId,status:'queued',progress:5,message:'Đã nhận mẫu giọng • đang chờ xử lý.',createdAt:now,updatedAt:now};
+            jobs.set(input.ownerId,job);const audio=Buffer.from(input.audio);
+            queue=queue.catch(()=>undefined).then(async()=>{try{update(job,{status:'processing',progress:25,message:'Đang chuẩn hóa mẫu và tạo embedding giọng…'});const result=await enrollPersonalVoice({ownerId:job.ownerId,audio});update(job,{status:'ready',progress:100,message:'Giọng của tôi đã sẵn sàng.',result,error:undefined})}catch(e){update(job,{status:'failed',progress:100,message:'Không thể tạo giọng.',error:e instanceof Error?e.message:String(e)})}});
+            return publicJob(job);
+          }
+          """,encoding='utf-8')
+
+          s=Path('src/server.ts');text=s.read_text(encoding='utf-8')
+          text=text.replace("import { personalVoiceStatus,enrollPersonalVoice,deletePersonalVoice } from './tts/personal.js';","import { personalVoiceStatus,deletePersonalVoice } from './tts/personal.js';\nimport { personalVoiceEnrollStatus,startPersonalVoiceEnroll } from './tts/personal-job.js';")
+          old="app.post('/api/voice-studio/personal-voice',express.raw({type:'application/octet-stream',limit:'12mb'}),async(q,r)=>{if(q.header('x-voice-rights-confirmed')!=='true')return r.status(400).json({error:'Cần xác nhận đây là giọng của bạn hoặc bạn có quyền sử dụng mẫu.'});if(!Buffer.isBuffer(q.body))return r.status(400).json({error:'Mẫu giọng không hợp lệ.'});try{return r.json(await enrollPersonalVoice({ownerId:accessOf(r).accountId,audio:q.body}))}catch(e){return r.status(422).json({error:e instanceof Error?e.message:String(e)})}});"
+          new="app.post('/api/voice-studio/personal-voice',express.raw({type:'application/octet-stream',limit:'12mb'}),(q,r)=>{if(q.header('x-voice-rights-confirmed')!=='true')return r.status(400).json({error:'Cần xác nhận đây là giọng của bạn hoặc bạn có quyền sử dụng mẫu.'});if(!Buffer.isBuffer(q.body))return r.status(400).json({error:'Mẫu giọng không hợp lệ.'});try{return r.status(202).json(startPersonalVoiceEnroll({ownerId:accessOf(r).accountId,audio:q.body}))}catch(e){return r.status(422).json({error:e instanceof Error?e.message:String(e)})}});\napp.get('/api/voice-studio/personal-voice/enroll-status',(_q,r)=>r.json(personalVoiceEnrollStatus(accessOf(r).accountId)));"
+          if old not in text: raise SystemExit('server voice enroll route pattern not found')
+          text=text.replace(old,new).replace("healthContentStudioVersion:'3.4.2'","healthContentStudioVersion:'3.4.3'").replace("version:'3.4.2',profiles","version:'3.4.3',profiles")
+          s.write_text(text,encoding='utf-8')
+
+          j=Path('public/health-studio.js');text=j.read_text(encoding='utf-8')
+          old="async function apiBinary(url,bytes){const r=await fetch(url,{method:'POST',headers:{...(await headers(false)),'content-type':'application/octet-stream','x-voice-rights-confirmed':'true'},body:bytes}),d=await r.json().catch(()=>({error:'Phản hồi không hợp lệ'}));if(!r.ok)throw Error(d.error||String(r.status));return d}"
+          new="async function apiBinary(url,bytes){let last='';for(let attempt=0;attempt<4;attempt++){const r=await fetch(url,{method:'POST',headers:{...(await headers(false)),'content-type':'application/octet-stream','x-voice-rights-confirmed':'true'},body:bytes}),d=await r.json().catch(()=>({error:'Phản hồi không hợp lệ'}));if(r.ok)return d;last=d.error||String(r.status);if(r.status!==429)throw Error(last);const retry=Number(r.headers.get('retry-after')||0),waitMs=Math.max(1500,retry>0?retry*1000:1500*(2**attempt));if($('personalVoiceStatus'))$('personalVoiceStatus').textContent=`Gateway đang giới hạn tạm thời • tự thử lại sau ${Math.ceil(waitMs/1000)} giây…`;await new Promise(resolve=>setTimeout(resolve,waitMs))}throw Error(last||'Clone voice đang bị giới hạn tạm thời.')}"
+          if old not in text: raise SystemExit('apiBinary pattern not found')
+          text=text.replace(old,new)
+          old2="async function enrollPersonalVoice(){const f=$('personalVoiceFile').files?.[0];if(!f)return alert('Hãy chọn mẫu giọng 3–8 giây.');if(!$('personalVoiceRights').checked)return alert('Cần xác nhận đây là giọng của bạn hoặc bạn có quyền sử dụng mẫu.');if(f.size>12_000_000)return alert('Mẫu giọng vượt 12 MB.');const b=$('enrollVoiceBtn');b.disabled=true;$('personalVoiceStatus').textContent='Đang chuẩn hóa mẫu và tạo embedding giọng trên VieNeu…';try{await apiBinary('/api/voice-studio/personal-voice',await f.arrayBuffer());await loadVoiceStudio();selectVoice('vi-personal');$('personalVoiceStatus').textContent='✓ Đã tạo Giọng của tôi. Có thể nghe thử, dùng SRT, lồng tiếng và Render.'}catch(e){$('personalVoiceStatus').textContent='⚠ '+e.message}finally{b.disabled=false}}"
+          new2="async function enrollPersonalVoice(){const f=$('personalVoiceFile').files?.[0];if(!f)return alert('Hãy chọn mẫu giọng 3–8 giây.');if(!$('personalVoiceRights').checked)return alert('Cần xác nhận đây là giọng của bạn hoặc bạn có quyền sử dụng mẫu.');if(f.size>12_000_000)return alert('Mẫu giọng vượt 12 MB.');const b=$('enrollVoiceBtn');b.disabled=true;$('personalVoiceStatus').textContent='Đang gửi mẫu giọng…';try{const accepted=await apiBinary('/api/voice-studio/personal-voice',await f.arrayBuffer());$('personalVoiceStatus').textContent=accepted.message||'Đã nhận mẫu • đang tạo giọng nền…';const deadline=Date.now()+6*60*1000;while(Date.now()<deadline){await new Promise(resolve=>setTimeout(resolve,2500));let job;try{job=await api('/api/voice-studio/personal-voice/enroll-status')}catch(e){if(String(e.code||'')==='429'){await new Promise(resolve=>setTimeout(resolve,4000));continue}throw e}if(job.status==='ready'){await loadVoiceStudio();selectVoice('vi-personal');$('personalVoiceStatus').textContent='✓ Đã tạo Giọng của tôi. Có thể nghe thử, dùng SRT, lồng tiếng và Render.';return}if(job.status==='failed')throw Error(job.error||job.message||'Không thể tạo giọng.');$('personalVoiceStatus').textContent=`${job.progress||0}% • ${job.message||'Đang xử lý mẫu giọng…'}`}throw Error('Clone giọng chưa hoàn tất sau 6 phút. Hệ thống đã dừng chờ; có thể kiểm tra trạng thái lại.')}catch(e){$('personalVoiceStatus').textContent='⚠ '+e.message}finally{b.disabled=false}}"
+          if old2 not in text: raise SystemExit('enrollPersonalVoice pattern not found')
+          text=text.replace(old2,new2)
+          j.write_text(text,encoding='utf-8')
+
+          h=Path('public/index.html');text=h.read_text(encoding='utf-8');import re
+          text=re.sub(r'V3\.4\.2','V3.4.3',text);text=re.sub(r'health-studio\.js\?v=3\.4\.2','health-studio.js?v=3.4.3',text);h.write_text(text,encoding='utf-8')
+
+          Path('scripts/smoke-personal-voice-async.mjs').write_text("""import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';
+          const [server,client,job]=await Promise.all(['src/server.ts','public/health-studio.js','src/tts/personal-job.ts'].map(x=>readFile(x,'utf8')));
+          assert.match(server,/personal-voice\/enroll-status/);assert.match(server,/status\(202\)/);assert.match(client,/Gateway đang giới hạn tạm thời/);assert.match(client,/6\*60\*1000/);assert.match(job,/status:'queued'/);assert.match(job,/status:'processing'/);assert.match(job,/status:'ready'/);assert.match(job,/status:'failed'/);console.log('Async personal voice clone contract OK');
+          """,encoding='utf-8')
+          PY
+      - run: npm ci
+      - run: npm run typecheck
+      - run: node --check public/health-studio.js
+      - run: node scripts/smoke-personal-voice-async.mjs
+      - name: Commit tested fix
+        shell: bash
+        run: |
+          rm -f .github/workflows/fix-voice-clone-async.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/tts/personal-job.ts src/server.ts public/health-studio.js public/index.html scripts/smoke-personal-voice-async.mjs .github/workflows/fix-voice-clone-async.yml
+          git commit -m "V3.4.3: async personal voice clone with 429 recovery"
+          git push origin HEAD:fix/voice-clone-async-20260910

@@ -1,0 +1,41 @@
+name: V3.3.1 one-time sync
+on:
+  push:
+    paths:
+      - '.github/workflows/v331-sync.yml'
+permissions:
+  contents: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download verified patch
+        run: |
+          curl -fL --retry 3 --retry-delay 2 'https://media.huyenvu.cloud/output/v331-sync.patch' -o /tmp/v331.patch
+          echo '292def153851d9c7226af90a609f565fe6ded76d7cd2dc47ec92aa7845dbab6a  /tmp/v331.patch' | sha256sum -c -
+      - name: Apply patch
+        run: |
+          git apply --check /tmp/v331.patch
+          git apply /tmp/v331.patch
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Voice Studio
+        run: npm run smoke:voice-studio
+      - name: UI contract
+        run: npm run smoke:ui
+      - name: Review gate
+        run: npm run smoke:review-gate
+      - name: Copyright
+        run: npm run smoke:copyright-safe
+      - name: Commit synchronized source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Fix Voice Studio preview and keep actions visible'
+          git push origin HEAD:main

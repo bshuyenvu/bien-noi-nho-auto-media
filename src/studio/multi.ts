@@ -3,8 +3,10 @@ import { findForeignSources } from '../research/foreign.js';
 import { prepareAutoNews } from '../producer/auto.js';
 import { providerCandidates, completeWithProvider } from '../ai/runtime.js';
 import { assertOriginalEditorial } from '../compliance/copyright.js';
-import { searchOpenMedia } from '../media/open-media.js';
+import { searchOpenMediaForScript } from '../media/open-media.js';
 import type { ScriptLength } from '../ai/editor.js';
+import { sourceCoherenceScore } from '../import/url.js';
+import { auditContentQuality } from './content-quality.js';
 
 export type ContentProfile='health'|'life_tips'|'life_truth'|'event_commentary';
 export interface MultiStudioInput extends Omit<HealthStudioInput,'format'>{
@@ -38,30 +40,27 @@ async function originalScript(input:MultiStudioInput,profile:'life_tips'|'life_t
 }
 async function prepareOriginal(input:MultiStudioInput,profile:'life_tips'|'life_truth'){
  const length=input.length||'60',edited=await originalScript(input,profile),topic=clean(input.topic||edited.headline,180);
- const originality=assertOriginalEditorial(edited.headline,edited.script,[]),openMedia=await searchOpenMedia(topic,6);
- const safe=!BLOCK_DANGEROUS.test(`${edited.headline} ${edited.script}`);
- const safety={status:safe?'pass':'block',score:safe?100:0,reasons:safe?[]:['Phát hiện hướng dẫn có rủi ro trong nội dung mẹo vặt.'],warnings:[]};
- const readyForDraft=safe&&originality.safe;
+ const originality=assertOriginalEditorial(edited.headline,edited.script,[]),openMedia=await searchOpenMediaForScript(topic,edited.script,6);
+ const safe=!BLOCK_DANGEROUS.test(`${edited.headline} ${edited.script}`),topicMatch=sourceCoherenceScore(topic,edited.script),topicGate=topicMatch>=.3?'pass':topicMatch>=.16?'review':'block';
+ const safety={status:safe?'pass':'block',score:safe?100:0,reasons:safe?[]:['Phát hiện hướng dẫn có rủi ro trong nội dung mẹo vặt.'],warnings:[]},contentQuality=auditContentQuality(edited.script);
+ const readyForDraft=safe&&originality.safe&&topicGate!=='block'&&contentQuality.status!=='block';
  return{stage:readyForDraft?'draft-ready':'blocked',profile,article:{sourceName:'Nội dung nguyên bản',sourceUrl:undefined,originalTitle:topic,language:'vi'},
   research:{sources:[],count:0},evidenceGate:{status:'pass',score:100,reasons:['Nội dung nguyên bản; không gắn nhãn là bằng chứng y khoa.'],supportedClaimCount:0,claimCount:0},
   intelligence:{sourceScore:100,authorityScore:100,warnings:[],facts:[],provider:edited.provider},edited:{...edited,estimatedSeconds:seconds(length),mode:edited.provider==='rules'?'local':'llm'},
   copyrightSafety:{mode:'strict',originality,externalMediaAutoUse:'rights-verified-only'},openMedia,
-  healthStudio:{version:'3.3',profile,topic,audience:input.audience||'general',topicMatch:1,topicGate:'pass',translationGate:'pass',localTranslationUsed:false,healthSafety:safety,readyForDraft,medicalReviewRequired:false,visualPolicy:'open-license-or-original'},
-  draftPayload:readyForDraft?{title:edited.headline,body:edited.script,sourceName:'Multi-Content Studio • Original',format:'standard',mediaProvenance:openMedia.candidates.map(x=>({url:x.url,sourceName:x.sourceName,sourceUrl:x.sourceUrl,kind:x.kind,rights:x.rights,creator:x.creator,licenseUrl:x.licenseUrl,rightsVerified:x.rightsVerified}))}:undefined};
+  healthStudio:{version:'3.4.2',profile,topic,audience:input.audience||'general',topicMatch:Number(topicMatch.toFixed(3)),topicGate,translationGate:'pass',localTranslationUsed:false,contentQuality,healthSafety:safety,readyForDraft,medicalReviewRequired:false,visualPolicy:'open-license-or-original'},
+  draftPayload:readyForDraft?{title:edited.headline,body:edited.script,sourceName:'Multi-Content Studio • Original',format:'standard',mediaProvenance:openMedia.candidates.map(x=>({url:x.url,sourceName:x.sourceName,sourceUrl:x.sourceUrl,kind:x.kind,rights:x.rights,creator:x.creator,licenseUrl:x.licenseUrl,rightsVerified:x.rightsVerified,sceneIndex:x.sceneIndex,sceneQuery:x.sceneQuery,sortOrder:x.sortOrder}))}:undefined};
 }
 
 async function prepareEventCommentary(input:MultiStudioInput){
  const topic=clean(input.topic,180);if(topic.length<3)throw new Error('Hãy nhập sự kiện cần bình luận.');
- const found=await findForeignSources(topic,5),primary=found.sources.find(x=>x.summary.length>=100);
- if(!primary)throw new Error('Chưa tìm được nguồn tin đủ tin cậy để bình luận sự kiện. Hãy nhập chủ đề cụ thể hơn hoặc URL nguồn.');
- const rest=found.sources.filter(x=>x.url!==primary.url);
- const prepared=await prepareAutoNews({ownerId:input.ownerId,url:primary.url,length:input.length||'60',format:'latest',audience:'general',editorialTitle:topic,
-  fallback:{title:primary.title,summary:primary.summary,sourceName:primary.name,language:'en',force:true},researchSources:rest});
- const openMedia=await searchOpenMedia(topic,6),readyForDraft=prepared.evidenceGate.status!=='block'&&prepared.copyrightSafety.originality.safe;
+ let prepared:Awaited<ReturnType<typeof prepareAutoNews>>,sourceName='Nguồn ưu tiên';
+ if(input.primaryUrl){prepared=await prepareAutoNews({ownerId:input.ownerId,url:input.primaryUrl,length:input.length||'60',format:'latest',audience:'general',editorialTitle:topic});sourceName=prepared.article.sourceName||sourceName}
+ else{const found=await findForeignSources(topic,5),primary=found.sources.find(x=>x.summary.length>=100);if(!primary)throw new Error('Chưa tìm được nguồn tin đủ tin cậy để bình luận sự kiện. Hãy nhập chủ đề cụ thể hơn hoặc URL nguồn.');const rest=found.sources.filter(x=>x.url!==primary.url);sourceName=primary.name;prepared=await prepareAutoNews({ownerId:input.ownerId,url:primary.url,length:input.length||'60',format:'latest',audience:'general',editorialTitle:topic,fallback:{title:primary.title,summary:primary.summary,sourceName:primary.name,language:'en',force:true},researchSources:rest})}
+ const openMedia=await searchOpenMediaForScript(topic,prepared.edited.script,6),topicMatch=sourceCoherenceScore(topic,prepared.edited.script),topicGate=topicMatch>=.3?'pass':topicMatch>=.16?'review':'block',contentQuality=auditContentQuality(prepared.edited.script),readyForDraft=topicGate!=='block'&&contentQuality.status!=='block'&&prepared.evidenceGate.status!=='block'&&prepared.copyrightSafety.originality.safe;
  return{...prepared,stage:readyForDraft?'draft-ready':'blocked',profile:'event_commentary',openMedia,
-  healthStudio:{version:'3.3',profile:'event_commentary',topic,audience:input.audience||'general',topicMatch:1,topicGate:'pass',translationGate:'pass',localTranslationUsed:false,healthSafety:{status:'pass',score:100,reasons:[],warnings:['Bình luận phải tách rõ dữ kiện đã xác minh và nhận định.']},readyForDraft,medicalReviewRequired:false,visualPolicy:'open-license-or-original'},
-  draftPayload:readyForDraft?{title:prepared.edited.headline,body:prepared.edited.script,sourceUrl:prepared.article.sourceUrl,sourceName:primary.name,format:'latest',evidenceBundleId:prepared.evidenceBundleId,
-   mediaProvenance:openMedia.candidates.map(x=>({url:x.url,sourceName:x.sourceName,sourceUrl:x.sourceUrl,kind:x.kind,rights:x.rights,creator:x.creator,licenseUrl:x.licenseUrl,rightsVerified:x.rightsVerified}))}:undefined};
+  healthStudio:{version:'3.4.2',profile:'event_commentary',topic,audience:input.audience||'general',topicMatch:Number(topicMatch.toFixed(3)),topicGate,translationGate:'pass',localTranslationUsed:false,contentQuality,healthSafety:{status:'pass',score:100,reasons:[],warnings:['Bình luận phải tách rõ dữ kiện đã xác minh và nhận định.']},readyForDraft,medicalReviewRequired:false,visualPolicy:'open-license-or-original'},
+  draftPayload:readyForDraft?{title:prepared.edited.headline,body:prepared.edited.script,sourceUrl:prepared.article.sourceUrl,sourceName,format:'latest',evidenceBundleId:prepared.evidenceBundleId,mediaProvenance:openMedia.candidates.map(x=>({url:x.url,sourceName:x.sourceName,sourceUrl:x.sourceUrl,kind:x.kind,rights:x.rights,creator:x.creator,licenseUrl:x.licenseUrl,rightsVerified:x.rightsVerified,sceneIndex:x.sceneIndex,sceneQuery:x.sceneQuery,sortOrder:x.sortOrder}))}:undefined};
 }
 export async function prepareMultiContentStudio(input:MultiStudioInput){
  const profile=input.profile||'health';

@@ -10,7 +10,7 @@ export function voiceStudioCatalog(personalConfigured=false):StudioVoice[]{
 }
 export function voiceStudioStatus(personalConfigured=false){const open=VOICE_CATALOG.filter(v=>v.provider==='vieneu').length,cloud=VOICE_CATALOG.filter(v=>v.provider==='edge').length;return{enabled:true,version:'3.3',openSourceVoices:open,cloudFallbackVoices:cloud,personalClone:{supported:process.env.VIENEU_TTS_ENABLED==='true',configured:personalConfigured,provider:'vieneu-v3-onnx'},modes:['text','srt','dub'],maxDubSeconds:300,maxSrtCues:80};}
 export interface SrtCue{index:number;time:string;startMs:number;endMs:number;durationMs:number;text:string;syllables:number;recommendedMin:number;recommendedMax:number;status:'ok'|'short'|'long'};
-function stampMs(v:string){const m=v.trim().match(/^(\d{1,2}):(\d{2}):(\d{2})[,.](\d{3})$/);if(!m)throw new Error('Timestamp SRT không hợp lệ: '+v);return((+m[1]*3600+ +m[2]*60+ +m[3])*1000)+ +m[4]}
+function stampMs(v:string){const raw=v.trim(),m=raw.match(/^(?:(\d{1,3}):)?(\d{1,2}):(\d{2})(?:[,.](\d{1,3}))?$/);if(!m)throw new Error('Timestamp SRT không hợp lệ: '+v);const hasHours=m[1]!==undefined,h=hasHours?Number(m[1]):0,min=Number(m[2]),sec=Number(m[3]),frac=String(m[4]||'').padEnd(3,'0').slice(0,3),ms=Number(frac||0);if(sec>=60||(hasHours&&min>=60))throw new Error('Timestamp SRT không hợp lệ: '+v);return((h*3600+min*60+sec)*1000)+ms}
 function rangeFor(ms:number){const s=ms/1000;if(s<2.5)return[5,8];if(s<4)return[8,13];if(s<7)return[13,18];if(s<12)return[18,25];return[25,36]}
 function countSyllables(text:string){return text.replace(/[^\p{L}\p{N}]+/gu,' ').trim().split(/\s+/).filter(Boolean).length}
 export function analyzeSrtTimeline(raw:string){
@@ -20,9 +20,11 @@ export function analyzeSrtTimeline(raw:string){
   if(!Number.isInteger(idx)||parts.length!==2)throw new Error(`Cue ${i+1} không đúng cấu trúc SRT.`);const startMs=stampMs(parts[0]),endMs=stampMs(parts[1]);
   if(endMs<=startMs)throw new Error(`Cue ${idx} có thời gian kết thúc không hợp lệ.`);const text=lines.slice(2).join(' ').replace(/\s+/g,' ').trim();if(!text)throw new Error(`Cue ${idx} không có nội dung.`);
   const durationMs=endMs-startMs,syllables=countSyllables(text),[recommendedMin,recommendedMax]=rangeFor(durationMs),status:SrtCue['status']=syllables>recommendedMax?'long':syllables<recommendedMin?'short':'ok';
-  return{index:idx,time,startMs,endMs,durationMs,text,syllables,recommendedMin,recommendedMax,status};});
+  const normalized=(ms:number)=>{const h=Math.floor(ms/3600000),m=Math.floor(ms%3600000/60000),s=Math.floor(ms%60000/1000),x=ms%1000;return`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')},${String(x).padStart(3,'0')}`};
+  return{index:idx,time:`${normalized(startMs)} --> ${normalized(endMs)}`,startMs,endMs,durationMs,text,syllables,recommendedMin,recommendedMax,status};});
  const long=cues.filter(x=>x.status==='long'),short=cues.filter(x=>x.status==='short'),ok=cues.length-long.length-short.length,totalMs=Math.max(...cues.map(x=>x.endMs));
- return{cues,total:cues.length,durationSeconds:Number((totalMs/1000).toFixed(2)),summary:{ok,long:long.length,short:short.length,score:Math.round(ok/Math.max(1,cues.length)*100)},
+ const normalizedSrt=cues.map(c=>`${c.index}\n${c.time}\n${c.text}\n`).join('\n');
+ return{cues,total:cues.length,durationSeconds:Number((totalMs/1000).toFixed(2)),normalizedSrt,summary:{ok,long:long.length,short:short.length,score:Math.round(ok/Math.max(1,cues.length)*100)},
   warnings:[...(long.length?[`${long.length} cue quá dài so với timeline; nên rút gọn trước TTS.`]:[]),...(short.length?[`${short.length} cue ngắn hơn vùng tối ưu; có thể thêm nhịp nghỉ thay vì nhồi chữ.`]:[])]};
 }
 export function voiceChoiceAllowed(id:string){return isVoiceId(id)}

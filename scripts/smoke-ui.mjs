@@ -15,4 +15,4 @@ for(const hiddenId of ['uploadMediaPanel','voiceStudioPanel','reviewPanel']){
     console.error('Primary task is hidden:',hiddenId);process.exit(1)
   }
 }
-console.log('Multi-Content Studio V3.4.1 UI contract OK');
+console.log('Multi-Content Studio V3.4.2 UI contract OK');

@@ -11,6 +11,7 @@ import soundfile as sf
 from vieneu import Vieneu
 
 _lock=threading.Lock()
+_infer_lock=threading.Lock()
 _engine=None
 VOICE_DIR=Path(os.getenv("VIENEU_VOICE_DIR","/voices"))
 VOICE_DIR.mkdir(parents=True,exist_ok=True)
@@ -62,9 +63,11 @@ class Handler(BaseHTTPRequestHandler):
     def synthesize(self,data):
         text=str(data.get("text","")).strip();voice=str(data.get("voice",DEFAULT_VOICE)).strip() or DEFAULT_VOICE
         if not text: raise ValueError("text is required")
-        audio=engine().infer(text,voice=voice)
+        with _infer_lock: audio=engine().infer(text,voice=voice)
         buf=io.BytesIO();sf.write(buf,audio,48000,format="WAV",subtype="PCM_16");payload=buf.getvalue()
-        self.send_response(200);self.send_header("content-type","audio/wav");self.send_header("content-length",str(len(payload)));self.end_headers();self.wfile.write(payload)
+        try:
+            self.send_response(200);self.send_header("content-type","audio/wav");self.send_header("content-length",str(len(payload)));self.end_headers();self.wfile.write(payload)
+        except (BrokenPipeError, ConnectionResetError): return
     def do_DELETE(self):
         if not self.path.startswith("/voices/"): return self.send_json(404,{"error":"not found"})
         try:

@@ -14,4 +14,4 @@ if(!client.includes("/api/voice-studio/preview"))throw new Error('Frontend chưa
 if(/voice-pane hidden/.test(ui))throw new Error('Các tác vụ Voice Studio không được ẩn sau tab');
 if(!ui.includes('id=\"configPanel\" class=\"panel config-panel workspace-drawer hidden\"')||!ui.includes('personal-voice\" open'))throw new Error('Cấu hình phải ẩn mặc định; Personal Voice phải mở');
 if(!ui.includes('id=\"openAccountConfigBtn\"')||!ui.includes('data-task-target=\"configPanel\"'))throw new Error('Cấu hình phải mở được từ Tài khoản và menu Cấu hình');
-console.log('Voice Studio V3.4.1 smoke OK',JSON.stringify({voices:voices.length,openSource:status.openSourceVoices,personal:status.personalClone,srtScore:a.summary.score}));
+console.log('Voice Studio V3.4.2 smoke OK',JSON.stringify({voices:voices.length,openSource:status.openSourceVoices,personal:status.personalClone,srtScore:a.summary.score}));

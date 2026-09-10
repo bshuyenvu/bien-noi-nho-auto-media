@@ -24,6 +24,7 @@ export async function prepareAutoNews(input: {
   fallback?: { title: string; summary?: string; sourceName?: string; imageUrl?: string; force?: boolean; language?: string };
   researchSources?: ForeignSource[];
   editorialTitle?: string;
+  userTopicHeadline?: boolean;
 }) {
   const ownerId = effectiveOwnerId(input.ownerId);
   let article,usedFallback=false;
@@ -81,7 +82,7 @@ export async function prepareAutoNews(input: {
 
   const sourceName = [article.sourceName, ...research.sources.map((x) => x.name)].filter(Boolean).join(' • ').slice(0, 120);
   const edited = await editNews({ title: input.editorialTitle?.trim()||intelligence.vietnameseTitle, body: editorialBody, sourceName, length: input.length, ownerId, facts: intelligence.facts, sourceScore: intelligence.sourceScore, audience: input.audience, factProvider: intelligence.provider });
-  const originality=assertOriginalEditorial(edited.headline,edited.script,[article.title,...(usedFallback?[]:[article.body]),...research.sources.map(x=>`${x.title} ${x.summary}`)]);
+  const originality=assertOriginalEditorial(edited.headline,edited.script,[article.title,...(usedFallback?[]:[article.body]),...research.sources.map(x=>`${x.title} ${x.summary}`)],{allowGenericHeadline:Boolean(input.userTopicHeadline)});
   const strictCopyright=copyrightSafeMode();
   const studio = strictCopyright?{candidates:[],summary:{accepted:0,rejected:0,total:0}}:await analyzeMediaStudio({
     sourceUrl: article.sourceUrl,

@@ -1,0 +1,39 @@
+name: Phase 11 V3.3 one-time sync
+on:
+  push:
+    paths:
+      - '.github/workflows/phase11-v33-sync.yml'
+permissions:
+  contents: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download verified V3.3 patch
+        run: |
+          curl -fL --retry 3 --retry-delay 2 'https://media.huyenvu.cloud/output/phase11-v33-sync.patch' -o /tmp/phase11-v33.patch
+          echo '799a26b40a17874299cabd42ae22986261ba039411b9c8b740375e4357598db8  /tmp/phase11-v33.patch' | sha256sum -c -
+      - name: Apply Phase 11.3 source
+        run: |
+          git apply --check /tmp/phase11-v33.patch
+          git apply /tmp/phase11-v33.patch
+      - name: Validate V3.3
+        run: |
+          npm ci --no-audit --no-fund
+          npm run typecheck
+          npm run smoke:ui
+          npm run smoke:voice-studio
+          npm run smoke:studio-v33
+          npm run smoke:mixed-media-render
+          npm run smoke:editorial-professional
+          npm run smoke:copyright-safe
+      - name: Commit synchronized source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Phase 11.3: Production Studio, mixed media and account settings'
+          git push origin HEAD:main

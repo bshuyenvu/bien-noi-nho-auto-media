@@ -7,36 +7,37 @@
  function statusClass(status){return status==='pass'?'gate-pass':status==='review'?'gate-review':'gate-block'}
  function statusLabel(status){return status==='pass'?'PASS':status==='review'?'REVIEW':'BLOCK'}
  function gateCard(label,status,score,detail){return `<div class="gate-card ${statusClass(status)}"><small>${esc(label)}</small><strong>${statusLabel(status)}${Number.isFinite(score)?' • '+Math.round(score):''}</strong><small>${esc(detail||'')}</small></div>`}
- const progressMessages=['Đọc và kiểm tra tính nhất quán của nguồn…','Fact Engine đang khóa claim y khoa…','Đối chiếu Evidence Gate và nguồn độc lập…','Editorial Professional V2 đang viết bản nguyên gốc…','Medical Safety + Copyright Gate đang kiểm tra…'];
+ const progressMessages=['Tìm nguồn y khoa uy tín theo chủ đề…','Tạo Evidence Pack từ nguồn chính thống + y văn…','Đọc và kiểm tra tính nhất quán của nguồn…','Fact Engine đang khóa claim y khoa…','Đối chiếu Evidence Gate và nguồn độc lập…','Editorial Professional V2 đang viết bản nguyên gốc…','Medical Safety + Copyright Gate đang kiểm tra…'];
  function setBusy(on){$('generateBtn').disabled=on;$('progress').classList.toggle('hidden',!on);if(on)$('result').classList.add('hidden')}
  function renderSources(x){
-  const rows=[{name:x.article?.sourceName||'Nguồn chính',url:x.article?.sourceUrl},...(x.research?.sources||[])];
+  const access=x.healthStudio?.sourceAccess||{},rows=[...(access.requestedUrl&&access.mode!=='direct'&&access.mode!=='topic-research'?[{name:'Nguồn yêu cầu (bị chặn truy cập tự động)',url:access.requestedUrl}]:[]),{name:x.article?.sourceName||'Nguồn bằng chứng chính',url:x.article?.sourceUrl},...(x.research?.sources||[])];
   $('sources').innerHTML=rows.filter(v=>v?.url).map(v=>`<div class="source"><b>${esc(v.name||'Nguồn')}</b><br><a href="${esc(v.url)}" target="_blank" rel="noopener noreferrer">${esc(v.url)}</a></div>`).join('')||'<div class="muted">Không có nguồn hiển thị.</div>';
  }
  function renderWarnings(x){
-  const hs=x.healthStudio?.healthSafety||{},items=[...(hs.reasons||[]),...(hs.warnings||[]),...(x.evidenceGate?.reasons||[]),...(x.intelligence?.warnings||[])];
+  const studio=x.healthStudio||{},hs=studio.healthSafety||{},items=[...(studio.sourceAccess?.mode&&studio.sourceAccess.mode!=='direct'&&studio.sourceAccess.mode!=='topic-research'?[`Nguồn chính không cho máy chủ đọc (${studio.sourceAccess.reason||'access blocked'}). Đã chuyển sang nguồn y khoa đối chiếu: ${studio.sourceAccess.fallbackSource?.name||'nguồn thay thế'}.`]:[]),...(hs.reasons||[]),...(hs.warnings||[]),...(x.evidenceGate?.reasons||[]),...(x.intelligence?.warnings||[]),...(studio.researchDiscovery?.warnings||[])];
   $('warnings').innerHTML=items.length?items.map(v=>`<div class="warning">${esc(v)}</div>`).join(''):'<div class="ok-note">Không phát hiện cảnh báo bổ sung ở lớp kiểm tra tự động.</div>';
  }
  function renderMetrics(x){
   const h=x.healthStudio||{},i=x.intelligence||{},o=x.copyrightSafety?.originality||{};
-  $('evidenceSummary').innerHTML=[['Evidence score',x.evidenceGate?.score],['Source score',i.sourceScore],['Authority',i.authorityScore],['Originality',o.score],['Topic match',Math.round((h.topicMatch||0)*100)+'%'],['Claims',x.evidenceGate?.supportedClaimCount+'/'+x.evidenceGate?.claimCount]].map(([k,v])=>`<div class="metric"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('');
+  $('evidenceSummary').innerHTML=[['Evidence score',x.evidenceGate?.score],['Source score',i.sourceScore],['Authority',i.authorityScore],['Originality',o.score],['Topic match',Math.round((h.topicMatch||0)*100)+'%'],['Claims',x.evidenceGate?.supportedClaimCount+'/'+x.evidenceGate?.claimCount],['Research',h.researchDiscovery?.mode||'URL']].map(([k,v])=>`<div class="metric"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('');
  }
  function renderResult(x){
   state.result=x;state.draft=null;const h=x.healthStudio||{},m=h.healthSafety||{},o=x.copyrightSafety?.originality||{};
   $('headline').textContent=x.edited?.headline||'';$('hook').textContent=x.edited?.hook||'';$('script').textContent=x.edited?.script||'';
-  $('gateGrid').innerHTML=[gateCard('Evidence Gate',x.evidenceGate?.status,x.evidenceGate?.score,'Claim → Source'),gateCard('Originality',o.safe?'pass':'block',o.score,'Không sao chép nguồn'),gateCard('Medical Safety',m.status,m.score,'An toàn nội dung y khoa'),gateCard('Copyright',x.copyrightSafety?.mode==='strict'?'pass':'review',undefined,'Media bên ngoài bị khóa'),gateCard('Human Review','review',undefined,'Bắt buộc trước render')].join('');
+  $('gateGrid').innerHTML=[gateCard('Evidence Gate',x.evidenceGate?.status,x.evidenceGate?.score,'Claim → Source'),gateCard('Translation',h.translationGate||'pass',undefined,h.localTranslationUsed?'Local MT • bắt buộc kiểm tra':'AI/nguồn Việt • đã qua lớp Việt hóa'),gateCard('Originality',o.safe?'pass':'block',o.score,'Không sao chép nguồn'),gateCard('Medical Safety',m.status,m.score,'An toàn nội dung y khoa'),gateCard('Copyright',x.copyrightSafety?.mode==='strict'?'pass':'review',undefined,'Media bên ngoài bị khóa'),gateCard('Human Review','review',undefined,'Bắt buộc trước render')].join('');
   renderMetrics(x);renderSources(x);renderWarnings(x);
-  const ready=Boolean(h.readyForDraft);$('readyBadge').textContent=ready?'✓ ĐỦ ĐIỀU KIỆN TẠO DRAFT':'⚠ CẦN SỬA / KIỂM TRA';$('readyBadge').className='badge '+(ready?'gate-pass':'gate-review');
-  $('draftBtn').disabled=!ready||!x.draftPayload;$('draftStatus').textContent=ready?'Bản này chưa được duyệt và chưa thể render.':'Health Studio chưa cho phép đưa bản này sang Review.';
+  const ready=Boolean(h.readyForDraft);$('readyBadge').textContent=ready?(h.translationGate==='review'?'⚠ CHUYỂN REVIEW • KIỂM TRA BẢN DỊCH':'✓ ĐỦ ĐIỀU KIỆN CHUYỂN REVIEW'):'⚠ CẦN SỬA / KIỂM TRA';$('readyBadge').className='badge '+(ready?'gate-pass':'gate-review');
+  $('draftBtn').disabled=!ready||!x.draftPayload;$('draftStatus').textContent=ready?(h.translationGate==='review'?'Bản dịch local chưa được xác nhận. Bắt buộc đối chiếu nguồn gốc trước khi duyệt render.':'Bản này chưa được duyệt và chưa thể render.'):'Health Studio chưa cho phép đưa bản này sang Review.';
   $('result').classList.remove('hidden');$('result').scrollIntoView({behavior:'smooth',block:'start'});
  }
  async function generate(){
   const primaryUrl=$('primaryUrl').value.trim(),topic=$('topic').value.trim();
-  try{const u=new URL(primaryUrl);if(!/^https?:$/.test(u.protocol))throw Error()}catch{return alert('Vui lòng nhập URL nguồn HTTP/HTTPS hợp lệ.')}
+  if(!primaryUrl&&!topic)return alert('Hãy nhập một chủ đề sức khỏe. URL nguồn là tùy chọn.');
+  if(primaryUrl){try{const u=new URL(primaryUrl);if(!/^https?:$/.test(u.protocol))throw Error()}catch{return alert('URL nguồn phải là HTTP/HTTPS hợp lệ.')}}
   setBusy(true);$('progressTitle').textContent=progressMessages[0];$('progressText').textContent='Quy trình có thể chuyển sang rules fallback nếu AI provider tạm hết quota.';
   let i=0;const timer=setInterval(()=>{$('progressTitle').textContent=progressMessages[++i%progressMessages.length]},1300);
-  try{const x=await api('/api/health-studio/generate',{method:'POST',body:JSON.stringify({primaryUrl,topic:topic||undefined,audience:$('audience').value,length:$('length').value,format:$('format').value})});renderResult(x)}
-  catch(e){$('progress').classList.remove('hidden');$('progressTitle').textContent='Không thể tạo bản Health Studio';$('progressText').textContent=e.message;alert(e.message)}
+  try{const x=await api('/api/health-studio/generate',{method:'POST',body:JSON.stringify({primaryUrl:primaryUrl||undefined,topic:topic||undefined,audience:$('audience').value,length:$('length').value,format:$('format').value})});renderResult(x)}
+  catch(e){$('progress').classList.remove('hidden');$('progressTitle').textContent='Không thể tạo bản Health Studio';$('progressText').textContent=e.message;$('progress').classList.add('gate-review')}
   finally{clearInterval(timer);$('generateBtn').disabled=false;if(state.result)$('progress').classList.add('hidden')}
  }
  async function createDraft(){

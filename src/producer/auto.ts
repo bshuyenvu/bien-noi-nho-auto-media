@@ -3,7 +3,7 @@ import { editNews, type ScriptLength } from '../ai/editor.js';
 import { analyzeMediaStudio } from '../media/studio.js';
 import { craftShotPlan } from '../video/shotcraft.js';
 import { castVietnameseVoice } from '../tts/casting.js';
-import { findForeignSources } from '../research/foreign.js';
+import { findForeignSources, type ForeignSource } from '../research/foreign.js';
 import { analyzeSourceIntelligence } from '../editorial/source-intelligence.js';
 import { evaluateSourceEvidence } from '../editorial/evidence-gate.js';
 import { buildClaimSourceMatrix } from '../editorial/claim-source-matrix.js';
@@ -21,28 +21,31 @@ export async function prepareAutoNews(input: {
   length: ScriptLength;
   format: 'breaking' | 'latest' | 'standard';
   audience?: 'general'|'medical'|'investor'|'patient'|'social';
-  fallback?: { title: string; summary?: string; sourceName?: string; imageUrl?: string };
+  fallback?: { title: string; summary?: string; sourceName?: string; imageUrl?: string; force?: boolean; language?: string };
+  researchSources?: ForeignSource[];
+  editorialTitle?: string;
 }) {
   const ownerId = effectiveOwnerId(input.ownerId);
-  let article;
-  try {
+  let article,usedFallback=false;
+  const fallbackArticle=()=>{
+    const summary=input.fallback?.summary?.trim()||'';
+    if(summary.length<120)return undefined;
+    usedFallback=true;
+    return{title:input.fallback!.title,body:summary,sourceName:input.fallback?.sourceName,sourceUrl:input.url,imageUrl:input.fallback?.imageUrl,imageUrls:input.fallback?.imageUrl?[input.fallback.imageUrl]:[],language:input.fallback?.language,publishedAt:undefined};
+  };
+  if(input.fallback?.force){
+    article=fallbackArticle();
+    if(!article)throw new Error('Curated evidence brief không đủ nội dung tối thiểu.');
+  }else try {
     article = await importArticleFromUrl(input.url);
   } catch (error) {
-    const summary = input.fallback?.summary?.trim() || '';
-    if (summary.length < 120) throw error;
-    article = {
-      title: input.fallback!.title,
-      body: summary,
-      sourceName: input.fallback?.sourceName,
-      sourceUrl: input.url,
-      imageUrl: input.fallback?.imageUrl,
-      imageUrls: input.fallback?.imageUrl ? [input.fallback.imageUrl] : [],
-      language: undefined,
-      publishedAt: undefined,
-    };
+    article=fallbackArticle();
+    if(!article)throw error;
   }
 
-  const research = await findForeignSources(article.title, 3);
+  const research = input.researchSources?.length
+    ? {sources:input.researchSources.slice(0,5),imageUrls:[...new Set(input.researchSources.flatMap(x=>x.imageUrls||[]))].slice(0,8)}
+    : await findForeignSources(article.title, 3);
   const intelligence = await analyzeSourceIntelligence({
     ownerId,
     sourceUrl: article.sourceUrl,
@@ -77,8 +80,8 @@ export async function prepareAutoNews(input: {
   ].filter(Boolean).join('\n\n');
 
   const sourceName = [article.sourceName, ...research.sources.map((x) => x.name)].filter(Boolean).join(' • ').slice(0, 120);
-  const edited = await editNews({ title: intelligence.vietnameseTitle, body: editorialBody, sourceName, length: input.length, ownerId, facts: intelligence.facts, sourceScore: intelligence.sourceScore, audience: input.audience, factProvider: intelligence.provider });
-  const originality=assertOriginalEditorial(edited.headline,edited.script,[article.title,article.body,...research.sources.map(x=>`${x.title} ${x.summary}`)]);
+  const edited = await editNews({ title: input.editorialTitle?.trim()||intelligence.vietnameseTitle, body: editorialBody, sourceName, length: input.length, ownerId, facts: intelligence.facts, sourceScore: intelligence.sourceScore, audience: input.audience, factProvider: intelligence.provider });
+  const originality=assertOriginalEditorial(edited.headline,edited.script,[article.title,...(usedFallback?[]:[article.body]),...research.sources.map(x=>`${x.title} ${x.summary}`)]);
   const strictCopyright=copyrightSafeMode();
   const studio = strictCopyright?{candidates:[],summary:{accepted:0,rejected:0,total:0}}:await analyzeMediaStudio({
     sourceUrl: article.sourceUrl,

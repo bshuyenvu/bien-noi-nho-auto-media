@@ -83,6 +83,9 @@ services:
       GEMINI_API_URL: ${GEMINI_API_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
+      LOCAL_TRANSLATION_ENABLED: ${LOCAL_TRANSLATION_ENABLED:-true}
+      LOCAL_TRANSLATION_URL: ${LOCAL_TRANSLATION_URL:-http://local-translate:8080}
+      LOCAL_TRANSLATION_TIMEOUT_MS: ${LOCAL_TRANSLATION_TIMEOUT_MS:-45000}
       VISION_API_URL: ${VISION_API_URL:-}
       VISION_API_KEY: ${VISION_API_KEY:-}
       VISION_MODEL: ${VISION_MODEL:-}
@@ -161,6 +164,27 @@ services:
       - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  local-translate:
+    build:
+      context: .
+      dockerfile: services/local-translate/Dockerfile
+    image: bien-noi-nho-local-translate:1.0
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 10s
+    environment:
+      LOCAL_TRANSLATE_THREADS: ${LOCAL_TRANSLATE_THREADS:-2}
+    mem_limit: ${LOCAL_TRANSLATE_MEM_LIMIT:-512m}
+    mem_reservation: 192m
+    cpus: ${LOCAL_TRANSLATE_CPUS:-1.0}
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3).read()"]
       interval: 30s
       timeout: 5s
       start_period: 30s

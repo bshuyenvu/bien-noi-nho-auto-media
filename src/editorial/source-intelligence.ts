@@ -2,6 +2,7 @@ import { createHash,randomUUID } from 'node:crypto';
 import { db,all,run } from '../storage/db.js';
 import { detectLanguage,type LanguageDetection } from './language.js';
 import { providerCandidates,completeWithProvider,aiProviderFingerprint,type RuntimeAiProvider } from '../ai/runtime.js';
+import { translateEnglishToVietnamese } from '../translation/local.js';
 
 export type FactKind='event'|'person'|'place'|'time'|'number'|'cause'|'effect'|'quote'|'context'|'advice';
 export interface SourceFact{kind:FactKind;text:string;sourceExcerpt?:string;confidence:number;corroboratedBy:number;corroboratingSourceIndexes?:number[];support:'primary'|'corroborated'|'uncertain'}
@@ -24,7 +25,7 @@ CREATE INDEX IF NOT EXISTS idx_source_intelligence_url ON source_intelligence(ow
 
 type Row={id:string;owner_id:string;source_url:string;source_name?:string;original_title:string;body_hash:string;language_json:string;translation_status:SourceIntelligence['translationStatus'];vietnamese_title:string;vietnamese_brief:string;facts_json:string;uncertainties_json:string;warnings_json:string;authority_score:number;freshness_score:number;source_score:number;corroboration_count:number;provider:RuntimeAiProvider|'rules';ready_for_editorial:number;created_at:string;updated_at:string};
 const clean=(v:unknown,max=10000)=>String(v??'').replace(/\s+/g,' ').trim().slice(0,max);
-const FACT_ENGINE_CACHE_VERSION='phase7-professional-v3';
+const FACT_ENGINE_CACHE_VERSION='phase7-professional-v4-local-translate';
 const bodyHash=(title:string,body:string,ownerId?:string)=>createHash('sha256').update(FACT_ENGINE_CACHE_VERSION+'\n'+aiProviderFingerprint(ownerId)+'\n'+clean(title,1000)+'\n'+clean(body,30000)).digest('hex');
 function safeJson<T>(raw:string,fallback:T):T{try{return JSON.parse(raw) as T}catch{return fallback}}
 function repairFactKinds(facts:SourceFact[]){return facts.map((f,i)=>{if(i===0&&f.kind==='event')return f;if(f.kind==='number'&&!hasMeaningfulNumber(f.text))return{...f,kind:classifyLocalFact(f.text)};return f})}
@@ -78,6 +79,17 @@ export async function analyzeSourceIntelligence(input:AnalyzeSourceInput):Promis
   let language=detectLanguage(`${input.title}\n${input.body}`,input.languageHint),provider:SourceIntelligence['provider']='rules';let vietnameseTitle='',vietnameseBrief='',facts:SourceFact[]=[],uncertainties:string[]=[],warnings:string[]=[];
   try{const result=await aiAnalyze({...input,ownerId},language);if(result){const ai=result.data;provider=result.provider;if(language.code==='und'&&ai.detectedLanguage)language=detectLanguage('',String(ai.detectedLanguage));vietnameseTitle=clean(ai.vietnameseTitle,180);vietnameseBrief=clean(ai.vietnameseBrief,7000);facts=normalizeFacts(ai.facts);uncertainties=(ai.uncertainties||[]).map((x:any)=>clean(x,500)).filter(Boolean).slice(0,10);warnings=(ai.warnings||[]).map((x:any)=>clean(x,500)).filter(Boolean).slice(0,10)}}catch(e){warnings.push(`AI Fact Engine fallback: ${e instanceof Error?e.message:String(e)}`)}
   if(!vietnameseBrief&&language.isVietnamese){vietnameseTitle=clean(input.title,180);vietnameseBrief=compactVietnamese(input.body);facts=localFacts(input.body)}
+  if(!vietnameseBrief&&language.code==='en'){
+    try{
+      const translated=await translateEnglishToVietnamese({title:input.title,body:input.body});
+      if(translated){
+        vietnameseTitle=clean(translated.title,180);vietnameseBrief=compactVietnamese(translated.body);
+        facts=localFacts(translated.body).map(f=>({...f,confidence:Math.min(f.confidence,.68)}));
+        uncertainties.push('Bản Việt hóa dùng CTranslate2/OPUS-MT local; cần đối chiếu thuật ngữ và claim với nguồn tiếng Anh trước khi duyệt.');
+        warnings.push('Local Translation fallback: CTranslate2 INT8 + Helsinki-NLP opus-mt-en-vi.');
+      }
+    }catch(e){warnings.push(`Local Translation fallback unavailable: ${e instanceof Error?e.message:String(e)}`)}
+  }
   const translationStatus:SourceIntelligence['translationStatus']=language.isVietnamese?'not_needed':vietnameseBrief?'translated':'pending';if(translationStatus==='pending')warnings.push('Nguồn nước ngoài chưa được Việt hóa; chặn Editorial cho đến khi Fact Engine dịch được.');
   const authority=sourceAuthorityScore(input.sourceUrl,input.sourceName),freshness=freshnessScore(input.publishedAt),corroborationCount=(input.corroboration||[]).length,score=overallScore(authority,freshness,corroborationCount),now=new Date().toISOString(),ready=Boolean(vietnameseTitle&&vietnameseBrief&&translationStatus!=='pending');
   const out:SourceIntelligence={id:randomUUID(),ownerId,sourceUrl:input.sourceUrl,sourceName:input.sourceName,originalTitle:clean(input.title,180),bodyHash:hash,language,translationStatus,vietnameseTitle:vietnameseTitle||clean(input.title,180),vietnameseBrief,facts,uncertainties,warnings,authorityScore:authority,freshnessScore:freshness,sourceScore:score,corroborationCount,provider,readyForEditorial:ready,createdAt:now,updatedAt:now};

@@ -41,12 +41,11 @@ Rights-cleared third-party image discovery uses the public Openverse search serv
 
 Each discovered media item keeps its own creator, landing page and license metadata. Openverse discovery does not override the copyright or attribution requirements of an individual media item.
 
-## Optional RevidAPI integration
+## Personal Voice Clone
 
-RevidAPI is an optional external service integration used only when an operator supplies a server-side API key. It is not bundled open-source code and is not required for local Voice Studio, SRT timeline synthesis, or FFmpeg dubbing.
+Personal voice cloning uses the same self-hosted VieNeu-TTS v3 engine above. Reference samples remain on the private server and are isolated by account-derived identifiers.
 
-- Service base: https://revidapi.com
-- Confirmed workflow reference supplied by the operator: SRT-to-speech timeline with voice ID `9039`
-- Credentials: server-side environment only (`REVID_API_KEY`)
-
-Use of RevidAPI remains subject to that service's own terms, pricing, model licenses, and media-use rules.
+- Engine/model license: Apache License 2.0
+- Reference sample: 3–8 seconds
+- Use restriction in this application: the operator must confirm the sample is their own voice or a voice they are authorized to use
+- Storage: private Docker volume; reference samples are never exposed through `/output`

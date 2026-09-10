@@ -1,32 +1,14 @@
-import { VOICE_CATALOG, type VoiceId, type VoiceStyle } from './edge.js';
+import { VOICE_CATALOG, isVoiceId, type VoiceId, type VoiceStyle } from './edge.js';
 
 export type VoiceLanguage='vi'|'en'|'multilingual';
-export type VoiceRegion='standard'|'north'|'south'|'central'|'international';
+export type VoiceRegion='standard'|'north'|'south'|'central'|'international'|'personal';
 export type VoiceGender='male'|'female';
 export type VoiceCategory='viral'|'podcast'|'review'|'news'|'advertising'|'story'|'voiceover';
-export interface StudioVoice{
- id:string;name:string;provider:'local'|'revid';voiceId?:VoiceId;externalVoiceId?:number;
- language:VoiceLanguage;region:VoiceRegion;gender:VoiceGender;categories:VoiceCategory[];
- description:string;available:boolean;recommended?:boolean;
+export interface StudioVoice{ id:VoiceId;name:string;provider:'edge'|'vieneu'|'personal';voiceId:VoiceId;language:VoiceLanguage;region:VoiceRegion;gender:VoiceGender;categories:VoiceCategory[];description:string;available:boolean;recommended?:boolean;tier:string; }
+export function voiceStudioCatalog(personalConfigured=false):StudioVoice[]{
+ return VOICE_CATALOG.map(v=>({id:v.id,name:v.name,provider:v.provider,voiceId:v.id,language:v.languageCode as VoiceLanguage,region:v.region as VoiceRegion,gender:v.genderCode as VoiceGender,categories:[...v.categories] as VoiceCategory[],description:v.description,available:v.provider!=='personal'||personalConfigured,recommended:v.recommended,tier:v.tier}));
 }
-const localMeta:Record<VoiceId,Omit<StudioVoice,'id'|'name'|'provider'|'voiceId'|'available'>>={
- 'vi-male':{language:'vi',region:'standard',gender:'male',categories:['news','review','viral','voiceover'],description:'Giọng nam Việt rõ chữ; phù hợp bản tin, review và thuyết minh.',recommended:true},
- 'vi-female':{language:'vi',region:'standard',gender:'female',categories:['podcast','news','story','voiceover'],description:'Giọng nữ Việt tự nhiên; phù hợp podcast, kể chuyện và thuyết minh.',recommended:true},
- 'multi-andrew':{language:'multilingual',region:'international',gender:'male',categories:['podcast','review','voiceover'],description:'Giọng nam quốc tế đa ngôn ngữ; dùng tốt cho nội dung song ngữ.'},
- 'multi-brian':{language:'multilingual',region:'international',gender:'male',categories:['news','review','voiceover'],description:'Giọng nam quốc tế chắc, rõ; phù hợp review và thuyết minh.'},
- 'multi-ava':{language:'multilingual',region:'international',gender:'female',categories:['podcast','advertising','voiceover'],description:'Giọng nữ quốc tế mềm, phù hợp podcast và quảng bá.'},
- 'multi-emma':{language:'multilingual',region:'international',gender:'female',categories:['story','podcast','voiceover'],description:'Giọng nữ quốc tế tự nhiên, phù hợp kể chuyện.'},
-};export function voiceStudioCatalog():StudioVoice[]{
- const local=VOICE_CATALOG.map(v=>({id:v.id,name:v.name,provider:'local' as const,voiceId:v.id,available:true,...localMeta[v.id]}));
- const adam:StudioVoice={id:'revid-adam-9039',name:'Adam • Revid 9039',provider:'revid',externalVoiceId:9039,
-  language:'vi',region:'south',gender:'male',categories:['viral','review','voiceover'],
-  description:'Giọng Adam theo workflow RevidAPI đã cung cấp; dùng cho lồng tiếng/video ngắn khi API được cấu hình.',
-  available:Boolean(process.env.REVID_API_KEY?.trim())};
- return [...local,adam];
-}
-export function voiceStudioStatus(){return{enabled:true,version:'3.1',localVoices:VOICE_CATALOG.length,
- revid:{configured:Boolean(process.env.REVID_API_KEY?.trim()),voiceId:9039},
- modes:['text','srt','dub'],maxDubSeconds:300,maxSrtCues:80};}
+export function voiceStudioStatus(personalConfigured=false){const open=VOICE_CATALOG.filter(v=>v.provider==='vieneu').length,cloud=VOICE_CATALOG.filter(v=>v.provider==='edge').length;return{enabled:true,version:'3.3',openSourceVoices:open,cloudFallbackVoices:cloud,personalClone:{supported:process.env.VIENEU_TTS_ENABLED==='true',configured:personalConfigured,provider:'vieneu-v3-onnx'},modes:['text','srt','dub'],maxDubSeconds:300,maxSrtCues:80};}
 export interface SrtCue{index:number;time:string;startMs:number;endMs:number;durationMs:number;text:string;syllables:number;recommendedMin:number;recommendedMax:number;status:'ok'|'short'|'long'};
 function stampMs(v:string){const m=v.trim().match(/^(\d{1,2}):(\d{2}):(\d{2})[,.](\d{3})$/);if(!m)throw new Error('Timestamp SRT không hợp lệ: '+v);return((+m[1]*3600+ +m[2]*60+ +m[3])*1000)+ +m[4]}
 function rangeFor(ms:number){const s=ms/1000;if(s<2.5)return[5,8];if(s<4)return[8,13];if(s<7)return[13,18];if(s<12)return[18,25];return[25,36]}
@@ -43,6 +25,6 @@ export function analyzeSrtTimeline(raw:string){
  return{cues,total:cues.length,durationSeconds:Number((totalMs/1000).toFixed(2)),summary:{ok,long:long.length,short:short.length,score:Math.round(ok/Math.max(1,cues.length)*100)},
   warnings:[...(long.length?[`${long.length} cue quá dài so với timeline; nên rút gọn trước TTS.`]:[]),...(short.length?[`${short.length} cue ngắn hơn vùng tối ưu; có thể thêm nhịp nghỉ thay vì nhồi chữ.`]:[])]};
 }
-export function voiceChoiceAllowed(id:string){return voiceStudioCatalog().find(v=>v.id===id&&v.available)}
-export function localVoiceChoice(id:string){const v=voiceChoiceAllowed(id);return v?.provider==='local'&&v.voiceId?v.voiceId:undefined}
+export function voiceChoiceAllowed(id:string){return isVoiceId(id)}
+export function localVoiceChoice(id:string){return isVoiceId(id)?id:undefined}
 export type StudioVoiceStyle=VoiceStyle;

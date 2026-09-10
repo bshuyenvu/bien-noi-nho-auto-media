@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { mkdtemp,rm,stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { renderNewsVideo } from '../src/video/ffmpeg.js';
+import { mediaDurationSeconds } from '../src/video/duration.js';
+const exec=promisify(execFile),root=await mkdtemp(join(tmpdir(),'mixed-render-'));
+const image=join(root,'image.png'),video=join(root,'clip.mp4'),audio=join(root,'audio.mp3'),out=join(root,'out.mp4');
+await exec('ffmpeg',['-y','-f','lavfi','-i','color=c=blue:s=970x760:d=1','-frames:v','1',image]);
+await exec('ffmpeg',['-y','-f','lavfi','-i','testsrc2=s=970x760:r=30:d=1','-c:v','libx264','-pix_fmt','yuv420p',video]);
+await exec('ffmpeg',['-y','-f','lavfi','-i','sine=frequency=660:duration=3.2','-c:a','libmp3lame',audio]);
+const duration=await mediaDurationSeconds(audio);assert.ok(duration>3&&duration<3.5);
+await renderNewsVideo({audioPath:audio,outputPath:out,duration,headline:'Kiểm thử V3.3',template:'classic',motion:'off',tickerMode:'off',mediaItems:[{path:image,kind:'image',sourceCredit:'synthetic'},{path:video,kind:'video',sourceCredit:'synthetic'}],scenes:[{imageIndex:0,startRatio:0,endRatio:.5,transition:'soft-dip'},{imageIndex:1,startRatio:.5,endRatio:1,transition:'cut'}]});
+const rendered=await mediaDurationSeconds(out),size=(await stat(out)).size;assert.ok(Math.abs(rendered-duration)<.25,`duration mismatch ${rendered} vs ${duration}`);assert.ok(size>20_000,'render output too small');
+await rm(root,{recursive:true,force:true});
+console.log('Mixed image/video + audio-duration render smoke OK',JSON.stringify({duration:Number(rendered.toFixed(2)),bytes:size}));

@@ -109,7 +109,7 @@ export async function prepareHealthStudio(input:HealthStudioInput){
   return{
     ...prepared,
     stage:readyForDraft?'draft-ready':'blocked',
-    healthStudio:{version:'3.1',profile:'health',topic:topic||prepared.edited.headline,audience,topicMatch:Number(topicMatch.toFixed(3)),topicGate,translationGate,localTranslationUsed,translationReviewRequired:localTranslationUsed,healthSafety,readyForDraft,medicalReviewRequired:true,visualPolicy:'original-cards-or-rights-verified-media',sourceAccess,researchDiscovery},
+    healthStudio:{version:'3.3',profile:'health',topic:topic||prepared.edited.headline,audience,topicMatch:Number(topicMatch.toFixed(3)),topicGate,translationGate,localTranslationUsed,translationReviewRequired:localTranslationUsed,healthSafety,readyForDraft,medicalReviewRequired:true,visualPolicy:'original-cards-or-rights-verified-media',sourceAccess,researchDiscovery},
     openMedia,
     draftPayload,
   };

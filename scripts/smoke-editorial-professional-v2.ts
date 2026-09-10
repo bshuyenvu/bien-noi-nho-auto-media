@@ -30,9 +30,9 @@ assert.equal(editor.stripPublisherAttribution('Theo VnExpress, rau xanh cung c�
 assert.equal(editor.stripPublisherAttribution('Theo nguồn y khoa, triệu chứng có thể không rõ ràng.','VnExpress'),'triệu chứng có thể không rõ ràng.');
 
 const root=new URL('../',import.meta.url);
-const server=readFileSync(new URL('src/server.ts',root),'utf8'),app=readFileSync(new URL('public/app.html',root),'utf8'),review=readFileSync(new URL('public/review.js',root),'utf8'),producer=readFileSync(new URL('public/producer.js',root),'utf8'),ffmpeg=readFileSync(new URL('src/video/ffmpeg.ts',root),'utf8');
-assert.match(server,/app\.patch\('\/api\/drafts\/:id\/content'/);assert.match(server,/mediaProvenance:getDraftMediaProvenance/);
-assert.match(app,/\/api\/drafts\/'\+draftId\+'\/content/);assert.match(review,/BẢN BIÊN TẬP CHÍNH THỨC/);assert.match(review,/không phải nội dung phát/);
-assert.match(producer,/mediaProvenance:x\.media\?\.provenance/);assert.doesNotMatch(ffmpeg,/text='NGUỒN'/);assert.doesNotMatch(ffmpeg,/sourceFile/);assert.match(ffmpeg,/Ảnh: \$\{s\.sourceCredit\}/);
+const server=readFileSync(new URL('src/server.ts',root),'utf8'),app=readFileSync(new URL('public/index.html',root),'utf8'),client=readFileSync(new URL('public/health-studio.js',root),'utf8'),ffmpeg=readFileSync(new URL('src/video/ffmpeg.ts',root),'utf8');
+assert.match(server,/app\.patch\('\/api\/drafts\/:id\/content'/);assert.match(server,/mediaProvenance:getDraftMediaProvenance/);assert.match(server,/bindReviewRenderProfile/);
+assert.match(app,/KỊCH BẢN CANONICAL • READ ONLY/);assert.match(app,/DURABLE REVIEW/);assert.match(client,/state\.review=x/);assert.match(client,/\/api\/drafts\/\$\{encodeURIComponent\(d\.id\)\}\/render/);
+assert.doesNotMatch(ffmpeg,/text='NGUỒN'/);assert.doesNotMatch(ffmpeg,/sourceFile/);assert.match(ffmpeg,/sourceCredit/);assert.match(ffmpeg,/item\.kind==='video'\?'Video':'Ảnh'/);
 console.log('Editorial Professional V2 contract smoke OK',{providers:candidates.slice(0,2).map(x=>x.id),mediaCredits:media.map(provenance.mediaCredit)});
 rmSync(dir,{recursive:true,force:true});

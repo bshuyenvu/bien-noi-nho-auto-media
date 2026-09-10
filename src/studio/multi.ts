@@ -46,7 +46,7 @@ async function prepareOriginal(input:MultiStudioInput,profile:'life_tips'|'life_
   research:{sources:[],count:0},evidenceGate:{status:'pass',score:100,reasons:['Nội dung nguyên bản; không gắn nhãn là bằng chứng y khoa.'],supportedClaimCount:0,claimCount:0},
   intelligence:{sourceScore:100,authorityScore:100,warnings:[],facts:[],provider:edited.provider},edited:{...edited,estimatedSeconds:seconds(length),mode:edited.provider==='rules'?'local':'llm'},
   copyrightSafety:{mode:'strict',originality,externalMediaAutoUse:'rights-verified-only'},openMedia,
-  healthStudio:{version:'3.1',profile,topic,audience:input.audience||'general',topicMatch:1,topicGate:'pass',translationGate:'pass',localTranslationUsed:false,healthSafety:safety,readyForDraft,medicalReviewRequired:false,visualPolicy:'open-license-or-original'},
+  healthStudio:{version:'3.3',profile,topic,audience:input.audience||'general',topicMatch:1,topicGate:'pass',translationGate:'pass',localTranslationUsed:false,healthSafety:safety,readyForDraft,medicalReviewRequired:false,visualPolicy:'open-license-or-original'},
   draftPayload:readyForDraft?{title:edited.headline,body:edited.script,sourceName:'Multi-Content Studio • Original',format:'standard',mediaProvenance:openMedia.candidates.map(x=>({url:x.url,sourceName:x.sourceName,sourceUrl:x.sourceUrl,kind:x.kind,rights:x.rights,creator:x.creator,licenseUrl:x.licenseUrl,rightsVerified:x.rightsVerified}))}:undefined};
 }
 
@@ -59,7 +59,7 @@ async function prepareEventCommentary(input:MultiStudioInput){
   fallback:{title:primary.title,summary:primary.summary,sourceName:primary.name,language:'en',force:true},researchSources:rest});
  const openMedia=await searchOpenMedia(topic,6),readyForDraft=prepared.evidenceGate.status!=='block'&&prepared.copyrightSafety.originality.safe;
  return{...prepared,stage:readyForDraft?'draft-ready':'blocked',profile:'event_commentary',openMedia,
-  healthStudio:{version:'3.1',profile:'event_commentary',topic,audience:input.audience||'general',topicMatch:1,topicGate:'pass',translationGate:'pass',localTranslationUsed:false,healthSafety:{status:'pass',score:100,reasons:[],warnings:['Bình luận phải tách rõ dữ kiện đã xác minh và nhận định.']},readyForDraft,medicalReviewRequired:false,visualPolicy:'open-license-or-original'},
+  healthStudio:{version:'3.3',profile:'event_commentary',topic,audience:input.audience||'general',topicMatch:1,topicGate:'pass',translationGate:'pass',localTranslationUsed:false,healthSafety:{status:'pass',score:100,reasons:[],warnings:['Bình luận phải tách rõ dữ kiện đã xác minh và nhận định.']},readyForDraft,medicalReviewRequired:false,visualPolicy:'open-license-or-original'},
   draftPayload:readyForDraft?{title:prepared.edited.headline,body:prepared.edited.script,sourceUrl:prepared.article.sourceUrl,sourceName:primary.name,format:'latest',evidenceBundleId:prepared.evidenceBundleId,
    mediaProvenance:openMedia.candidates.map(x=>({url:x.url,sourceName:x.sourceName,sourceUrl:x.sourceUrl,kind:x.kind,rights:x.rights,creator:x.creator,licenseUrl:x.licenseUrl,rightsVerified:x.rightsVerified}))}:undefined};
 }

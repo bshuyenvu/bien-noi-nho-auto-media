@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Multi-Content Studio • Nội dung, giọng đọc và video AI</title>
-  <link rel="stylesheet" href="/health-studio.css?v=3.1.0">
+  <link rel="stylesheet" href="/health-studio.css?v=3.3.0">
 </head>
 <body>
 <div class="wrap">
   <header class="hero">
-    <div class="eyebrow">🎬 MULTI-CONTENT STUDIO V3.1</div>
+    <div class="eyebrow">🎬 MULTI-CONTENT STUDIO V3.3</div>
     <h1>Studio nội dung AI đa chủ đề, có kiểm chứng và an toàn bản quyền</h1>
     <p>Từ một chủ đề, Studio có thể nghiên cứu nguồn, viết kịch bản, chọn media có quyền sử dụng, chọn giọng đọc, tạo audio theo SRT và lồng tiếng video trước khi Review → Render.</p>
     <div class="hero-actions"><span id="runtimeBadge" class="badge muted">Đang kiểm tra hệ thống…</span></div>
@@ -34,7 +34,7 @@
       <input id="primaryUrl" type="url" placeholder="Tùy chọn: URL nguồn tham khảo chính">
       <div class="row three">
         <div><label>Đối tượng</label><select id="audience"><option value="general">Cộng đồng</option><option value="patient">Người bệnh / người nhà</option><option value="medical">Nhân viên y tế</option><option value="social">Mạng xã hội</option></select></div>
-        <div><label>Thời lượng</label><select id="length"><option value="45">45 giây</option><option value="60" selected>60 giây</option><option value="90">90 giây</option><option value="120">120 giây</option></select></div>
+        <div><label>Thời lượng kịch bản</label><select id="length"><option value="auto" selected>Tự động theo nội dung</option><option value="45">≈ 45 giây</option><option value="60">≈ 60 giây</option><option value="90">≈ 90 giây</option><option value="120">≈ 120 giây</option></select></div>
         <div><label>Phong cách</label><select id="format"><option value="standard">Giải thích chuẩn</option><option value="latest">Cập nhật mới</option></select></div>
       </div>
       <div class="notice">Nếu bỏ trống URL, Studio tự tìm nguồn phù hợp theo profile. Nguồn chỉ dùng cho bằng chứng/nghiên cứu; hệ thống không tự lấy ảnh/video từ nguồn để render trong Copyright Safe Mode.</div>
@@ -53,6 +53,12 @@
       <div class="policy-divider"></div>
       <div class="step">AN TOÀN MẶC ĐỊNH</div><h2 class="policy-title">Production policy</h2>
       <ul class="policy"><li>Autopilot công khai: <b>OFF</b></li><li>Media bên thứ ba: <b>BLOCK</b> nếu chưa xác minh quyền</li><li>Liều thuốc/chỉ dẫn điều trị: <b>Medical Review</b></li><li>Render không media: <b>Original visual cards</b></li></ul>
+
+      <details id="studioSettings" class="settings-panel"><summary>⚙ CẤU HÌNH AI & TỰ ĐỘNG THEO TÀI KHOẢN</summary>
+        <div class="settings-grid"><label>AI ưu tiên<select id="aiPreferred"><option value="gemini">Gemini</option><option value="openai">OpenAI-compatible</option></select></label><label>Gemini model<input id="geminiModel" placeholder="gemini-..."></label><label>Gemini API Key<input id="geminiKey" type="password" placeholder="Để trống = giữ key hiện tại"></label><label>OpenAI model<input id="openaiModel" placeholder="gpt-..."></label><label>OpenAI Base URL<input id="openaiBaseUrl" placeholder="https://api.openai.com/v1"></label><label>OpenAI API Key<input id="openaiKey" type="password" placeholder="Để trống = giữ key hiện tại"></label></div>
+        <div id="aiKeyState" class="status-line muted"></div><div class="actions"><button id="saveAiBtn" class="btn small">LƯU AI</button><button id="testAiBtn" class="btn ghost small">TEST AI</button></div>
+        <div class="policy-divider"></div><div class="toggle-grid"><label><input id="setAutoDuration" type="checkbox" checked disabled> Luôn bật: thời lượng video = audio thật</label><label><input id="setAutoScenes" type="checkbox"> Tự tạo scene</label><label><input id="setShotCraft" type="checkbox"> ShotCraft + chuyển cảnh</label><label><input id="setAutoVoice" type="checkbox"> Tự chọn giọng</label><label><input id="setVideoScenes" type="checkbox"> Cho video vào scene</label></div><button id="saveStudioSettingsBtn" class="btn small">LƯU TỰ ĐỘNG HÓA</button><div id="settingsStatus" class="status-line muted"></div>
+      </details>
       <details id="legacyAccess"><summary>API key legacy</summary><div class="api-row"><input id="apiKey" type="password" placeholder="Bearer API key"><button id="saveKey" class="btn small">LƯU</button></div></details>
     </aside>
   </main>
@@ -66,6 +72,8 @@
       <aside class="panel"><div class="meta-label">EVIDENCE & SAFETY</div><div id="evidenceSummary"></div><div class="meta-label space">NGUỒN ĐỐI CHIẾU</div><div id="sources"></div><div class="meta-label space">CẢNH BÁO</div><div id="warnings"></div></aside>
     </div>
     <div id="openMediaPanel" class="panel media-panel hidden"><div class="section-head media-head"><div><div class="step">MEDIA RIGHTS ENGINE</div><h2>Media giấy phép mở tự động</h2></div><span id="openMediaBadge" class="badge">OPENVERSE</span></div><p class="muted">Chỉ các ảnh có Public Domain / CC0 / CC BY / CC BY-SA và metadata quyền hợp lệ mới được đưa vào render. Có thể bỏ chọn từng ảnh.</p><div id="openMediaGrid" class="media-grid"></div><div id="openMediaStatus" class="status-line muted"></div></div>
+
+    <section id="uploadMediaPanel" class="panel media-panel hidden"><div class="section-head media-head"><div><div class="step">MEDIA UPLOAD</div><h2>Ảnh / video của bạn</h2></div><span class="badge">OWNED / LICENSED</span></div><p class="muted">Upload JPG/PNG/WebP hoặc MP4/WebM. Video có thể được Scene Director dùng trực tiếp trong montage.</p><input id="mediaUploadFile" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"><label class="rights-check"><input id="mediaUploadRights" type="checkbox"> Tôi sở hữu media hoặc có quyền sử dụng media này.</label><div class="actions"><button id="mediaUploadBtn" class="btn success">UPLOAD MEDIA</button><button id="refreshUploadsBtn" class="btn ghost">LÀM MỚI</button></div><div id="uploadedMediaList" class="upload-list"></div><div id="mediaUploadStatus" class="status-line muted"></div></section>
     <section id="voiceStudioPanel" class="panel voice-studio hidden">
       <div class="section-head voice-head"><div><div class="step">VOICE STUDIO</div><h2>Giọng đọc & lồng tiếng</h2></div><span id="voiceStudioBadge" class="badge">LOCAL TTS</span></div>
       <div class="voice-layout">
@@ -80,7 +88,8 @@ Nội dung câu đầu..."></textarea><div class="actions"><button id="analyzeSr
           <div class="voice-pane hidden" data-voice-pane="dub"><label>Direct URL video MP4/WebM đã có quyền sử dụng</label><input id="dubVideoUrl" type="url" placeholder="https://.../video.mp4"><label class="rights-check"><input id="dubRights" type="checkbox"> Tôi sở hữu video hoặc có giấy phép/quyền sử dụng để lồng tiếng.</label><button id="dubBtn" class="btn primary compact">LỒNG TIẾNG VIDEO</button><div id="dubStatus" class="status-line muted"></div><video id="dubVideo" class="render-video hidden" controls playsinline></video></div>
           <audio id="voicePreviewPlayer" class="voice-player hidden" controls></audio>
         </div>
-        <aside class="voice-library"><div class="meta-label">THƯ VIỆN GIỌNG</div><input id="voiceSearch" placeholder="Tìm giọng, ví dụ: adam, podcast, nam..."><div class="voice-filters"><select id="voiceLanguage"><option value="all">Tất cả ngôn ngữ</option><option value="vi">Tiếng Việt</option><option value="multilingual">Đa ngôn ngữ</option></select><select id="voiceRegion"><option value="all">Tất cả vùng</option><option value="standard">Việt Nam chuẩn</option><option value="south">Miền Nam</option><option value="international">Quốc tế</option></select><select id="voiceGender"><option value="all">Tất cả giới tính</option><option value="male">Nam</option><option value="female">Nữ</option></select><select id="voiceCategory"><option value="all">Tất cả thể loại</option><option value="viral">Viral</option><option value="podcast">Podcast</option><option value="review">Review</option><option value="news">Tin tức</option><option value="story">Đọc truyện</option><option value="voiceover">Thuyết minh</option></select></div><div id="voiceLibrary" class="voice-list"></div></aside>
+        <aside class="voice-library"><div class="meta-label">THƯ VIỆN GIỌNG MIỄN PHÍ</div><input id="voiceSearch" placeholder="Tìm giọng, ví dụ: podcast, miền Nam, tin tức...">
+          <details class="personal-voice"><summary>🎙 GIỌNG CỦA TÔI • CLONE NỘI BỘ</summary><p class="muted">Mẫu sạch 3–8 giây. File mẫu không được công khai và chỉ gắn với tài khoản đang đăng nhập.</p><input id="personalVoiceFile" type="file" accept="audio/wav,audio/mpeg,audio/mp4,audio/webm,audio/x-m4a"><label class="rights-check"><input id="personalVoiceRights" type="checkbox"> Đây là giọng của tôi hoặc tôi có quyền sử dụng mẫu giọng này.</label><div class="actions"><button id="enrollVoiceBtn" class="btn success">TẠO GIỌNG CỦA TÔI</button><button id="deleteVoiceBtn" class="btn ghost hidden">XÓA GIỌNG</button></div><div id="personalVoiceStatus" class="status-line muted">Đang kiểm tra trạng thái clone giọng…</div></details><div class="voice-filters"><select id="voiceLanguage"><option value="all">Tất cả ngôn ngữ</option><option value="vi">Tiếng Việt</option><option value="multilingual">Đa ngôn ngữ</option></select><select id="voiceRegion"><option value="all">Tất cả vùng</option><option value="standard">Việt Nam chuẩn</option><option value="north">Miền Bắc</option><option value="central">Miền Trung</option><option value="south">Miền Nam</option><option value="personal">Giọng của tôi</option><option value="international">Quốc tế</option></select><select id="voiceGender"><option value="all">Tất cả giới tính</option><option value="male">Nam</option><option value="female">Nữ</option></select><select id="voiceCategory"><option value="all">Tất cả thể loại</option><option value="viral">Viral</option><option value="podcast">Podcast</option><option value="review">Review</option><option value="news">Tin tức</option><option value="story">Đọc truyện</option><option value="voiceover">Thuyết minh</option></select></div><div id="voiceLibrary" class="voice-list"></div></aside>
       </div>
       <div id="voiceStudioStatus" class="status-line muted"></div>
     </section>
@@ -93,20 +102,20 @@ Nội dung câu đầu..."></textarea><div class="actions"><button id="analyzeSr
           <div class="meta-label">CLAIM → SOURCE MATRIX</div>
           <div id="evidenceState" class="status-card">Đang tải Evidence Bundle…</div>
           <div id="claimMatrix" class="claim-matrix"></div>
-          <label class="review-label" for="evidenceNote">Ghi chú xác minh của người duyệt</label>
-          <textarea id="evidenceNote" rows="3" maxlength="1000" placeholder="Ví dụ: Đã đối chiếu CDC/NHS và các nguồn y văn; các claim chính phù hợp nguồn."></textarea>
-          <div class="actions review-actions"><button id="evidenceAcceptBtn" class="btn success">XÁC NHẬN EVIDENCE</button><button id="evidenceFixBtn" class="btn ghost">ĐÁNH DẤU CẦN SỬA</button></div>
+          <label id="evidenceConfirmWrap" class="evidence-confirm"><input id="evidenceConfirm" type="checkbox"> <span>✓ Tôi đã kiểm tra nguồn và các claim chính.</span></label>
         </article>
         <aside class="panel">
           <div class="meta-label">DURABLE REVIEW</div>
           <div id="reviewState" class="status-card">Chưa duyệt bản.</div>
           <button id="approveBtn" class="btn primary compact" disabled>KHÓA & DUYỆT BẢN</button>
           <div class="meta-label space">RENDER AN TOÀN BẢN QUYỀN</div>
-          <div class="render-controls">
-            <label>Mẫu<select id="renderTemplate"><option value="clean" selected>Clean Health</option><option value="classic">Classic</option></select></label>
-            <label>Chuyển động<select id="renderMotion"><option value="light" selected>Nhẹ</option><option value="off">Tĩnh</option><option value="medium">Vừa</option></select></label>
-            <label>Ticker<select id="renderTicker"><option value="headline" selected>Headline</option><option value="off">Tắt</option></select></label>
-          </div>
+          <div class="production-mode"><label>Chế độ<select id="renderMode"><option value="auto">Tự động theo nội dung</option><option value="latest">TIN MỚI</option><option value="breaking">TIN NÓNG</option><option value="standard">TIN TỨC / GIẢI THÍCH</option></select></label></div>
+          <div class="theme-picker"><button type="button" class="theme-card active" data-theme="clean"><b>Ocean Clean</b><span>Sức khỏe / giải thích</span></button><button type="button" class="theme-card" data-theme="classic"><b>Newsroom Blue</b><span>Tin mới / tin tức</span></button><button type="button" class="theme-card" data-theme="breaking"><b>Breaking Red</b><span>Tin nóng / cảnh báo</span></button></div>
+          <select id="renderTemplate" class="hidden"><option value="clean" selected>Ocean Clean</option><option value="classic">Newsroom Blue</option><option value="breaking">Breaking Red</option></select>
+          <div class="render-controls"><label>Chuyển động<select id="renderMotion"><option value="light" selected>Nhẹ</option><option value="off">Tĩnh</option><option value="medium">Vừa</option><option value="strong">Mạnh</option></select></label><label>Ticker<select id="renderTicker"><option value="headline" selected>Headline</option><option value="custom">Tùy chỉnh</option><option value="off">Tắt</option></select></label><label>Tốc độ ticker<input id="tickerSpeed" type="range" min="35" max="180" value="85"></label></div>
+          <input id="tickerText" class="hidden" maxlength="500" placeholder="Nội dung ticker tùy chỉnh">
+          <div class="toggle-grid production-toggles"><label><input id="autoDuration" type="checkbox" checked disabled> Luôn bật: thời lượng = audio thật</label><label><input id="smartScenes" type="checkbox" checked> Scene tự động</label><label><input id="shotCraft" type="checkbox" checked> ShotCraft / chuyển cảnh</label><label><input id="includeVideoScenes" type="checkbox" checked> Dùng video upload trong scene</label></div>
+          <div class="actions"><button id="previewScenesBtn" class="btn ghost small">DUYỆT SCENE TỰ ĐỘNG</button><button id="clearScenePlanBtn" class="btn ghost small">DÙNG LẠI AUTO</button></div><div id="scenePreview" class="scene-preview muted">Scene sẽ được đồng bộ lại theo thời lượng audio thật khi render.</div>
           <div class="notice">Render chỉ dùng media đã được Rights Engine xác nhận hoặc visual card nguyên bản. Giọng đọc lấy từ Voice Studio và được khóa cùng Durable Review.</div>
           <button id="renderBtn" class="btn primary compact" disabled>🎬 RENDER VIDEO</button>
           <div id="renderStatus" class="status-line muted">Chờ hoàn tất Evidence Review và Durable Review.</div>
@@ -116,8 +125,8 @@ Nội dung câu đầu..."></textarea><div class="actions"><button id="analyzeSr
     </section>
   </section>
 
-  <footer>Multi-Content Studio V3.1 • Research • Rights-safe media • Voice Studio • Review → Render</footer>
+  <footer>Multi-Content Studio V3.3 • Open-source voices • Personal Voice Clone • Rights-safe • Review → Render</footer>
 </div>
-<script src="/health-studio.js?v=3.1.0"></script>
+<script src="/health-studio.js?v=3.3.0"></script>
 </body>
 </html>

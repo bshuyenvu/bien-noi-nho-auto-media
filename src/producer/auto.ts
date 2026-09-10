@@ -9,6 +9,7 @@ import { evaluateSourceEvidence } from '../editorial/evidence-gate.js';
 import { buildClaimSourceMatrix } from '../editorial/claim-source-matrix.js';
 import { createPreparedEvidenceBundle } from '../review/evidence-store.js';
 import { all } from '../storage/db.js';
+import { assertOriginalEditorial,copyrightSafeMode } from '../compliance/copyright.js';
 
 function effectiveOwnerId(ownerId?: string) {
   return ownerId || all<{ id: string }>("SELECT id FROM accounts WHERE role='admin' AND status='active' ORDER BY created_at LIMIT 1")[0]?.id || 'legacy-admin';
@@ -77,7 +78,9 @@ export async function prepareAutoNews(input: {
 
   const sourceName = [article.sourceName, ...research.sources.map((x) => x.name)].filter(Boolean).join(' • ').slice(0, 120);
   const edited = await editNews({ title: intelligence.vietnameseTitle, body: editorialBody, sourceName, length: input.length, ownerId, facts: intelligence.facts, sourceScore: intelligence.sourceScore, audience: input.audience, factProvider: intelligence.provider });
-  const studio = await analyzeMediaStudio({
+  const originality=assertOriginalEditorial(edited.headline,edited.script,[article.title,article.body,...research.sources.map(x=>`${x.title} ${x.summary}`)]);
+  const strictCopyright=copyrightSafeMode();
+  const studio = strictCopyright?{candidates:[],summary:{accepted:0,rejected:0,total:0}}:await analyzeMediaStudio({
     sourceUrl: article.sourceUrl,
     imageUrl: article.imageUrl,
     imageUrls: [...(article.imageUrls || []), ...research.imageUrls].slice(0, 19),
@@ -132,6 +135,7 @@ export async function prepareAutoNews(input: {
     scenes,
     shotCraft:{version:shotPlan.version,motionCharacter:shotPlan.motionCharacter,qa:shotPlan.qa},
     voice,
+    copyrightSafety:{mode:strictCopyright?'strict':'legacy',originality,externalMediaAutoUse:strictCopyright?'blocked':'allowed'},
     reviewRequired: true,
   };
 }

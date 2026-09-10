@@ -1,0 +1,3 @@
+import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';
+const [server,client,job]=await Promise.all(['src/server.ts','public/health-studio.js','src/tts/personal-job.ts'].map(x=>readFile(x,'utf8')));
+assert.match(server,/personal-voice\/enroll-status/);assert.match(server,/status\(202\)/);assert.match(client,/Gateway đang giới hạn tạm thời/);assert.match(client,/6\*60\*1000/);assert.match(job,/status:'queued'/);assert.match(job,/status:'processing'/);assert.match(job,/status:'ready'/);assert.match(job,/status:'failed'/);console.log('Async personal voice clone contract OK');

@@ -10,7 +10,7 @@
 <body>
 <div class="wrap">
   <header class="hero">
-    <div class="eyebrow">🎬 MULTI-CONTENT STUDIO V3.3.1</div>
+    <div class="eyebrow">🎬 MULTI-CONTENT STUDIO V3.3.2.1</div>
     <h1>Studio nội dung AI đa chủ đề, có kiểm chứng và an toàn bản quyền</h1>
     <p>Từ một chủ đề, Studio có thể nghiên cứu nguồn, viết kịch bản, chọn media có quyền sử dụng, chọn giọng đọc, tạo audio theo SRT và lồng tiếng video trước khi Review → Render.</p>
     <div class="hero-actions"><span id="runtimeBadge" class="badge muted">Đang kiểm tra hệ thống…</span></div>
@@ -125,8 +125,15 @@ Nội dung câu đầu..."></textarea><div class="actions"><button id="analyzeSr
     </section>
   </section>
 
-  <footer>Multi-Content Studio V3.3.1 • Open-source voices • Personal Voice Clone • Rights-safe • Review → Render</footer>
+  <section id="renderHistoryPanel" class="panel render-history-panel">
+    <div class="section-head history-head"><div><div class="step">LỊCH SỬ RENDER</div><h2>Xem lại video đã tạo</h2></div><button id="refreshRenderHistoryBtn" class="btn ghost small">LÀM MỚI</button></div>
+    <p class="muted">Hiển thị các render gần đây của đúng tài khoản đang đăng nhập. Có thể xem lại hoặc xóa các render đã hoàn tất/lỗi.</p>
+    <div id="renderHistoryStatus" class="status-line muted">Đang tải lịch sử render…</div>
+    <div id="renderHistoryList" class="render-history-list"></div>
+  </section>
+
+  <footer>Multi-Content Studio V3.3.2 • Open-source voices • Personal Voice Clone • Rights-safe • Review → Render</footer>
 </div>
-<script src="/health-studio.js?v=3.3.1"></script>
+<script src="/health-studio.js?v=3.3.2"></script>
 </body>
 </html>

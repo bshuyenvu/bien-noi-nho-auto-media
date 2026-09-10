@@ -42,7 +42,7 @@
     "smoke:publish": "tsx scripts/smoke-publish.ts",
     "smoke:youtube-oauth": "tsx scripts/smoke-youtube-oauth.ts",
     "smoke:v1-acceptance": "node scripts/v1-production-acceptance.mjs",
-    "smoke:ui": "node --check public/health-studio.js && node -e \"const fs=require('fs');const h=fs.readFileSync('public/index.html','utf8');if(!h.includes('MULTI-CONTENT STUDIO V3.3')||!h.includes('SRT → giọng')||!h.includes('Lồng tiếng video')||!h.includes('MEDIA RIGHTS ENGINE')||!h.includes('evidenceConfirm')||!h.includes('GIỌNG CỦA TÔI')||!h.includes('MEDIA UPLOAD')||!h.includes('TIN NÓNG')||!h.includes('CẤU HÌNH AI & TỰ ĐỘNG')||!h.includes('previewScenesBtn'))process.exit(1);console.log('Multi-Content Studio V3.3 UI contract OK')\"",
+    "smoke:ui": "node --check public/health-studio.js && node -e \"const fs=require('fs');const h=fs.readFileSync('public/index.html','utf8');if(!h.includes('MULTI-CONTENT STUDIO V3.3')||!h.includes('SRT → giọng')||!h.includes('Lồng tiếng video')||!h.includes('MEDIA RIGHTS ENGINE')||!h.includes('evidenceConfirm')||!h.includes('GIỌNG CỦA TÔI')||!h.includes('MEDIA UPLOAD')||!h.includes('TIN NÓNG')||!h.includes('CẤU HÌNH AI & TỰ ĐỘNG')||!h.includes('previewScenesBtn')||!h.includes('LỊCH SỬ RENDER'))process.exit(1);console.log('Multi-Content Studio V3.3 UI contract OK')\"",
     "tts:demo": "tsx src/cli-tts.ts",
     "video:demo": "tsx src/cli-video.ts",
     "smoke:editorial-intelligence": "tsx scripts/smoke-editorial-intelligence.ts",
@@ -58,7 +58,8 @@
     "smoke:multi-content": "tsx scripts/smoke-multi-content.ts",
     "smoke:voice-studio": "tsx scripts/smoke-voice-studio.ts",
     "smoke:studio-v33": "tsx scripts/smoke-studio-v33.ts",
-    "smoke:mixed-media-render": "tsx scripts/smoke-mixed-media-render.ts"
+    "smoke:mixed-media-render": "tsx scripts/smoke-mixed-media-render.ts",
+    "smoke:render-history": "tsx scripts/smoke-render-history.ts"
   },
   "dependencies": {
     "@clerk/express": "^2.1.66",

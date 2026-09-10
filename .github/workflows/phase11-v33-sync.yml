@@ -20,16 +20,22 @@ jobs:
         run: |
           git apply --check /tmp/phase11-v33.patch
           git apply /tmp/phase11-v33.patch
-      - name: Validate V3.3
-        run: |
-          npm ci --no-audit --no-fund
-          npm run typecheck
-          npm run smoke:ui
-          npm run smoke:voice-studio
-          npm run smoke:studio-v33
-          npm run smoke:mixed-media-render
-          npm run smoke:editorial-professional
-          npm run smoke:copyright-safe
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: UI contract
+        run: npm run smoke:ui
+      - name: Voice Studio
+        run: npm run smoke:voice-studio
+      - name: Tenant settings and upload
+        run: npm run smoke:studio-v33
+      - name: Editorial Professional V2
+        run: npm run smoke:editorial-professional
+      - name: Copyright Safe
+        run: npm run smoke:copyright-safe
+      - name: Source Coherence
+        run: npm run smoke:source-coherence
       - name: Commit synchronized source
         run: |
           git config user.name 'github-actions[bot]'

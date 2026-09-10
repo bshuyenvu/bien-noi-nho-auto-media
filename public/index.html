@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Multi-Content Studio • Nội dung, giọng đọc và video AI</title>
-  <link rel="stylesheet" href="/health-studio.css?v=3.4.0">
+  <link rel="stylesheet" href="/health-studio.css?v=3.4.1">
 </head>
 <body>
 <div class="wrap">
   <header class="hero">
-    <div class="eyebrow">🎬 MULTI-CONTENT STUDIO V3.4</div>
+    <div class="eyebrow">🎬 MULTI-CONTENT STUDIO V3.4.1</div>
     <h1>Studio nội dung AI đa chủ đề, có kiểm chứng và an toàn bản quyền</h1>
     <p>Từ một chủ đề, Studio có thể nghiên cứu nguồn, viết kịch bản, chọn media có quyền sử dụng, chọn giọng đọc, tạo audio theo SRT và lồng tiếng video trước khi Review → Render.</p>
     <div class="hero-actions"><span id="runtimeBadge" class="badge muted">Đang kiểm tra hệ thống…</span></div>
@@ -58,7 +58,7 @@
         <div class="account-copy"><h2 id="accountName">Đang tải tài khoản…</h2><div id="accountEmail" class="muted"></div><div class="account-badges"><span id="accountRole" class="badge">—</span><span id="accountPlan" class="badge">—</span></div></div>
       </div>
       <div id="accountUsage" class="account-usage muted"></div>
-      <div class="account-actions single"><button id="signOut" class="btn ghost hidden">ĐĂNG XUẤT</button></div>
+      <div class="account-actions"><button id="openAccountConfigBtn" class="btn ghost">⚙ QUẢN LÝ TÀI KHOẢN & CẤU HÌNH</button><button id="signOut" class="btn ghost hidden">ĐĂNG XUẤT</button></div>
       <div id="authStatus" class="status-line muted">Đang kiểm tra quyền truy cập…</div>
       <div class="policy-divider"></div>
       <div class="step">AN TOÀN MẶC ĐỊNH</div><h2 class="policy-title">Production policy</h2>
@@ -129,8 +129,8 @@ Nội dung câu đầu..."></textarea><div class="actions"><button id="analyzeSr
     </section>
   </section>
 
-  <section id="configPanel" class="panel config-panel">
-    <div class="section-head"><div><div class="step">CẤU HÌNH WORKSPACE</div><h2>Kênh, AI và tự động hóa</h2></div><span class="badge">THEO TÀI KHOẢN</span></div>
+  <section id="configPanel" class="panel config-panel workspace-drawer hidden" aria-hidden="true">
+    <div class="section-head"><div><div class="step">CẤU HÌNH WORKSPACE</div><h2>Kênh, AI và tự động hóa</h2></div><div class="actions"><span class="badge">THEO TÀI KHOẢN</span><button id="closeConfigBtn" class="btn ghost small">ĐÓNG</button></div></div>
     <div class="config-sections">
       <section class="config-block"><div class="meta-label">HỒ SƠ KÊNH</div><div class="settings-grid"><label>Tên kênh<input id="channelNameInput" maxlength="60" placeholder="Tên kênh hiển thị trên video"></label><label>Tagline<input id="channelTaglineInput" maxlength="120" placeholder="Thông điệp ngắn của kênh"></label></div><button id="saveChannelBtn" class="btn small">LƯU TÊN KÊNH</button><div id="channelStatus" class="status-line muted"></div></section>
       <section class="config-block"><div class="meta-label">AI PROVIDER</div><div class="settings-grid"><label>AI ưu tiên<select id="aiPreferred"><option value="gemini">Gemini</option><option value="openai">OpenAI-compatible</option></select></label><label>Gemini model<input id="geminiModel" placeholder="gemini-..."></label><label>Gemini API Key<input id="geminiKey" type="password" placeholder="Để trống = giữ key hiện tại"></label><label>OpenAI model<input id="openaiModel" placeholder="gpt-..."></label><label>OpenAI Base URL<input id="openaiBaseUrl" placeholder="https://api.openai.com/v1"></label><label>OpenAI API Key<input id="openaiKey" type="password" placeholder="Để trống = giữ key hiện tại"></label></div><div id="aiKeyState" class="status-line muted"></div><div class="actions"><button id="saveAiBtn" class="btn small">LƯU AI</button><button id="testAiBtn" class="btn ghost small">TEST AI</button></div></section>
@@ -146,8 +146,8 @@ Nội dung câu đầu..."></textarea><div class="actions"><button id="analyzeSr
     <div id="renderHistoryList" class="render-history-list"></div>
   </section>
 
-  <footer>Multi-Content Studio V3.4 • Open-source voices • Personal Voice Clone • Rights-safe • Review → Render</footer>
+  <footer>Multi-Content Studio V3.4.1 • Open-source voices • Personal Voice Clone • Rights-safe • Review → Render</footer>
 </div>
-<script src="/health-studio.js?v=3.4.0"></script>
+<script src="/health-studio.js?v=3.4.1"></script>
 </body>
 </html>

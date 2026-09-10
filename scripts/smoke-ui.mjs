@@ -6,7 +6,7 @@ const required=[
   'MULTI-CONTENT STUDIO V3.4','SRT → giọng','Lồng tiếng video',
   'MEDIA RIGHTS ENGINE','evidenceConfirm','GIỌNG CỦA TÔI','MEDIA UPLOAD',
   'TIN NÓNG','previewScenesBtn','LỊCH SỬ RENDER',
-  'data-task-target="configPanel"','channelNameInput','CẤU HÌNH WORKSPACE'
+  'data-task-target="configPanel"','channelNameInput','CẤU HÌNH WORKSPACE','openAccountConfigBtn','workspace-drawer hidden'
 ];
 const missing=required.filter(x=>!h.includes(x));
 if(missing.length){console.error('UI contract missing:',missing);process.exit(1)}
@@ -15,4 +15,4 @@ for(const hiddenId of ['uploadMediaPanel','voiceStudioPanel','reviewPanel']){
     console.error('Primary task is hidden:',hiddenId);process.exit(1)
   }
 }
-console.log('Multi-Content Studio V3.4 UI contract OK');
+console.log('Multi-Content Studio V3.4.1 UI contract OK');

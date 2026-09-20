@@ -27,7 +27,8 @@ await phase2.preparePipelineProject(ownerId, project.id, { skipExternal: true })
 const caps = phase3.generationCapabilities();
 assert.equal(caps.find((x) => x.id === 'local-original-scene-card')?.status, 'ready');
 assert.equal(caps.find((x) => x.id === 'ffmpeg-short-9x16')?.status, 'ready');
-assert.equal(caps.find((x) => x.id === 'ffmpeg-landscape-16x9')?.status, 'planned');
+assert.equal(caps.find((x) => x.id === 'ffmpeg-landscape-16x9')?.status, 'ready');
+assert.equal(caps.find((x) => x.id === 'podcast-audio-export')?.status, 'ready');
 
 const batch = phase3.enqueuePipelineGeneration({ ownerId, projectId: project.id });
 assert.equal(batch.primaryOutputId, 'short-9x16');
@@ -35,8 +36,14 @@ assert.equal(batch.status, 'queued');
 const short = batch.outputs.find((x) => x.outputId === 'short-9x16');
 assert.equal(short?.status, 'queued');
 assert.ok(short?.renderJobId);
-assert.equal(batch.outputs.find((x) => x.outputId === 'video-16x9')?.status, 'planned');
-assert.equal(batch.outputs.find((x) => x.outputId === 'podcast')?.status, 'planned');
+const landscape = batch.outputs.find((x) => x.outputId === 'video-16x9');
+const podcast = batch.outputs.find((x) => x.outputId === 'podcast');
+assert.equal(landscape?.status, 'queued');
+assert.equal(podcast?.status, 'queued');
+assert.ok(landscape?.renderJobId);
+assert.ok(podcast?.renderJobId);
+assert.equal(landscape?.worker, 'ffmpeg-landscape-16x9');
+assert.equal(podcast?.worker, 'tts-audio-export');
 
 const again = phase3.enqueuePipelineGeneration({ ownerId, projectId: project.id });
 assert.equal(again.id, batch.id, 'must not duplicate active generation batch');

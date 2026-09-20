@@ -7,6 +7,9 @@ export interface ShotCraftRenderManifestInput{
   template?:VideoTemplate;
   motion?:MotionLevel;
   scenes:VideoScene[];
+  aspectRatio?:'9:16'|'16:9';
+  width?:number;
+  height?:number;
 }
 
 export async function writeShotCraftRenderManifest(input:ShotCraftRenderManifestInput){
@@ -17,8 +20,8 @@ export async function writeShotCraftRenderManifest(input:ShotCraftRenderManifest
     generatedAt:new Date().toISOString(),
     videoFile:input.outputPath.split('/').pop()||input.outputPath,
     headline:input.headline,
-    aspectRatio:'9:16',
-    frame:{width:1080,height:1920,fps:30},
+    aspectRatio:input.aspectRatio||'9:16',
+    frame:{width:input.width||1080,height:input.height||1920,fps:30},
     template:input.template||'classic',
     motion,
     scenes:input.scenes.map((scene,index)=>({

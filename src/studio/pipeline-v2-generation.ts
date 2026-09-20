@@ -139,9 +139,16 @@ export function generationCapabilities(): MediaGenerationCapability[] {
     {
       id: 'ffmpeg-landscape-16x9',
       kind: 'compose',
-      status: 'planned',
+      status: 'ready',
       mode: 'ffmpeg-landscape',
-      notes: 'Chưa bật cho đến khi renderer 1920x1080 có acceptance smoke test riêng.',
+      notes: 'Renderer 1920x1080 dùng persistent render queue và ShotCraft scene plan.',
+    },
+    {
+      id: 'podcast-audio-export',
+      kind: 'export',
+      status: 'ready',
+      mode: 'tts-audio',
+      notes: 'Xuất MP3 trực tiếp từ TTS worker, giữ SRT song song cho downstream.',
     },
     {
       id: 'comic-export',
@@ -234,63 +241,94 @@ export function enqueuePipelineGeneration(input: {
   if (!runtime) throw new Error('Project chưa có runtime; hãy chạy prepare trước.');
   const handoff = buildGenerationHandoff(input.ownerId, input.projectId);
 
-  const vertical = handoff.outputs.find((output) => output.id === (input.outputId || 'short-9x16'));
-  if (!vertical) throw new Error('Project không có output Short 9:16 để chạy renderer hiện tại.');
-  if (vertical.aspectRatio !== '9:16' || (vertical.kind !== 'short' && vertical.kind !== 'video')) {
-    throw new Error('Phase 3A hiện chỉ execution Short/Video 9:16; output khác vẫn được giữ ở trạng thái planned.');
+  const supported = handoff.outputs.filter((output) =>
+    output.kind === 'podcast' ||
+    (output.kind === 'short' && output.aspectRatio === '9:16') ||
+    (output.kind === 'video' && (output.aspectRatio === '9:16' || output.aspectRatio === '16:9'))
+  );
+  const selected = input.outputId
+    ? supported.filter((output) => output.id === input.outputId)
+    : supported;
+  if (!selected.length) {
+    throw new Error(input.outputId
+      ? 'Output chưa có worker execution ở Phase 3B.'
+      : 'Project chưa có output 9:16, 16:9 hoặc podcast để chạy worker Phase 3B.');
   }
 
+  const selectedIds = new Set(selected.map((output) => output.id));
   const duplicate = listGenerationBatches(input.ownerId, input.projectId)
     .find((batch) => batch.outputs.some((output) =>
-      output.outputId === vertical.id &&
+      selectedIds.has(output.outputId) &&
       ['queued', 'rendering'].includes(output.status),
     ));
   if (duplicate) return duplicate;
 
   const voice = chooseVoice(handoff.voicePlan.voice);
   const voiceStyle = chooseStyle(handoff.voicePlan.style);
-  const renderJob = enqueueRender({
-    draftId: project.id,
-    ownerId: input.ownerId,
-    text: project.script,
-    headline: project.topic,
-    source: project.seriesName,
-    autoCollectImages: false,
-    smartScenes: true,
-    shotCraft: true,
-    voice,
-    voiceStyle,
-    template: 'classic',
-    motion: 'light',
-    tickerMode: 'off',
-    channelName: project.seriesName || 'Content Studio',
-    mediaProvenance: [],
-    localMedia: [],
-  });
+  const jobs = new Map<string, ReturnType<typeof enqueueRender>>();
 
+  for (const output of selected) {
+    const renderMode =
+      output.kind === 'podcast'
+        ? 'audio'
+        : output.aspectRatio === '16:9'
+          ? 'landscape'
+          : 'vertical';
+    const job = enqueueRender({
+      draftId: project.id,
+      ownerId: input.ownerId,
+      text: project.script,
+      headline: project.topic,
+      source: project.seriesName,
+      autoCollectImages: false,
+      smartScenes: true,
+      shotCraft: true,
+      voice,
+      voiceStyle,
+      template: 'classic',
+      motion: 'light',
+      tickerMode: 'off',
+      channelName: project.seriesName || 'Content Studio',
+      mediaProvenance: [],
+      localMedia: [],
+      renderMode,
+    });
+    jobs.set(output.id, job);
+  }
+
+  const primary =
+    selected.find((output) => output.id === 'short-9x16') ||
+    selected.find((output) => output.id === 'video-16x9') ||
+    selected[0];
   const now = new Date().toISOString();
-  const outputs: PipelineGenerationOutput[] = handoff.outputs.map((output) => ({
-    outputId: output.id,
-    kind: output.kind,
-    aspectRatio: output.aspectRatio,
-    status: output.id === vertical.id ? 'queued' : 'planned',
-    worker:
-      output.id === vertical.id
-        ? 'ffmpeg-short-9x16'
-        : output.kind === 'podcast'
-          ? 'tts-audio-export-planned'
-          : output.kind === 'comic' || output.kind === 'thumbnail'
-            ? 'image-sequence-planned'
-            : 'ffmpeg-landscape-planned',
-    renderJobId: output.id === vertical.id ? renderJob.id : undefined,
-  }));
+  const outputs: PipelineGenerationOutput[] = handoff.outputs.map((output) => {
+    const job = jobs.get(output.id);
+    const worker =
+      output.kind === 'podcast'
+        ? 'tts-audio-export'
+        : output.aspectRatio === '16:9' && output.kind === 'video'
+          ? 'ffmpeg-landscape-16x9'
+          : output.aspectRatio === '9:16' && (output.kind === 'short' || output.kind === 'video')
+            ? 'ffmpeg-short-9x16'
+            : output.kind === 'comic' || output.kind === 'thumbnail'
+              ? 'image-sequence-planned'
+              : 'planned';
+    return {
+      outputId: output.id,
+      kind: output.kind,
+      aspectRatio: output.aspectRatio,
+      status: job ? 'queued' : 'planned',
+      worker,
+      renderJobId: job?.id,
+    };
+  });
 
   const batch: PipelineGenerationBatch = {
     id: randomUUID(),
     projectId: project.id,
     ownerId: input.ownerId,
     status: 'queued',
-    primaryOutputId: vertical.id,
+    primaryOutputId: primary.id,
     outputs,
     createdAt: now,
     updatedAt: now,

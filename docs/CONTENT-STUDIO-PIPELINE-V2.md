@@ -321,3 +321,112 @@ Research/Medical Review vẫn phải mở Generation Gate trước khi tạo b�
 ### Acceptance
 
 Comic/cover được render thật trong Docker, kiểm tra file PNG và manifest có kích thước thực. Remote AI image/video provider vẫn chưa được tự động kích hoạt nếu chưa có provenance contract.
+
+
+## Phase 4A — AI Media Provider Router
+
+Phase 4A chuyển media generation từ một bước chung thành **job cấp scene** có provider, retry và provenance riêng.
+
+### Provider capability
+
+- `local-original-card`: luôn READY, tạo keyframe PNG nguyên bản trên server.
+- `remote-image-webhook`: chỉ READY khi có endpoint hợp lệ và `CONTENT_STUDIO_REMOTE_MEDIA_ENABLED=true`.
+- `remote-video-webhook`: tương tự; yêu cầu scene đã có keyframe image READY.
+
+Việc chỉ cấu hình endpoint **không tự bật execution**.
+
+### Scene media job
+
+Mỗi job lưu:
+
+- project / owner / scene;
+- image hoặc video;
+- provider + model;
+- prompt + negative prompt;
+- continuity key;
+- input keyframe;
+- seed;
+- output path / remote asset URL;
+- cost theo micro-USD;
+- attempts / retry;
+- provenance JSON.
+
+Job chạy độc lập nên một scene lỗi có thể retry mà không render lại toàn bộ tập.
+
+### Remote provider contract
+
+Request JSON:
+
+```json
+{
+  "version": "content-studio-media-v1",
+  "jobId": "...",
+  "projectId": "...",
+  "sceneIndex": 0,
+  "kind": "image",
+  "model": "...",
+  "prompt": "...",
+  "negativePrompt": "...",
+  "continuityKey": "...",
+  "inputArtifactPath": null,
+  "inputArtifactData": null
+}
+```
+
+Video request có `inputArtifactData` là data URL của keyframe, giới hạn 8 MB.
+
+Response tối thiểu:
+
+```json
+{
+  "assetUrl": "https://...",
+  "model": "provider-model",
+  "seed": "optional",
+  "costUsd": 0.01,
+  "provenance": {}
+}
+```
+
+Có thể trả `costMicrousd` thay cho `costUsd`.
+
+### API
+
+- `GET /api/content-studio-v2/media-providers`
+- `GET /api/content-studio-v2/projects/:id/scene-media-jobs`
+- `POST /api/content-studio-v2/projects/:id/scene-media-jobs`
+- `GET /api/content-studio-v2/scene-media-jobs/:jobId`
+- `POST /api/content-studio-v2/scene-media-jobs/:jobId/run`
+- `POST /api/content-studio-v2/scene-media-jobs/:jobId/retry`
+- `POST /api/content-studio-v2/projects/:id/scene-media-jobs/run`
+
+### Environment
+
+```
+CONTENT_STUDIO_REMOTE_MEDIA_ENABLED=false
+CONTENT_STUDIO_IMAGE_WEBHOOK_URL=
+CONTENT_STUDIO_IMAGE_WEBHOOK_TOKEN=
+CONTENT_STUDIO_IMAGE_MODEL=
+CONTENT_STUDIO_VIDEO_WEBHOOK_URL=
+CONTENT_STUDIO_VIDEO_WEBHOOK_TOKEN=
+CONTENT_STUDIO_VIDEO_MODEL=
+CONTENT_STUDIO_REMOTE_MEDIA_TIMEOUT_MS=120000
+```
+
+Endpoint remote phải dùng HTTPS, ngoại trừ localhost runtime.
+
+### Safety / provenance
+
+- Vẫn bắt buộc Generation Gate trước khi tạo media job.
+- Local fallback được ghi `rights=generated`.
+- Remote result được tải về local trước khi đánh dấu READY.
+- Mỗi output scene được ghi vào Artifact Registry.
+- Prompt/model/seed/cost/continuity được giữ trong provenance.
+- Copyright Review + Human Final Review vẫn khóa trước publish.
+
+### Verify
+
+```bash
+npm run typecheck
+npm run build
+npm run smoke:content-studio-v2-phase4
+```

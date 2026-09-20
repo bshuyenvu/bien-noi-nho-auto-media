@@ -85,7 +85,7 @@ export interface ContentStudioArtifact {
   rights:'generated';generator:string;metadata?:Record<string,unknown>;createdAt:string;
 }
 type ArtifactRow={id:string;project_id:string;owner_id:string;output_id:string;kind:string;path:string;rights:'generated';generator:string;metadata_json?:string;created_at:string};
-function recordStudioArtifact(input:{projectId:string;ownerId:string;outputId:string;kind:string;path:string;generator:string;metadata?:Record<string,unknown>}){
+export function recordStudioArtifact(input:{projectId:string;ownerId:string;outputId:string;kind:string;path:string;generator:string;metadata?:Record<string,unknown>}){
   const now=new Date().toISOString(),id=randomUUID();
   run('INSERT OR IGNORE INTO content_studio_artifacts(id,project_id,owner_id,output_id,kind,path,rights,generator,metadata_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',
     id,input.projectId,input.ownerId,input.outputId,input.kind,input.path,'generated',input.generator,input.metadata?JSON.stringify(input.metadata):null,now);

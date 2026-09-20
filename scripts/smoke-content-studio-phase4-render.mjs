@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import { rm,stat } from 'node:fs/promises';
+const dbPath=`/tmp/vietnewsflow-content-studio-v2-phase4-render-${process.pid}.sqlite`;process.env.DB_PATH=dbPath;process.env.RENDER_QUEUE_PAUSED='true';
+const core=await import('../dist/studio/pipeline-v2.js');
+const rt=await import('../dist/studio/pipeline-v2-runtime.js');
+const media=await import('../dist/studio/pipeline-v2-media-router.js');
+const generation=await import('../dist/studio/pipeline-v2-generation.js');
+const {db}=await import('../dist/storage/db.js');
+const ownerId='phase4-render-smoke';
+const project=core.createPipelineProject({ownerId,templateId:'podcast-story',topic:'Một câu chuyện về lắng nghe',seriesName:'Chuyện đời thường',episode:4,script:'Buổi chiều, hai người trong gia đình ngồi lại. Họ chậm rãi lắng nghe nhau. Cuộc trò chuyện giúp cả hai hiểu rõ điều đang khiến người kia lo lắng.',outputIds:['short-9x16']});
+await rt.preparePipelineProject(ownerId,project.id,{skipExternal:true});
+const jobs=media.createSceneMediaJobs({ownerId,projectId:project.id,kind:'image',providerId:'local-original-card',sceneIndices:[0]});assert.equal(jobs.length,1);
+const ready=await media.runSceneMediaJob(ownerId,jobs[0].id);assert.equal(ready.status,'ready');assert.ok(ready.outputPath);assert.ok((await stat(ready.outputPath)).size>3000);assert.equal(ready.provenance?.rights,'generated');
+const artifacts=generation.listStudioArtifacts(ownerId,project.id);assert.ok(artifacts.some(x=>x.outputId===`scene-${ready.sceneIndex}-image`&&x.path===ready.outputPath));
+console.log('Content Studio Phase 4 local keyframe + provenance Docker smoke OK',JSON.stringify({jobId:ready.id,sceneIndex:ready.sceneIndex,provider:ready.providerId,output:ready.outputPath,artifacts:artifacts.length}));
+db.close();for(const suffix of['','-shm','-wal'])await rm(`${dbPath}${suffix}`,{force:true});

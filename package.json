@@ -61,7 +61,8 @@
     "smoke:mixed-media-render": "tsx scripts/smoke-mixed-media-render.ts",
     "smoke:render-history": "tsx scripts/smoke-render-history.ts",
     "smoke:content-studio-v2": "tsx scripts/smoke-content-studio-v2.ts",
-    "smoke:content-studio-v2-phase2": "tsx scripts/smoke-content-studio-v2-phase2.ts"
+    "smoke:content-studio-v2-phase2": "tsx scripts/smoke-content-studio-v2-phase2.ts",
+    "smoke:content-studio-v2-phase3": "tsx scripts/smoke-content-studio-v2-phase3.ts"
   },
   "dependencies": {
     "@clerk/express": "^2.1.66",

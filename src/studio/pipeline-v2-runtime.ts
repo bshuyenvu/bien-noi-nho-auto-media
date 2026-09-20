@@ -630,6 +630,52 @@ export function setPipelineMedicalReview(input: {
   return getPipelineRuntime(input.ownerId, input.projectId)!;
 }
 
+export function setPipelineReleaseReview(input:{
+  ownerId:string;
+  projectId:string;
+  gate:'copyright'|'final';
+  status:'accepted'|'needs_fix';
+  actor:string;
+  note?:string;
+}) {
+  const project=getPipelineProject(input.ownerId,input.projectId);
+  if(!project)throw new Error('Content Studio project not found');
+  const runtime=getPipelineRuntime(input.ownerId,input.projectId);
+  if(!runtime)throw new Error('Project chưa chạy prepare runtime');
+  if(!runtime.generationAllowed)throw new Error('Generation Gate chưa mở; chưa thể duyệt release.');
+
+  const note=clean(input.note,1200);
+  if(input.status==='needs_fix'&&note.length<5)throw new Error('needs_fix cần ghi chú cụ thể.');
+
+  let artifactCount=0;
+  try{
+    const row=all<{n:number}>('SELECT COUNT(*) AS n FROM content_studio_artifacts WHERE owner_id=? AND project_id=?',input.ownerId,input.projectId)[0];
+    artifactCount=Number(row?.n||0);
+  }catch{}
+  if(input.status==='accepted'&&artifactCount<1)throw new Error('Chưa có artifact để thực hiện Copyright/Final Review.');
+
+  if(input.gate==='final'&&input.status==='accepted'&&runtime.reviews.copyright!=='accepted'){
+    throw new Error('Copyright Review chưa ACCEPTED; chưa thể xác nhận Final Review.');
+  }
+
+  const now=new Date().toISOString(),column=input.gate==='copyright'?'copyright_review_status':'final_review_status';
+  const nextStage=input.status==='accepted'
+    ? (input.gate==='copyright'?'final-review':'release-ready')
+    : (input.gate==='copyright'?'copyright-fix':'final-fix');
+  run(`UPDATE content_studio_project_runtime SET ${column}=?,current_stage=?,updated_at=? WHERE project_id=? AND owner_id=?`,
+    input.status,nextStage,now,input.projectId,input.ownerId);
+  run(
+    'INSERT INTO content_studio_project_review_events(id,project_id,owner_id,gate,status,actor,note,created_at) VALUES(?,?,?,?,?,?,?,?)',
+    randomUUID(),input.projectId,input.ownerId,input.gate,input.status,clean(input.actor,240),note||null,now
+  );
+  run(
+    'UPDATE content_studio_projects SET status=?,updated_at=? WHERE id=? AND owner_id=?',
+    input.status==='accepted'?(input.gate==='final'?'review_accepted':'review_required'):'review_required',
+    now,input.projectId,input.ownerId
+  );
+  return getPipelineRuntime(input.ownerId,input.projectId)!;
+}
+
 export function buildGenerationHandoff(ownerId: string, projectId: string): GenerationHandoff {
   const project = getPipelineProject(ownerId, projectId);
   const runtime = getPipelineRuntime(ownerId, projectId);

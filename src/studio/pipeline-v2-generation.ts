@@ -4,6 +4,7 @@ import { enqueueRender, renderJobs } from '../video/job.js';
 import { isVoiceId, isVoiceStyle, type VoiceId, type VoiceStyle } from '../tts/edge.js';
 import { buildGenerationHandoff, getPipelineRuntime } from './pipeline-v2-runtime.js';
 import { getPipelineProject } from './pipeline-v2.js';
+import { exportComicPackage,exportThumbnail } from './pipeline-v2-static-export.js';
 
 export type MediaGenerationCapabilityStatus = 'ready' | 'configured' | 'planned' | 'disabled';
 
@@ -24,6 +25,7 @@ export interface PipelineGenerationOutput {
   renderJobId?: string;
   outputPath?: string;
   error?: string;
+  assets?: string[];
 }
 
 export interface PipelineGenerationBatch {
@@ -61,7 +63,39 @@ CREATE TABLE IF NOT EXISTS content_studio_generation_batches (
 );
 CREATE INDEX IF NOT EXISTS idx_content_studio_generation_project
 ON content_studio_generation_batches(owner_id, project_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS content_studio_artifacts (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  owner_id TEXT NOT NULL,
+  output_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  path TEXT NOT NULL,
+  rights TEXT NOT NULL,
+  generator TEXT NOT NULL,
+  metadata_json TEXT,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id,owner_id,output_id,path)
+);
+CREATE INDEX IF NOT EXISTS idx_content_studio_artifacts_owner_project
+ON content_studio_artifacts(owner_id,project_id,created_at DESC);
 `);
+
+export interface ContentStudioArtifact {
+  id:string;projectId:string;ownerId:string;outputId:string;kind:string;path:string;
+  rights:'generated';generator:string;metadata?:Record<string,unknown>;createdAt:string;
+}
+type ArtifactRow={id:string;project_id:string;owner_id:string;output_id:string;kind:string;path:string;rights:'generated';generator:string;metadata_json?:string;created_at:string};
+function recordStudioArtifact(input:{projectId:string;ownerId:string;outputId:string;kind:string;path:string;generator:string;metadata?:Record<string,unknown>}){
+  const now=new Date().toISOString(),id=randomUUID();
+  run('INSERT OR IGNORE INTO content_studio_artifacts(id,project_id,owner_id,output_id,kind,path,rights,generator,metadata_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',
+    id,input.projectId,input.ownerId,input.outputId,input.kind,input.path,'generated',input.generator,input.metadata?JSON.stringify(input.metadata):null,now);
+}
+export function listStudioArtifacts(ownerId:string,projectId:string):ContentStudioArtifact[]{
+  return all<ArtifactRow>('SELECT * FROM content_studio_artifacts WHERE owner_id=? AND project_id=? ORDER BY created_at DESC',ownerId,projectId).map(r=>({
+    id:r.id,projectId:r.project_id,ownerId:r.owner_id,outputId:r.output_id,kind:r.kind,path:r.path,rights:r.rights,generator:r.generator,
+    metadata:r.metadata_json?JSON.parse(r.metadata_json):undefined,createdAt:r.created_at
+  }));
+}
 
 function mapBatch(row: BatchRow): PipelineGenerationBatch {
   return {
@@ -110,7 +144,7 @@ export function generationCapabilities(): MediaGenerationCapability[] {
       status: imageWebhook ? 'configured' : 'planned',
       mode: 'webhook-adapter',
       notes: imageWebhook
-        ? 'Adapter đã có endpoint cấu hình; worker gọi provider sẽ được bật ở Phase 3B.'
+        ? 'Adapter đã có endpoint cấu hình; remote execution vẫn khóa cho đến khi có provenance contract.'
         : 'Chưa cấu hình CONTENT_STUDIO_IMAGE_WEBHOOK_URL.',
     },
     {
@@ -153,9 +187,16 @@ export function generationCapabilities(): MediaGenerationCapability[] {
     {
       id: 'comic-export',
       kind: 'export',
-      status: 'planned',
-      mode: 'image-sequence',
-      notes: 'Chưa bật execution; manifest vẫn được giữ trong generation handoff.',
+      status: 'ready',
+      mode: 'local-png-sequence',
+      notes: 'Xuất comic panels 1080x1080 PNG + manifest bằng renderer deterministic rights-safe.',
+    },
+    {
+      id: 'thumbnail-export',
+      kind: 'export',
+      status: 'ready',
+      mode: 'local-png',
+      notes: 'Xuất cover 1280x720 PNG nguyên bản bằng renderer deterministic rights-safe.',
     },
   ];
 }
@@ -198,6 +239,9 @@ function syncBatch(batch: PipelineGenerationBatch) {
       outputPath: job.output || output.outputPath,
       error: job.error || undefined,
     };
+    if (next.status==='ready'&&next.outputPath){
+      recordStudioArtifact({projectId:batch.projectId,ownerId:batch.ownerId,outputId:output.outputId,kind:output.kind,path:next.outputPath,generator:`render-job:${output.worker}`,metadata:{renderJobId:output.renderJobId,aspectRatio:output.aspectRatio}});
+    }
     if (
       next.status !== output.status ||
       next.outputPath !== output.outputPath ||
@@ -230,11 +274,11 @@ function chooseStyle(value: string): VoiceStyle {
   return isVoiceStyle(value) ? value : 'podcast';
 }
 
-export function enqueuePipelineGeneration(input: {
+export async function enqueuePipelineGeneration(input: {
   ownerId: string;
   projectId: string;
   outputId?: string;
-}): PipelineGenerationBatch {
+}): Promise<PipelineGenerationBatch> {
   const project = getPipelineProject(input.ownerId, input.projectId);
   if (!project) throw new Error('Content Studio project not found');
   const runtime = getPipelineRuntime(input.ownerId, input.projectId);
@@ -243,104 +287,63 @@ export function enqueuePipelineGeneration(input: {
 
   const supported = handoff.outputs.filter((output) =>
     output.kind === 'podcast' ||
+    output.kind === 'comic' ||
+    output.kind === 'thumbnail' ||
     (output.kind === 'short' && output.aspectRatio === '9:16') ||
     (output.kind === 'video' && (output.aspectRatio === '9:16' || output.aspectRatio === '16:9'))
   );
-  const selected = input.outputId
-    ? supported.filter((output) => output.id === input.outputId)
-    : supported;
-  if (!selected.length) {
-    throw new Error(input.outputId
-      ? 'Output chưa có worker execution ở Phase 3B.'
-      : 'Project chưa có output 9:16, 16:9 hoặc podcast để chạy worker Phase 3B.');
-  }
+  const selected = input.outputId ? supported.filter((output) => output.id === input.outputId) : supported;
+  if (!selected.length) throw new Error(input.outputId?'Output chưa có worker execution ở Phase 3C.':'Project chưa có output được hỗ trợ.');
 
   const selectedIds = new Set(selected.map((output) => output.id));
-  const duplicate = listGenerationBatches(input.ownerId, input.projectId)
-    .find((batch) => batch.outputs.some((output) =>
-      selectedIds.has(output.outputId) &&
-      ['queued', 'rendering'].includes(output.status),
-    ));
+  const duplicate = listGenerationBatches(input.ownerId, input.projectId).find((batch) =>
+    batch.outputs.some((output) => selectedIds.has(output.outputId) && ['queued','rendering'].includes(output.status))
+  );
   if (duplicate) return duplicate;
 
-  const voice = chooseVoice(handoff.voicePlan.voice);
-  const voiceStyle = chooseStyle(handoff.voicePlan.style);
-  const jobs = new Map<string, ReturnType<typeof enqueueRender>>();
-
-  for (const output of selected) {
-    const renderMode =
-      output.kind === 'podcast'
-        ? 'audio'
-        : output.aspectRatio === '16:9'
-          ? 'landscape'
-          : 'vertical';
-    const job = enqueueRender({
-      draftId: project.id,
-      ownerId: input.ownerId,
-      text: project.script,
-      headline: project.topic,
-      source: project.seriesName,
-      autoCollectImages: false,
-      smartScenes: true,
-      shotCraft: true,
-      voice,
-      voiceStyle,
-      template: 'classic',
-      motion: 'light',
-      tickerMode: 'off',
-      channelName: project.seriesName || 'Content Studio',
-      mediaProvenance: [],
-      localMedia: [],
-      renderMode,
+  const batchId=randomUUID();
+  const voice=chooseVoice(handoff.voicePlan.voice),voiceStyle=chooseStyle(handoff.voicePlan.style);
+  const jobs=new Map<string,ReturnType<typeof enqueueRender>>();
+  for(const output of selected.filter(x=>x.kind!=='comic'&&x.kind!=='thumbnail')){
+    const renderMode=output.kind==='podcast'?'audio':output.aspectRatio==='16:9'?'landscape':'vertical';
+    const job=enqueueRender({
+      draftId:project.id,ownerId:input.ownerId,text:project.script,headline:project.topic,source:project.seriesName,
+      autoCollectImages:false,smartScenes:true,shotCraft:true,voice,voiceStyle,template:'classic',motion:'light',
+      tickerMode:'off',channelName:project.seriesName||'Content Studio',mediaProvenance:[],localMedia:[],renderMode
     });
-    jobs.set(output.id, job);
+    jobs.set(output.id,job);
   }
 
-  const primary =
-    selected.find((output) => output.id === 'short-9x16') ||
-    selected.find((output) => output.id === 'video-16x9') ||
-    selected[0];
-  const now = new Date().toISOString();
-  const outputs: PipelineGenerationOutput[] = handoff.outputs.map((output) => {
-    const job = jobs.get(output.id);
-    const worker =
-      output.kind === 'podcast'
-        ? 'tts-audio-export'
-        : output.aspectRatio === '16:9' && output.kind === 'video'
-          ? 'ffmpeg-landscape-16x9'
-          : output.aspectRatio === '9:16' && (output.kind === 'short' || output.kind === 'video')
-            ? 'ffmpeg-short-9x16'
-            : output.kind === 'comic' || output.kind === 'thumbnail'
-              ? 'image-sequence-planned'
-              : 'planned';
-    return {
-      outputId: output.id,
-      kind: output.kind,
-      aspectRatio: output.aspectRatio,
-      status: job ? 'queued' : 'planned',
-      worker,
-      renderJobId: job?.id,
-    };
+  let comicResult:Awaited<ReturnType<typeof exportComicPackage>>|undefined;
+  if(selected.some(x=>x.kind==='comic')){
+    comicResult=await exportComicPackage({
+      projectId:project.id,batchId,seriesName:project.seriesName,topic:project.topic,
+      scenes:runtime.scenePrompts.map(scene=>({index:scene.sceneIndex,beat:scene.beat,narration:scene.narration}))
+    });
+  }
+  let thumbResult:Awaited<ReturnType<typeof exportThumbnail>>|undefined;
+  if(selected.some(x=>x.kind==='thumbnail')){
+    thumbResult=await exportThumbnail({projectId:project.id,batchId,seriesName:project.seriesName,topic:project.topic,episode:project.episode});
+  }
+
+  const primary=selected.find(x=>x.id==='short-9x16')||selected.find(x=>x.id==='video-16x9')||selected[0];
+  const now=new Date().toISOString();
+  const outputs:PipelineGenerationOutput[]=handoff.outputs.map(output=>{
+    const job=jobs.get(output.id);
+    if(output.kind==='comic'&&comicResult&&selectedIds.has(output.id)){
+      recordStudioArtifact({projectId:project.id,ownerId:input.ownerId,outputId:output.id,kind:'comic',path:comicResult.outputPath,generator:'local-deterministic-comic',metadata:{assets:comicResult.assets}});
+      return{outputId:output.id,kind:output.kind,aspectRatio:output.aspectRatio,status:'ready',worker:'local-comic-png',outputPath:comicResult.outputPath,assets:comicResult.assets};
+    }
+    if(output.kind==='thumbnail'&&thumbResult&&selectedIds.has(output.id)){
+      recordStudioArtifact({projectId:project.id,ownerId:input.ownerId,outputId:output.id,kind:'thumbnail',path:thumbResult.outputPath,generator:'local-deterministic-thumbnail',metadata:{assets:thumbResult.assets}});
+      return{outputId:output.id,kind:output.kind,aspectRatio:output.aspectRatio,status:'ready',worker:'local-thumbnail-png',outputPath:thumbResult.outputPath,assets:thumbResult.assets};
+    }
+    const worker=output.kind==='podcast'?'tts-audio-export':output.aspectRatio==='16:9'&&output.kind==='video'?'ffmpeg-landscape-16x9':output.aspectRatio==='9:16'&&(output.kind==='short'||output.kind==='video')?'ffmpeg-short-9x16':output.kind==='comic'?'local-comic-png':output.kind==='thumbnail'?'local-thumbnail-png':'planned';
+    return{outputId:output.id,kind:output.kind,aspectRatio:output.aspectRatio,status:job?'queued':'planned',worker,renderJobId:job?.id};
   });
 
-  const batch: PipelineGenerationBatch = {
-    id: randomUUID(),
-    projectId: project.id,
-    ownerId: input.ownerId,
-    status: 'queued',
-    primaryOutputId: primary.id,
-    outputs,
-    createdAt: now,
-    updatedAt: now,
-  };
+  const batch:PipelineGenerationBatch={id:batchId,projectId:project.id,ownerId:input.ownerId,status:'queued',primaryOutputId:primary.id,outputs,createdAt:now,updatedAt:now};
   saveBatch(batch);
-
-  run(
-    'UPDATE content_studio_projects SET status=?,updated_at=? WHERE id=? AND owner_id=?',
-    'generation_ready',
-    now,
-    project.id,
-    input.ownerId,
-  );
-  return batch;
+  run('UPDATE content_studio_projects SET status=?,updated_at=? WHERE id=? AND owner_id=?','generation_ready',now,project.id,input.ownerId);
+  return syncBatch(batch);
 }

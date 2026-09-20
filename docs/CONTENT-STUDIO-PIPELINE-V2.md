@@ -597,3 +597,52 @@ npm run smoke:content-studio-v2-dashboard
 npm run smoke:content-studio-v2-actions
 npm run smoke:ui
 ```
+
+
+## Phase 5C — Safe Auto-Advance
+
+Phase 5C bổ sung chế độ **TỰ CHẠY ĐẾN GATE**.
+
+Backend lặp các action kỹ thuật hợp lệ tối đa một số bước giới hạn và tự dừng khi gặp:
+
+- Research/Evidence cần người duyệt;
+- Medical Review;
+- Copyright Review;
+- Human Final Review;
+- render đang chạy;
+- pipeline đã sẵn sàng;
+- action không thể tiếp tục.
+
+Endpoint:
+
+```
+POST /api/content-studio-v2/projects/:id/dashboard/auto-advance
+```
+
+Payload:
+
+```json
+{
+  "skipExternalPrepare": false,
+  "maxSteps": 8
+}
+```
+
+Response có `trace`, `performedSteps`, `stoppedOn` và dashboard snapshot mới nhất.
+
+### Safety
+
+Auto-Advance không thể ACCEPT review và không tự publish. Nó chỉ gọi Action Executor đã được gate-aware ở Phase 5B.
+
+### UI
+
+Dashboard có thêm nút **TỰ CHẠY ĐẾN GATE** bên cạnh **CHẠY BƯỚC TIẾP**. Khi tới human review gate hoặc render đang chạy, nút tự động bị khóa.
+
+### Verify
+
+```bash
+npm run typecheck
+npm run build
+npm run smoke:content-studio-v2-auto-advance
+npm run smoke:ui
+```

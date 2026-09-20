@@ -430,3 +430,46 @@ npm run typecheck
 npm run build
 npm run smoke:content-studio-v2-phase4
 ```
+
+
+## Phase 4B — Generated media render handoff
+
+Phase 4B nối output của Scene Media Provider Router vào render worker thật.
+
+### Ưu tiên media theo scene
+
+Renderer dùng thứ tự:
+
+```
+generated video READY theo scene
+  -> generated image READY theo scene
+  -> rights-verified remote media theo scene
+  -> media chưa gắn scene
+  -> original visual-card fallback
+```
+
+`RenderMediaItem` có thêm `sceneIndex` và `providerId`. Media không còn bị phân phối tuần tự bằng cách shift đơn giản khi đã có chỉ số scene.
+
+### Generation endpoint
+
+Khi gọi:
+
+```
+POST /api/content-studio-v2/projects/:id/generate
+```
+
+server tự đọc các scene media job ở trạng thái `READY`, chọn một asset tốt nhất cho mỗi scene (ưu tiên video hơn image) và truyền chúng vào persistent render payload.
+
+Podcast không nhận visual media; video 16:9 và short 9:16 đều nhận cùng bộ generated scene media.
+
+### Acceptance
+
+Docker smoke xác minh:
+
+- local keyframe PNG được tạo thật;
+- keyframe có `rights=generated`;
+- artifact registry có record tương ứng;
+- `readySceneMediaForRender()` trả đúng `sceneIndex`;
+- render job payload chứa đúng generated media path và scene index.
+
+Nhờ vậy có thể retry/tạo lại riêng một scene rồi render lại project mà không cần thay toàn bộ media.

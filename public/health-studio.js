@@ -106,6 +106,10 @@
     actionBtn.disabled=humanReview||researchHuman||actionId==='ready'||!actionId;
     actionBtn.textContent=actionId==='render-running'?'LÀM MỚI TRẠNG THÁI':humanReview||researchHuman?'CẦN NGƯỜI DUYỆT':actionId==='ready'?'ĐÃ QUA GATE':'CHẠY BƯỚC TIẾP';
   }
+  const autoBtn=$('contentStudioAutoAdvanceBtn');if(autoBtn){
+    autoBtn.disabled=humanReview||researchHuman||actionId==='ready'||actionId==='render-running'||!actionId;
+    autoBtn.textContent=humanReview||researchHuman?'DỪNG Ở REVIEW GATE':actionId==='render-running'?'ĐANG RENDER':actionId==='ready'?'PIPELINE SẴN SÀNG':'TỰ CHẠY ĐẾN GATE';
+  }
   if(reviewBox){
     if(humanReview){
       const gate=actionId==='medical-review'?'medical':actionId==='copyright-review'?'copyright':'final';
@@ -156,6 +160,19 @@
     renderContentStudioDashboard(x.dashboard);
   }catch(e){if(status)status.textContent='⚠ '+e.message;alert(e.message)}
   finally{if(btn&&state.contentStudioDashboard){const a=state.contentStudioDashboard.nextAction?.id;btn.disabled=['medical-review','copyright-review','final-review','research-review','fix-research','ready'].includes(a)}}
+ }
+ async function runContentStudioAutoAdvance(){
+  const projectId=state.contentStudioSelected||$('contentStudioProjectSelect')?.value;if(!projectId)return;
+  const btn=$('contentStudioAutoAdvanceBtn'),status=$('contentStudioActionStatus');
+  if(btn)btn.disabled=true;if($('contentStudioActionBtn'))$('contentStudioActionBtn').disabled=true;
+  if(status)status.textContent='Đang tự chạy các bước kỹ thuật đến gate kế tiếp…';
+  try{
+    const x=await api(`/api/content-studio-v2/projects/${encodeURIComponent(projectId)}/dashboard/auto-advance`,{method:'POST',body:JSON.stringify({skipExternalPrepare:false,maxSteps:8})});
+    const trace=(x.trace||[]).map(v=>v.action+(v.performed?' ✓':'')).join(' → ');
+    if(status)status.textContent=`✓ Đã chạy ${x.performedSteps||0} bước • dừng tại ${x.stoppedOn||'—'}${trace?' • '+trace:''}`;
+    renderContentStudioDashboard(x.dashboard);
+  }catch(e){if(status)status.textContent='⚠ '+e.message;alert(e.message)}
+  finally{if(btn)btn.disabled=false}
  }
  async function submitContentStudioReview(gate,statusValue){
   const projectId=state.contentStudioSelected||$('contentStudioProjectSelect')?.value;if(!projectId)return;
@@ -244,7 +261,7 @@
   document.querySelectorAll('.profile-card').forEach(b=>b.onclick=()=>selectProfile(b.dataset.profile||'health'));selectProfile('health');
   document.querySelectorAll('.voice-tab').forEach(b=>b.onclick=()=>setVoiceTab(b.dataset.voiceTab||'text'));setVoiceTab('text');
   ['voiceSearch','voiceLanguage','voiceRegion','voiceGender','voiceCategory'].forEach(id=>{const el=$(id);if(el){el.oninput=renderVoiceLibrary;el.onchange=renderVoiceLibrary}});
-  $('previewVoiceBtn').onclick=()=>previewVoice(undefined,true);$('previewTextBtn').onclick=()=>previewVoice($('voiceText').value,false);$('analyzeSrtBtn').onclick=analyzeSrt;$('srtSpeechBtn').onclick=srtSpeech;$('dubBtn').onclick=dubVideo;$('enrollVoiceBtn').onclick=enrollPersonalVoice;$('deleteVoiceBtn').onclick=deletePersonalVoice;$('refreshRenderHistoryBtn').onclick=loadRenderHistory;$('refreshContentStudioV2Btn').onclick=loadContentStudioV2;$('contentStudioActionBtn').onclick=runContentStudioNextAction;$('contentStudioReviewControls').onclick=e=>{const b=e.target.closest?.('[data-pipeline-review]');if(b)void submitContentStudioReview(b.dataset.pipelineGate,b.dataset.pipelineReview)};$('contentStudioProjectSelect').onchange=()=>loadContentStudioDashboard($('contentStudioProjectSelect').value);$('saveChannelBtn').onclick=saveChannelProfile;$('openAccountConfigBtn').onclick=openConfigPanel;$('closeConfigBtn').onclick=closeConfigPanel;bindTaskNav();
+  $('previewVoiceBtn').onclick=()=>previewVoice(undefined,true);$('previewTextBtn').onclick=()=>previewVoice($('voiceText').value,false);$('analyzeSrtBtn').onclick=analyzeSrt;$('srtSpeechBtn').onclick=srtSpeech;$('dubBtn').onclick=dubVideo;$('enrollVoiceBtn').onclick=enrollPersonalVoice;$('deleteVoiceBtn').onclick=deletePersonalVoice;$('refreshRenderHistoryBtn').onclick=loadRenderHistory;$('refreshContentStudioV2Btn').onclick=loadContentStudioV2;$('contentStudioActionBtn').onclick=runContentStudioNextAction;$('contentStudioAutoAdvanceBtn').onclick=runContentStudioAutoAdvance;$('contentStudioReviewControls').onclick=e=>{const b=e.target.closest?.('[data-pipeline-review]');if(b)void submitContentStudioReview(b.dataset.pipelineGate,b.dataset.pipelineReview)};$('contentStudioProjectSelect').onchange=()=>loadContentStudioDashboard($('contentStudioProjectSelect').value);$('saveChannelBtn').onclick=saveChannelProfile;$('openAccountConfigBtn').onclick=openConfigPanel;$('closeConfigBtn').onclick=closeConfigPanel;bindTaskNav();
   document.querySelectorAll('.theme-card').forEach(b=>b.onclick=()=>chooseTheme(b.dataset.theme||'clean'));$('renderMode').onchange=()=>{if($('renderMode').value==='breaking')chooseTheme('breaking');else if($('renderMode').value==='latest'&&$('renderTemplate').value==='breaking')chooseTheme('classic');state.scenePlan=[]};$('renderTicker').onchange=()=>$('tickerText').classList.toggle('hidden',$('renderTicker').value!=='custom');$('mediaUploadBtn').onclick=uploadMedia;$('refreshUploadsBtn').onclick=loadUploadedMedia;$('previewScenesBtn').onclick=previewScenes;$('clearScenePlanBtn').onclick=()=>{state.scenePlan=[];$('scenePreview').textContent='Scene sẽ được tự tạo lại và đồng bộ theo audio thật khi render.'};$('saveAiBtn').onclick=saveAiSettings;$('testAiBtn').onclick=testAi;$('saveStudioSettingsBtn').onclick=saveStudioSettings;
   $('srtFile').onchange=async()=>{const f=$('srtFile').files?.[0];if(!f)return;if(f.size>100000)return alert('File SRT quá lớn.');$('srtInput').value=await f.text();await analyzeSrt()};
   $('generateBtn').onclick=generate;$('draftBtn').onclick=createDraft;$('evidenceConfirm').onchange=confirmEvidence;$('approveBtn').onclick=approveDraft;$('renderBtn').onclick=renderDraft;$('resetBtn').onclick=()=>{if(state.poll)clearTimeout(state.poll);state.result=null;state.draft=null;state.review=null;state.renderJob=null;state.mediaSelected=new Set();state.scenePlan=[];sessionStorage.removeItem('healthDraftId');$('result').classList.add('hidden');$('reviewPanel').classList.add('hidden');$('renderVideo').classList.add('hidden');$('renderVideo').removeAttribute('src');$('draftBtn').textContent='TẠO DRAFT & REVIEW';window.scrollTo({top:0,behavior:'smooth'})};

@@ -145,13 +145,13 @@ Nội dung câu đầu..."></textarea><div class="actions"><button id="analyzeSr
       <div><div class="step">CONTENT STUDIO V2 • PROJECT PIPELINE</div><h2>Project → Gate → Scene Media → Render → Artifact</h2></div>
       <div class="actions"><span id="contentStudioV2Badge" class="badge">OPERATOR</span><button id="refreshContentStudioV2Btn" class="btn ghost small">LÀM MỚI</button></div>
     </div>
-    <p class="muted">Bảng điều khiển tổng hợp trạng thái pipeline. Phase 5B cho phép chạy bước kỹ thuật kế tiếp có kiểm soát. Medical/Copyright/Final Review vẫn cần quyết định người duyệt.</p>
+    <p class="muted">Bảng điều khiển tổng hợp trạng thái pipeline. Phase 5C cho phép chạy từng bước hoặc tự chạy chuỗi kỹ thuật đến human review gate. Medical/Copyright/Final Review vẫn cần quyết định người duyệt.</p>
     <div class="content-studio-v2-toolbar"><label>Project<select id="contentStudioProjectSelect"><option value="">Đang tải project…</option></select></label><div id="contentStudioV2Status" class="status-line muted">Đang tải Content Studio V2…</div></div>
     <div id="contentStudioV2Empty" class="content-studio-v2-empty hidden">Chưa có project Content Studio V2.</div>
     <div id="contentStudioV2Body" class="hidden">
       <div id="contentStudioNextAction" class="pipeline-next-action"></div>
       <div class="pipeline-action-bar">
-        <button id="contentStudioActionBtn" class="btn small">CHẠY BƯỚC TIẾP</button>
+        <div class="actions"><button id="contentStudioActionBtn" class="btn small">CHẠY BƯỚC TIẾP</button><button id="contentStudioAutoAdvanceBtn" class="btn ghost small">TỰ CHẠY ĐẾN GATE</button></div>
         <span id="contentStudioActionStatus" class="status-line muted">Dashboard operator-controlled • không tự bỏ qua review gate.</span>
       </div>
       <div id="contentStudioReviewControls" class="pipeline-review-controls hidden"></div>

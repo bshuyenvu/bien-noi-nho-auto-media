@@ -45,8 +45,28 @@ x=dashboard.contentStudioProjectDashboard(ownerId,project.id);
 assert.equal(x.nextAction.id,'render-running');
 assert.equal(x.generation.latestBatch?.id,batch.id);
 
+const actionResult=await dashboard.runContentStudioDashboardAction({ownerId,projectId:project.id,action:'generate-keyframes'});
+assert.equal(actionResult.ok,true);
+assert.equal(actionResult.dashboard.nextAction.id,'run-scene-media');
+assert.ok(Number(actionResult.result.created)>0);
+await assert.rejects(()=>dashboard.runContentStudioDashboardAction({ownerId,projectId:project.id,action:'render'}),/Workflow đã thay đổi/);
+
+const podcastOnly=core.createPipelineProject({
+  ownerId,
+  templateId:'podcast-story',
+  topic:'Podcast chỉ có audio',
+  script:'Một câu chuyện ngắn được kể bằng giọng đọc, không yêu cầu hình ảnh để hoàn thành đầu ra podcast.',
+  outputIds:['podcast'],
+});
+await runtime.preparePipelineProject(ownerId,podcastOnly.id,{skipExternal:true});
+let podcastDash=dashboard.contentStudioProjectDashboard(ownerId,podcastOnly.id);
+assert.equal(podcastDash.nextAction.id,'render');
+const renderAction=await dashboard.runContentStudioDashboardAction({ownerId,projectId:podcastOnly.id,action:'render'});
+assert.equal(renderAction.ok,true);
+assert.equal(renderAction.dashboard.nextAction.id,'render-running');
+
 const cards=dashboard.listContentStudioDashboardProjects(ownerId);
-assert.equal(cards.length,1);
+assert.equal(cards.length,2);
 assert.equal(cards[0].project.id,project.id);
 assert.equal(cards[0].nextAction.id,'render-running');
 

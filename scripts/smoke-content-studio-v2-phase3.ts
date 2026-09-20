@@ -30,7 +30,7 @@ assert.equal(caps.find((x) => x.id === 'ffmpeg-short-9x16')?.status, 'ready');
 assert.equal(caps.find((x) => x.id === 'ffmpeg-landscape-16x9')?.status, 'ready');
 assert.equal(caps.find((x) => x.id === 'podcast-audio-export')?.status, 'ready');
 
-const batch = phase3.enqueuePipelineGeneration({ ownerId, projectId: project.id });
+const batch = await phase3.enqueuePipelineGeneration({ ownerId, projectId: project.id });
 assert.equal(batch.primaryOutputId, 'short-9x16');
 assert.equal(batch.status, 'queued');
 const short = batch.outputs.find((x) => x.outputId === 'short-9x16');
@@ -45,7 +45,7 @@ assert.ok(podcast?.renderJobId);
 assert.equal(landscape?.worker, 'ffmpeg-landscape-16x9');
 assert.equal(podcast?.worker, 'tts-audio-export');
 
-const again = phase3.enqueuePipelineGeneration({ ownerId, projectId: project.id });
+const again = await phase3.enqueuePipelineGeneration({ ownerId, projectId: project.id });
 assert.equal(again.id, batch.id, 'must not duplicate active generation batch');
 
 console.log(JSON.stringify({

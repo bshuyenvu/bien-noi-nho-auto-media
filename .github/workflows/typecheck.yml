@@ -51,6 +51,8 @@ jobs:
         run: npm run smoke:health-studio
       - name: Content Studio Pipeline v2 template orchestration smoke test
         run: npm run smoke:content-studio-v2
+      - name: Content Studio Pipeline v2 Phase 2 runtime smoke test
+        run: npm run smoke:content-studio-v2-phase2
       - name: ShotCraft Lite cinematic scene planning smoke test
         run: npm run smoke:shotcraft-lite
       - name: ShotCraft render manifest smoke test

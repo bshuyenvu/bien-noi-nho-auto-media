@@ -69,6 +69,7 @@ jobs:
           docker run --rm -v "$PWD/scripts/smoke-copyright-safe-render.mjs:/app/scripts/smoke-copyright-safe-render.mjs:ro" --entrypoint node shotcraft-ci /app/scripts/smoke-copyright-safe-render.mjs
           docker run --rm -v "$PWD/scripts/smoke-content-studio-landscape.mjs:/app/scripts/smoke-content-studio-landscape.mjs:ro" --entrypoint node shotcraft-ci /app/scripts/smoke-content-studio-landscape.mjs
           docker run --rm -v "$PWD/scripts/smoke-content-studio-static.mjs:/app/scripts/smoke-content-studio-static.mjs:ro" --entrypoint node shotcraft-ci /app/scripts/smoke-content-studio-static.mjs
+          docker run --rm -v "$PWD/scripts/smoke-content-studio-phase4-render.mjs:/app/scripts/smoke-content-studio-phase4-render.mjs:ro" --entrypoint node shotcraft-ci /app/scripts/smoke-content-studio-phase4-render.mjs
       - name: Wyse deploy backup rollback smoke test
         run: npm run smoke:wyse-ops
       - name: V1 private-first deployment safety smoke test

@@ -646,3 +646,71 @@ npm run build
 npm run smoke:content-studio-v2-auto-advance
 npm run smoke:ui
 ```
+
+
+## Phase 6A — Project Creator + End-to-End Wizard
+
+Phase 6A bổ sung một điểm vào duy nhất để tạo Content Studio project mới.
+
+### Project Creator
+
+UI cho phép nhập:
+
+- template;
+- tên series;
+- số tập;
+- chủ đề;
+- kịch bản;
+- danh sách URL nguồn tham khảo;
+- output cần tạo;
+- bật/tắt Safe Auto-Advance.
+
+Danh sách output được sinh trực tiếp từ Template Registry, tránh hard-code khác biệt giữa `health-story`, `podcast-story`, `comic-episode`...
+
+### Create + Start API
+
+```
+POST /api/content-studio-v2/wizard/create-start
+```
+
+Payload ví dụ:
+
+```json
+{
+  "templateId": "health-story",
+  "topic": "Dấu hiệu cảnh báo đột quỵ",
+  "seriesName": "Chuyện Sức Khỏe Quanh Ta",
+  "episode": 8,
+  "script": "Kịch bản...",
+  "sourceUrls": ["https://..."],
+  "outputIds": ["video-16x9", "short-9x16", "podcast", "comic", "thumbnail"],
+  "autoAdvance": true,
+  "maxSteps": 8
+}
+```
+
+Backend tạo project tenant-bound rồi dùng Safe Auto-Advance của Phase 5C để chạy đến gate đầu tiên. Nếu external prepare gặp lỗi, project vẫn được giữ và dashboard trả trạng thái hiện tại thay vì mất dữ liệu nhập.
+
+### UX
+
+Sau khi tạo thành công:
+
+1. Project mới được chọn tự động.
+2. Project Pipeline được refresh.
+3. UI cuộn tới dashboard.
+4. Hiển thị số bước đã chạy và điểm dừng hiện tại.
+5. Nếu tới Medical/Copyright/Final Review, người duyệt tiếp tục bằng review form đã có.
+
+### Safety
+
+Wizard không bypass Research/Medical/Copyright/Final gate và không tự publish. Output không hợp lệ với template bị loại ở planner hiện hữu.
+
+### Verify
+
+```bash
+npm run typecheck
+npm run build
+npm run smoke:content-studio-v2-wizard
+npm run smoke:content-studio-v2-auto-advance
+npm run smoke:ui
+```

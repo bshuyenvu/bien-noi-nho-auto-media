@@ -140,6 +140,29 @@ Nội dung câu đầu..."></textarea><div class="actions"><button id="analyzeSr
     </div>
   </section>
 
+  <section id="contentStudioCreatorPanel" class="panel content-studio-creator-panel">
+    <div class="section-head content-studio-v2-head">
+      <div><div class="step">CONTENT STUDIO V2 • PROJECT CREATOR</div><h2>Ý tưởng → Project → Auto-Advance → Review</h2></div>
+      <span class="badge">PHASE 6A</span>
+    </div>
+    <p class="muted">Tạo project mới từ một form duy nhất. Output thay đổi theo template; Auto-Advance chỉ chạy bước kỹ thuật và tự dừng ở review gate.</p>
+    <div class="creator-grid">
+      <label>Template<select id="contentStudioCreateTemplate"></select></label>
+      <label>Tên series<input id="contentStudioCreateSeries" placeholder="Ví dụ: Chuyện Sức Khỏe Quanh Ta"></label>
+      <label>Số tập<input id="contentStudioCreateEpisode" type="number" min="1" placeholder="Ví dụ: 7"></label>
+      <label class="creator-topic">Chủ đề<input id="contentStudioCreateTopic" placeholder="Ví dụ: Dấu hiệu cảnh báo đột quỵ"></label>
+    </div>
+    <label>Kịch bản<textarea id="contentStudioCreateScript" rows="7" placeholder="Nhập kịch bản hoàn chỉnh hoặc bản nháp đủ nội dung để chia scene…"></textarea></label>
+    <label>Nguồn tham khảo <span class="optional">(mỗi dòng một URL)</span><textarea id="contentStudioCreateSources" rows="3" placeholder="https://…"></textarea></label>
+    <div class="creator-output-block"><div class="meta-label">OUTPUT</div><div id="contentStudioCreateOutputs" class="creator-output-grid"></div></div>
+    <div id="contentStudioTemplateNote" class="status-line muted"></div>
+    <div class="creator-actions">
+      <label class="creator-check"><input id="contentStudioCreateAutoAdvance" type="checkbox" checked> Tự chạy các bước kỹ thuật đến gate đầu tiên</label>
+      <button id="contentStudioCreateBtn" class="btn">TẠO PROJECT & BẮT ĐẦU</button>
+    </div>
+    <div id="contentStudioCreateStatus" class="status-line muted">Sẵn sàng tạo project mới.</div>
+  </section>
+
   <section id="contentStudioV2Panel" class="panel content-studio-v2-panel">
     <div class="section-head content-studio-v2-head">
       <div><div class="step">CONTENT STUDIO V2 • PROJECT PIPELINE</div><h2>Project → Gate → Scene Media → Render → Artifact</h2></div>

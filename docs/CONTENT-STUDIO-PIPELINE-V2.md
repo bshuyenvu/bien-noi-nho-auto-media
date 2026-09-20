@@ -189,3 +189,39 @@ npm run smoke:content-studio-v2-phase2
 5. FFmpeg multi-output composer.
 6. Artifact manifest + copyright review sau render.
 7. Project dashboard hiển thị trạng thái từng stage.
+
+
+## Phase 3A — Media generation worker
+
+Phase 3A đưa Generation Handoff vào worker thật nhưng chỉ bật execution cho đường đã có acceptance coverage: **Short 9:16**.
+
+### Đã bật
+
+- Capability registry cho image/video/voice/compose/export.
+- Local original scene-card là fallback mặc định, rights-safe.
+- TTS hiện hữu sinh MP3 + SRT.
+- ShotCraft + FFmpeg vertical 1080x1920.
+- Generation batch persistence theo owner/project.
+- Chống enqueue trùng batch đang chạy.
+- API theo dõi batch và trạng thái render job.
+
+### Chưa bật execution
+
+- 16:9 landscape: trạng thái `planned` cho đến khi có renderer + smoke test 1920x1080.
+- Comic/thumbnail: giữ manifest, chưa export ảnh thật.
+- Remote image/video provider: chỉ báo `configured` khi có webhook env; execution chưa bật cho đến khi có provenance contract.
+
+### API
+
+- `GET /api/content-studio-v2/generation-capabilities`
+- `POST /api/content-studio-v2/projects/:id/generate`
+- `GET /api/content-studio-v2/projects/:id/generation-batches`
+- `GET /api/content-studio-v2/generation-batches/:batchId`
+
+### Verify
+
+```bash
+npm run typecheck
+npm run build
+npm run smoke:content-studio-v2-phase3
+```

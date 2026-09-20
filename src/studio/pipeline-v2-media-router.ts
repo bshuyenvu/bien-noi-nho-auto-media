@@ -3,7 +3,7 @@ import { mkdir,readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { all,db,run } from '../storage/db.js';
 import { downloadRemoteImage,downloadRemoteVideo } from '../media/download.js';
-import { runFfmpeg } from '../video/ffmpeg.js';
+import { runFfmpeg, type RenderMediaItem } from '../video/ffmpeg.js';
 import { createSceneVisualCard } from '../video/scene-card.js';
 import { buildGenerationHandoff } from './pipeline-v2-runtime.js';
 import { recordStudioArtifact } from './pipeline-v2-generation.js';
@@ -63,6 +63,12 @@ function projectDir(projectId:string,jobId:string){return `output/content-studio
 
 export function listSceneMediaJobs(ownerId:string,projectId:string){return all<Row>('SELECT * FROM content_studio_scene_media_jobs WHERE owner_id=? AND project_id=? ORDER BY scene_index,kind,created_at',ownerId,projectId).map(fromRow)}
 export function getSceneMediaJob(ownerId:string,id:string){const r=row(id,ownerId);return r?fromRow(r):undefined}
+export function readySceneMediaForRender(ownerId:string,projectId:string):RenderMediaItem[]{
+ const rows=all<Row>(`SELECT * FROM content_studio_scene_media_jobs WHERE owner_id=? AND project_id=? AND status='ready' AND output_path IS NOT NULL ORDER BY scene_index ASC, CASE kind WHEN 'video' THEN 0 ELSE 1 END, updated_at DESC`,ownerId,projectId);
+ const chosen=new Map<number,Row>();
+ for(const r of rows)if(!chosen.has(Number(r.scene_index)))chosen.set(Number(r.scene_index),r);
+ return [...chosen.values()].sort((a,b)=>Number(a.scene_index)-Number(b.scene_index)).map(r=>({path:String(r.output_path),kind:r.kind==='video'?'video':'image',sceneIndex:Number(r.scene_index),providerId:r.provider_id,sourceCredit:r.provider_id==='local-original-card'?'Minh họa nguyên bản • AI generated':`AI generated • ${r.provider_id}`}));
+}
 
 export function createSceneMediaJobs(input:{ownerId:string;projectId:string;kind:SceneMediaKind;providerId?:SceneMediaProviderId;sceneIndices?:number[]}):SceneMediaJob[]{
  const project=getPipelineProject(input.ownerId,input.projectId);if(!project)throw new Error('Content Studio project not found');

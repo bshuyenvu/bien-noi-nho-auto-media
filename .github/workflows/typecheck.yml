@@ -61,6 +61,8 @@ jobs:
         run: npm run smoke:content-studio-v2-dashboard
       - name: Content Studio Pipeline v2 Phase 5B actionable dashboard smoke test
         run: npm run smoke:content-studio-v2-actions
+      - name: Content Studio Pipeline v2 Phase 5C safe auto-advance smoke test
+        run: npm run smoke:content-studio-v2-auto-advance
       - name: ShotCraft Lite cinematic scene planning smoke test
         run: npm run smoke:shotcraft-lite
       - name: ShotCraft render manifest smoke test

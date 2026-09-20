@@ -225,3 +225,54 @@ npm run typecheck
 npm run build
 npm run smoke:content-studio-v2-phase3
 ```
+
+
+## Phase 3B — Multi-output render
+
+Phase 3B mở execution cho ba đầu ra có worker thật:
+
+- **Short 9:16** → FFmpeg vertical 1080×1920.
+- **Video 16:9** → FFmpeg landscape 1920×1080.
+- **Podcast** → MP3 trực tiếp từ TTS worker; SRT vẫn được giữ cho downstream.
+
+Cả ba dùng chung persistent render queue hiện hữu nên có retry, recovery sau restart, resource guard, storage guard và watchdog.
+
+### Quy tắc generation batch
+
+Khi không truyền `outputId`, hệ thống enqueue tất cả output đang được hỗ trợ trong project. Ví dụ `health-story`:
+
+```
+Short 9:16   -> queued
+Video 16:9   -> queued
+Podcast      -> queued
+Comic        -> planned
+Thumbnail    -> planned
+```
+
+Nếu truyền `outputId`, chỉ output đó được enqueue. Worker chưa hỗ trợ sẽ bị từ chối thay vì giả lập thành công.
+
+### Acceptance
+
+Landscape renderer phải vượt render thật trong Docker và được kiểm bằng `ffprobe`:
+
+- codec H.264;
+- width 1920;
+- height 1080;
+- duration hợp lệ;
+- artifact có kích thước thực.
+
+### Chưa bật
+
+- Comic panels.
+- Thumbnail/cover export.
+- Remote image/video provider execution.
+- Chia sẻ TTS asset giữa nhiều output trong cùng batch (mỗi render job hiện tự phục hồi độc lập).
+
+### Verify
+
+```bash
+npm run typecheck
+npm run build
+npm run smoke:content-studio-v2-phase3
+npm run smoke:content-studio-landscape
+```

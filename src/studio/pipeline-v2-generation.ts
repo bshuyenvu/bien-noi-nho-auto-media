@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { all, db, run } from '../storage/db.js';
 import { enqueueRender, renderJobs } from '../video/job.js';
+import type { RenderMediaItem } from '../video/ffmpeg.js';
 import { isVoiceId, isVoiceStyle, type VoiceId, type VoiceStyle } from '../tts/edge.js';
 import { buildGenerationHandoff, getPipelineRuntime } from './pipeline-v2-runtime.js';
 import { getPipelineProject } from './pipeline-v2.js';
@@ -278,6 +279,7 @@ export async function enqueuePipelineGeneration(input: {
   ownerId: string;
   projectId: string;
   outputId?: string;
+  localMedia?: RenderMediaItem[];
 }): Promise<PipelineGenerationBatch> {
   const project = getPipelineProject(input.ownerId, input.projectId);
   if (!project) throw new Error('Content Studio project not found');
@@ -309,7 +311,7 @@ export async function enqueuePipelineGeneration(input: {
     const job=enqueueRender({
       draftId:project.id,ownerId:input.ownerId,text:project.script,headline:project.topic,source:project.seriesName,
       autoCollectImages:false,smartScenes:true,shotCraft:true,voice,voiceStyle,template:'classic',motion:'light',
-      tickerMode:'off',channelName:project.seriesName||'Content Studio',mediaProvenance:[],localMedia:[],renderMode
+      tickerMode:'off',channelName:project.seriesName||'Content Studio',mediaProvenance:[],localMedia:renderMode==='audio'?[]:(input.localMedia||[]),renderMode
     });
     jobs.set(output.id,job);
   }

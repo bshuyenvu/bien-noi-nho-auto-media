@@ -95,11 +95,27 @@
  function renderContentStudioDashboard(x){
   state.contentStudioDashboard=x;
   const body=$('contentStudioV2Body'),empty=$('contentStudioV2Empty'),badge=$('contentStudioV2Badge');
-  if(!x){body?.classList.add('hidden');empty?.classList.remove('hidden');if(badge)badge.textContent='NO PROJECT';return}
+  if(!x){body?.classList.add('hidden');empty?.classList.remove('hidden');if(badge)badge.textContent='NO PROJECT';if($('contentStudioActionBtn'))$('contentStudioActionBtn').disabled=true;if($('contentStudioReviewControls'))$('contentStudioReviewControls').classList.add('hidden');return}
   empty?.classList.add('hidden');body?.classList.remove('hidden');
   const overall=String(x.overallStatus||'waiting'),next=x.nextAction||{};
   if(badge){badge.textContent=overall.toUpperCase();badge.className='badge '+(overall==='ready'?'gate-pass':overall==='blocked'||overall==='attention'?'gate-review':'')}
-  const nextBox=$('contentStudioNextAction');if(nextBox){nextBox.className=`pipeline-next-action ${overall}`;nextBox.innerHTML=`<div><small class="meta-label">NEXT ACTION</small><b>${esc(next.label||next.id||'—')}</b></div><span>${next.hardBlocked?'Đang bị chặn bởi gate bắt buộc':'Read-only workflow guidance'} • ${esc(x.runtime?.currentStage||x.project?.status||'')}</span>`}
+  const nextBox=$('contentStudioNextAction');if(nextBox){nextBox.className=`pipeline-next-action ${overall}`;nextBox.innerHTML=`<div><small class="meta-label">NEXT ACTION</small><b>${esc(next.label||next.id||'—')}</b></div><span>${next.hardBlocked?'Đang bị chặn bởi gate bắt buộc':'Operator-controlled workflow'} • ${esc(x.runtime?.currentStage||x.project?.status||'')}</span>`}
+  const actionId=String(next.id||''),actionBtn=$('contentStudioActionBtn'),reviewBox=$('contentStudioReviewControls');
+  const humanReview=['medical-review','copyright-review','final-review'].includes(actionId),researchHuman=['research-review','fix-research'].includes(actionId);
+  if(actionBtn){
+    actionBtn.disabled=humanReview||researchHuman||actionId==='ready'||!actionId;
+    actionBtn.textContent=actionId==='render-running'?'LÀM MỚI TRẠNG THÁI':humanReview||researchHuman?'CẦN NGƯỜI DUYỆT':actionId==='ready'?'ĐÃ QUA GATE':'CHẠY BƯỚC TIẾP';
+  }
+  if(reviewBox){
+    if(humanReview){
+      const gate=actionId==='medical-review'?'medical':actionId==='copyright-review'?'copyright':'final';
+      reviewBox.classList.remove('hidden');
+      reviewBox.innerHTML=`<div class="pipeline-review-head"><div><small class="meta-label">HUMAN REVIEW</small><b>${esc(gate.toUpperCase())}</b></div><span>Quyết định này được ghi vào audit trail.</span></div><textarea id="contentStudioReviewNote" rows="2" placeholder="Ghi chú review; bắt buộc nếu NEEDS FIX"></textarea><div class="actions"><button class="btn small" data-pipeline-review="accepted" data-pipeline-gate="${esc(gate)}">ACCEPT</button><button class="btn ghost small" data-pipeline-review="needs_fix" data-pipeline-gate="${esc(gate)}">NEEDS FIX</button></div>`;
+    }else if(researchHuman){
+      reviewBox.classList.remove('hidden');
+      reviewBox.innerHTML='<div class="warning">Research/Evidence cần người duyệt hoặc bổ sung nguồn. Dashboard không tự PASS Research Gate.</div>';
+    }else reviewBox.classList.add('hidden');
+  }
   const gates=x.gates||{},research=gates.research||{};
   $('contentStudioGateGrid').innerHTML=[
     pipelineGateCard('Research',research.status,Number.isFinite(research.sourceCount)?`${research.sourceCount} nguồn • ${research.authoritativeSourceCount||0} authority`:''),
@@ -127,6 +143,34 @@
   $('contentStudioV2Status').textContent='Đang tải pipeline snapshot…';
   try{const x=await api(`/api/content-studio-v2/projects/${encodeURIComponent(projectId)}/dashboard`);state.contentStudioSelected=projectId;renderContentStudioDashboard(x)}
   catch(e){$('contentStudioV2Status').textContent='⚠ '+e.message;renderContentStudioDashboard(null)}
+ }
+ async function runContentStudioNextAction(){
+  const projectId=state.contentStudioSelected||$('contentStudioProjectSelect')?.value;if(!projectId)return;
+  const action=state.contentStudioDashboard?.nextAction?.id;
+  const status=$('contentStudioActionStatus'),btn=$('contentStudioActionBtn');
+  if(action==='render-running'){if(status)status.textContent='Đang làm mới trạng thái render…';await loadContentStudioDashboard(projectId);return}
+  if(btn)btn.disabled=true;if(status)status.textContent='Đang chạy bước kỹ thuật kế tiếp…';
+  try{
+    const x=await api(`/api/content-studio-v2/projects/${encodeURIComponent(projectId)}/dashboard/action`,{method:'POST',body:JSON.stringify({skipExternalPrepare:false})});
+    if(status)status.textContent=(x.performed?'✓ ':'ℹ ')+(x.message||'Đã cập nhật pipeline.');
+    renderContentStudioDashboard(x.dashboard);
+  }catch(e){if(status)status.textContent='⚠ '+e.message;alert(e.message)}
+  finally{if(btn&&state.contentStudioDashboard){const a=state.contentStudioDashboard.nextAction?.id;btn.disabled=['medical-review','copyright-review','final-review','research-review','fix-research','ready'].includes(a)}}
+ }
+ async function submitContentStudioReview(gate,statusValue){
+  const projectId=state.contentStudioSelected||$('contentStudioProjectSelect')?.value;if(!projectId)return;
+  const note=$('contentStudioReviewNote')?.value?.trim()||'';
+  if(statusValue==='needs_fix'&&note.length<5)return alert('NEEDS FIX cần ghi chú cụ thể.');
+  if(statusValue==='accepted'&&!confirm(`Xác nhận ACCEPT ${String(gate).toUpperCase()} Review cho project này?`))return;
+  const status=$('contentStudioActionStatus');if(status)status.textContent='Đang ghi quyết định review…';
+  try{
+    const url=gate==='medical'
+      ?`/api/content-studio-v2/projects/${encodeURIComponent(projectId)}/medical-review`
+      :`/api/content-studio-v2/projects/${encodeURIComponent(projectId)}/release-review/${encodeURIComponent(gate)}`;
+    await api(url,{method:'POST',body:JSON.stringify({status:statusValue,note:note||undefined})});
+    if(status)status.textContent=`✓ Đã ghi ${String(gate).toUpperCase()} Review: ${String(statusValue).toUpperCase()}.`;
+    await loadContentStudioDashboard(projectId);
+  }catch(e){if(status)status.textContent='⚠ '+e.message;alert(e.message)}
  }
  async function loadContentStudioV2(){
   const select=$('contentStudioProjectSelect'),status=$('contentStudioV2Status');if(!select||!status)return;
@@ -200,7 +244,7 @@
   document.querySelectorAll('.profile-card').forEach(b=>b.onclick=()=>selectProfile(b.dataset.profile||'health'));selectProfile('health');
   document.querySelectorAll('.voice-tab').forEach(b=>b.onclick=()=>setVoiceTab(b.dataset.voiceTab||'text'));setVoiceTab('text');
   ['voiceSearch','voiceLanguage','voiceRegion','voiceGender','voiceCategory'].forEach(id=>{const el=$(id);if(el){el.oninput=renderVoiceLibrary;el.onchange=renderVoiceLibrary}});
-  $('previewVoiceBtn').onclick=()=>previewVoice(undefined,true);$('previewTextBtn').onclick=()=>previewVoice($('voiceText').value,false);$('analyzeSrtBtn').onclick=analyzeSrt;$('srtSpeechBtn').onclick=srtSpeech;$('dubBtn').onclick=dubVideo;$('enrollVoiceBtn').onclick=enrollPersonalVoice;$('deleteVoiceBtn').onclick=deletePersonalVoice;$('refreshRenderHistoryBtn').onclick=loadRenderHistory;$('refreshContentStudioV2Btn').onclick=loadContentStudioV2;$('contentStudioProjectSelect').onchange=()=>loadContentStudioDashboard($('contentStudioProjectSelect').value);$('saveChannelBtn').onclick=saveChannelProfile;$('openAccountConfigBtn').onclick=openConfigPanel;$('closeConfigBtn').onclick=closeConfigPanel;bindTaskNav();
+  $('previewVoiceBtn').onclick=()=>previewVoice(undefined,true);$('previewTextBtn').onclick=()=>previewVoice($('voiceText').value,false);$('analyzeSrtBtn').onclick=analyzeSrt;$('srtSpeechBtn').onclick=srtSpeech;$('dubBtn').onclick=dubVideo;$('enrollVoiceBtn').onclick=enrollPersonalVoice;$('deleteVoiceBtn').onclick=deletePersonalVoice;$('refreshRenderHistoryBtn').onclick=loadRenderHistory;$('refreshContentStudioV2Btn').onclick=loadContentStudioV2;$('contentStudioActionBtn').onclick=runContentStudioNextAction;$('contentStudioReviewControls').onclick=e=>{const b=e.target.closest?.('[data-pipeline-review]');if(b)void submitContentStudioReview(b.dataset.pipelineGate,b.dataset.pipelineReview)};$('contentStudioProjectSelect').onchange=()=>loadContentStudioDashboard($('contentStudioProjectSelect').value);$('saveChannelBtn').onclick=saveChannelProfile;$('openAccountConfigBtn').onclick=openConfigPanel;$('closeConfigBtn').onclick=closeConfigPanel;bindTaskNav();
   document.querySelectorAll('.theme-card').forEach(b=>b.onclick=()=>chooseTheme(b.dataset.theme||'clean'));$('renderMode').onchange=()=>{if($('renderMode').value==='breaking')chooseTheme('breaking');else if($('renderMode').value==='latest'&&$('renderTemplate').value==='breaking')chooseTheme('classic');state.scenePlan=[]};$('renderTicker').onchange=()=>$('tickerText').classList.toggle('hidden',$('renderTicker').value!=='custom');$('mediaUploadBtn').onclick=uploadMedia;$('refreshUploadsBtn').onclick=loadUploadedMedia;$('previewScenesBtn').onclick=previewScenes;$('clearScenePlanBtn').onclick=()=>{state.scenePlan=[];$('scenePreview').textContent='Scene sẽ được tự tạo lại và đồng bộ theo audio thật khi render.'};$('saveAiBtn').onclick=saveAiSettings;$('testAiBtn').onclick=testAi;$('saveStudioSettingsBtn').onclick=saveStudioSettings;
   $('srtFile').onchange=async()=>{const f=$('srtFile').files?.[0];if(!f)return;if(f.size>100000)return alert('File SRT quá lớn.');$('srtInput').value=await f.text();await analyzeSrt()};
   $('generateBtn').onclick=generate;$('draftBtn').onclick=createDraft;$('evidenceConfirm').onchange=confirmEvidence;$('approveBtn').onclick=approveDraft;$('renderBtn').onclick=renderDraft;$('resetBtn').onclick=()=>{if(state.poll)clearTimeout(state.poll);state.result=null;state.draft=null;state.review=null;state.renderJob=null;state.mediaSelected=new Set();state.scenePlan=[];sessionStorage.removeItem('healthDraftId');$('result').classList.add('hidden');$('reviewPanel').classList.add('hidden');$('renderVideo').classList.add('hidden');$('renderVideo').removeAttribute('src');$('draftBtn').textContent='TẠO DRAFT & REVIEW';window.scrollTo({top:0,behavior:'smooth'})};

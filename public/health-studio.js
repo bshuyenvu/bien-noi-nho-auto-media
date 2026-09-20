@@ -1,5 +1,5 @@
 (()=>{
- const $=id=>document.getElementById(id),state={result:null,draft:null,review:null,renderJob:null,poll:null,clerk:null,publicConfig:null,mediaSelected:new Set(),profile:'health',voiceCatalog:[],voiceSelected:'vieneu-minh-duc',voiceMode:'text',voiceStudioStatus:null,uploadedMedia:[],uploadedSelected:new Set(),scenePlan:[],studioSettings:null,aiSettings:null,accountProfile:null};
+ const $=id=>document.getElementById(id),state={result:null,draft:null,review:null,renderJob:null,poll:null,clerk:null,publicConfig:null,mediaSelected:new Set(),profile:'health',voiceCatalog:[],voiceSelected:'vieneu-minh-duc',voiceMode:'text',voiceStudioStatus:null,uploadedMedia:[],uploadedSelected:new Set(),scenePlan:[],studioSettings:null,aiSettings:null,accountProfile:null,contentStudioProjects:[],contentStudioSelected:null,contentStudioDashboard:null};
  const apiKey=()=>sessionStorage.getItem('renderApiKey')||'';
  function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
  async function headers(json=false){const h={...(json?{'content-type':'application/json'}:{})},session=state.clerk?.session;if(session?.getToken){try{const token=await session.getToken();if(token){h.authorization='Bearer '+token;return h}}catch{}}const legacy=apiKey();if(legacy)h.authorization='Bearer '+legacy;return h}
@@ -74,6 +74,70 @@
  async function confirmEvidence(){const d=state.draft;if(!d||!$('evidenceConfirm').checked)return;try{await api(`/api/drafts/${encodeURIComponent(d.id)}/evidence-review`,{method:'POST',body:JSON.stringify({status:'accepted'})});await openReview(d.id)}catch(e){$('evidenceConfirm').checked=false;alert(e.message)}}
  async function approveDraft(){const d=state.draft;if(!d)return;const b=$('approveBtn');b.disabled=true;try{await api(`/api/drafts/${encodeURIComponent(d.id)}/approve`,{method:'POST'});await openReview(d.id)}catch(e){alert(e.message);b.disabled=false}}
  function formatWhen(v){try{return new Intl.DateTimeFormat('vi-VN',{dateStyle:'short',timeStyle:'short'}).format(new Date(v))}catch{return String(v||'')}}
+ function pipelineGateClass(status){
+  const s=String(status||'').toLowerCase();
+  if(['accepted','pass','not_required','true','ready'].includes(s))return'pass';
+  if(['block','blocked','needs_fix','false'].includes(s))return'block';
+  return'review';
+ }
+ function pipelineStateClass(status){
+  const s=String(status||'').toLowerCase();
+  if(['ready','completed','accepted','pass'].includes(s))return'ready';
+  if(['failed','block','blocked','attention'].includes(s))return'failed';
+  if(['queued','running','rendering','waiting','review'].includes(s))return s;
+  return'';
+ }
+ function pipelineGateCard(label,value,detail=''){
+  const raw=typeof value==='boolean'?(value?'true':'false'):String(value??'—'),cls=pipelineGateClass(raw);
+  const shown=raw==='true'?'YES':raw==='false'?'NO':raw.replaceAll('_',' ').toUpperCase();
+  return `<div class="pipeline-gate ${cls}"><small>${esc(label)}</small><b>${esc(shown)}</b>${detail?`<small>${esc(detail)}</small>`:''}</div>`;
+ }
+ function renderContentStudioDashboard(x){
+  state.contentStudioDashboard=x;
+  const body=$('contentStudioV2Body'),empty=$('contentStudioV2Empty'),badge=$('contentStudioV2Badge');
+  if(!x){body?.classList.add('hidden');empty?.classList.remove('hidden');if(badge)badge.textContent='NO PROJECT';return}
+  empty?.classList.add('hidden');body?.classList.remove('hidden');
+  const overall=String(x.overallStatus||'waiting'),next=x.nextAction||{};
+  if(badge){badge.textContent=overall.toUpperCase();badge.className='badge '+(overall==='ready'?'gate-pass':overall==='blocked'||overall==='attention'?'gate-review':'')}
+  const nextBox=$('contentStudioNextAction');if(nextBox){nextBox.className=`pipeline-next-action ${overall}`;nextBox.innerHTML=`<div><small class="meta-label">NEXT ACTION</small><b>${esc(next.label||next.id||'—')}</b></div><span>${next.hardBlocked?'Đang bị chặn bởi gate bắt buộc':'Read-only workflow guidance'} • ${esc(x.runtime?.currentStage||x.project?.status||'')}</span>`}
+  const gates=x.gates||{},research=gates.research||{};
+  $('contentStudioGateGrid').innerHTML=[
+    pipelineGateCard('Research',research.status,Number.isFinite(research.sourceCount)?`${research.sourceCount} nguồn • ${research.authoritativeSourceCount||0} authority`:''),
+    pipelineGateCard('Medical',gates.medical),
+    pipelineGateCard('Generation',Boolean(gates.generationAllowed)),
+    pipelineGateCard('Copyright',gates.copyright),
+    pipelineGateCard('Final Review',gates.final),
+  ].join('');
+  const scenes=x.scenes||{items:[],total:0,readyVisual:0,missingVisual:0,statusCounts:{}};
+  $('contentStudioSceneSummary').textContent=`${scenes.readyVisual||0}/${scenes.total||0} scene có generated media • thiếu ${scenes.missingVisual||0} • ${Object.entries(scenes.statusCounts||{}).map(([k,v])=>`${k}: ${v}`).join(' • ')||'chưa có media job'}`;
+  $('contentStudioSceneList').innerHTML=(scenes.items||[]).slice(0,12).map(scene=>{
+    const preferred=scene.preferredMedia||'fallback',img=scene.image,vid=scene.video,status=vid?.status==='ready'?'ready':img?.status==='ready'?'ready':vid?.status||img?.status||'fallback';
+    const meta=[`beat: ${scene.beat||'—'}`,img?`image ${img.status} • ${img.providerId}`:'image —',vid?`video ${vid.status} • ${vid.providerId}`:'video —'].join(' • ');
+    return `<div class="pipeline-scene"><div class="pipeline-scene-main"><div class="pipeline-scene-title">SCENE ${scene.sceneIndex+1} • ${esc(preferred.toUpperCase())}</div><div class="pipeline-scene-meta">${esc(meta)}</div></div><span class="pipeline-state ${pipelineStateClass(status)}">${esc(status)}</span></div>`;
+  }).join('')||'<div class="muted">Chưa có scene runtime.</div>';
+  const g=x.generation||{},batch=g.latestBatch;
+  $('contentStudioOutputSummary').textContent=batch?`Batch ${String(batch.id).slice(0,8)}… • ${batch.status} • ${Object.entries(g.statusCounts||{}).map(([k,v])=>`${k}: ${v}`).join(' • ')}`:'Chưa có generation batch.';
+  $('contentStudioOutputList').innerHTML=(batch?.outputs||[]).map(output=>`<div class="pipeline-output"><div class="pipeline-output-main"><div class="pipeline-output-title">${esc(output.outputId)} • ${esc(output.kind)}</div><div class="pipeline-output-meta">${esc(output.worker||'—')}${output.error?' • '+esc(output.error):''}</div></div><span class="pipeline-state ${pipelineStateClass(output.status)}">${esc(output.status)}</span></div>`).join('')||'<div class="muted">Chưa render output.</div>';
+  const a=x.artifacts||{total:0,counts:{}},chips=Object.entries(a.counts||{}).map(([k,v])=>`<span class="pipeline-artifact-chip">${esc(k)} • ${esc(v)}</span>`).join('');
+  $('contentStudioArtifactSummary').innerHTML=`Artifacts: <b>${esc(a.total||0)}</b><div class="pipeline-artifact-chips">${chips||'<span class="muted">Chưa có artifact.</span>'}</div>`;
+  $('contentStudioV2Status').textContent=`${x.project?.templateName||x.project?.templateId||'Project'} • ${x.project?.topic||''} • cập nhật ${formatWhen(x.project?.updatedAt)}`;
+ }
+ async function loadContentStudioDashboard(projectId){
+  if(!projectId){renderContentStudioDashboard(null);return}
+  $('contentStudioV2Status').textContent='Đang tải pipeline snapshot…';
+  try{const x=await api(`/api/content-studio-v2/projects/${encodeURIComponent(projectId)}/dashboard`);state.contentStudioSelected=projectId;renderContentStudioDashboard(x)}
+  catch(e){$('contentStudioV2Status').textContent='⚠ '+e.message;renderContentStudioDashboard(null)}
+ }
+ async function loadContentStudioV2(){
+  const select=$('contentStudioProjectSelect'),status=$('contentStudioV2Status');if(!select||!status)return;
+  status.textContent='Đang tải Content Studio V2…';
+  try{
+    const rows=await api('/api/content-studio-v2/dashboard?limit=20');state.contentStudioProjects=rows||[];
+    if(!rows?.length){select.innerHTML='<option value="">Chưa có project</option>';select.disabled=true;state.contentStudioSelected=null;renderContentStudioDashboard(null);status.textContent='Chưa có project Content Studio V2.';return}
+    select.disabled=false;select.innerHTML=rows.map(row=>`<option value="${esc(row.project.id)}">${esc((row.project.seriesName?row.project.seriesName+' • ':'')+(row.project.topic||row.project.templateName))} — ${esc(row.overallStatus)}</option>`).join('');
+    const selected=rows.some(row=>row.project.id===state.contentStudioSelected)?state.contentStudioSelected:rows[0].project.id;select.value=selected;await loadContentStudioDashboard(selected);
+  }catch(e){status.textContent='⚠ Không tải được Content Studio V2: '+e.message}
+ }
  function renderStatusText(s){return s==='ready'?'HOÀN TẤT':s==='failed'?'LỖI':s==='rendering'?'ĐANG RENDER':'ĐANG CHỜ'}
  function renderStage(j){const s=String(j?.checkpointStage||'');if(/^downloading-/.test(s))return'Đang tải media';return({queued:'Đang chờ worker',recovered:'Khôi phục sau restart','resource-check':'Đang chờ tài nguyên','resources-ready':'Tài nguyên sẵn sàng',starting:'Khởi động render','collecting-media':'Đang tìm media','media-collected':'Đã lấy media','selecting-media':'Đang chọn media',tts:'Đang tạo giọng đọc','scene-sync':'Đồng bộ scene theo audio','pre-ffmpeg-check':'Chuẩn bị FFmpeg',ffmpeg:'Đang ghép video','retry-backoff':'Chờ thử lại',completed:'Hoàn tất'}[s]||s||'Đang chờ') }
  async function loadRenderHistory(){const box=$('renderHistoryList'),status=$('renderHistoryStatus');if(!box||!status)return;status.textContent='Đang tải lịch sử render…';try{const rows=await api('/api/render-jobs');const items=(rows||[]).slice(0,30);status.textContent=items.length?`${items.length} render gần nhất • chỉ thuộc tài khoản hiện tại`:'Chưa có render nào.';box.innerHTML=items.length?items.map(j=>{const mode=j.breaking?'TIN NÓNG':j.renderMode==='latest'?'TIN MỚI':j.renderMode==='standard'?'TIN TỨC':'TỰ ĐỘNG',theme=j.template==='breaking'?'Breaking Red':j.template==='classic'?'Newsroom Blue':j.template==='clean'?'Ocean Clean':'Theme tự động',canDelete=j.status==='ready'||j.status==='failed'||j.status==='queued';return `<article class="render-history-card"><div class="render-history-top"><div><div class="render-history-title">${esc(j.title||'Video đã render')}</div><div class="render-history-meta">${esc(formatWhen(j.completedAt||j.updatedAt||j.createdAt))} • ${esc(mode)} • ${esc(theme)}${j.voice?' • '+esc(j.voice):''}</div></div><span class="render-status ${esc(j.status)}">${esc(renderStatusText(j.status))}${j.status==='rendering'||j.status==='queued'?' • '+Math.round(Number(j.progress||0))+'% • '+esc(renderStage(j)):''}</span></div>${j.status==='ready'&&j.outputUrl?`<video class="render-history-video" controls preload="metadata" playsinline src="${esc(j.outputUrl)}"></video>`:''}${j.error?`<div class="warning">${esc(j.error)}</div>`:''}<div class="render-history-actions">${j.outputUrl?`<a class="btn ghost small" href="${esc(j.outputUrl)}" target="_blank" rel="noopener">MỞ VIDEO</a>`:''}${canDelete?`<button class="btn ghost small" data-render-delete="${esc(j.id)}">${j.status==='queued'?'HỦY':'XÓA'}</button>`:''}</div></article>`}).join(''):'<div class="render-history-empty">Chưa có video render để hiển thị.</div>';box.querySelectorAll('[data-render-delete]').forEach(btn=>btn.onclick=()=>deleteRenderHistory(btn.dataset.renderDelete))}catch(e){status.textContent='⚠ Không tải được lịch sử render: '+e.message;box.innerHTML=''}}
@@ -136,11 +200,11 @@
   document.querySelectorAll('.profile-card').forEach(b=>b.onclick=()=>selectProfile(b.dataset.profile||'health'));selectProfile('health');
   document.querySelectorAll('.voice-tab').forEach(b=>b.onclick=()=>setVoiceTab(b.dataset.voiceTab||'text'));setVoiceTab('text');
   ['voiceSearch','voiceLanguage','voiceRegion','voiceGender','voiceCategory'].forEach(id=>{const el=$(id);if(el){el.oninput=renderVoiceLibrary;el.onchange=renderVoiceLibrary}});
-  $('previewVoiceBtn').onclick=()=>previewVoice(undefined,true);$('previewTextBtn').onclick=()=>previewVoice($('voiceText').value,false);$('analyzeSrtBtn').onclick=analyzeSrt;$('srtSpeechBtn').onclick=srtSpeech;$('dubBtn').onclick=dubVideo;$('enrollVoiceBtn').onclick=enrollPersonalVoice;$('deleteVoiceBtn').onclick=deletePersonalVoice;$('refreshRenderHistoryBtn').onclick=loadRenderHistory;$('saveChannelBtn').onclick=saveChannelProfile;$('openAccountConfigBtn').onclick=openConfigPanel;$('closeConfigBtn').onclick=closeConfigPanel;bindTaskNav();
+  $('previewVoiceBtn').onclick=()=>previewVoice(undefined,true);$('previewTextBtn').onclick=()=>previewVoice($('voiceText').value,false);$('analyzeSrtBtn').onclick=analyzeSrt;$('srtSpeechBtn').onclick=srtSpeech;$('dubBtn').onclick=dubVideo;$('enrollVoiceBtn').onclick=enrollPersonalVoice;$('deleteVoiceBtn').onclick=deletePersonalVoice;$('refreshRenderHistoryBtn').onclick=loadRenderHistory;$('refreshContentStudioV2Btn').onclick=loadContentStudioV2;$('contentStudioProjectSelect').onchange=()=>loadContentStudioDashboard($('contentStudioProjectSelect').value);$('saveChannelBtn').onclick=saveChannelProfile;$('openAccountConfigBtn').onclick=openConfigPanel;$('closeConfigBtn').onclick=closeConfigPanel;bindTaskNav();
   document.querySelectorAll('.theme-card').forEach(b=>b.onclick=()=>chooseTheme(b.dataset.theme||'clean'));$('renderMode').onchange=()=>{if($('renderMode').value==='breaking')chooseTheme('breaking');else if($('renderMode').value==='latest'&&$('renderTemplate').value==='breaking')chooseTheme('classic');state.scenePlan=[]};$('renderTicker').onchange=()=>$('tickerText').classList.toggle('hidden',$('renderTicker').value!=='custom');$('mediaUploadBtn').onclick=uploadMedia;$('refreshUploadsBtn').onclick=loadUploadedMedia;$('previewScenesBtn').onclick=previewScenes;$('clearScenePlanBtn').onclick=()=>{state.scenePlan=[];$('scenePreview').textContent='Scene sẽ được tự tạo lại và đồng bộ theo audio thật khi render.'};$('saveAiBtn').onclick=saveAiSettings;$('testAiBtn').onclick=testAi;$('saveStudioSettingsBtn').onclick=saveStudioSettings;
   $('srtFile').onchange=async()=>{const f=$('srtFile').files?.[0];if(!f)return;if(f.size>100000)return alert('File SRT quá lớn.');$('srtInput').value=await f.text();await analyzeSrt()};
   $('generateBtn').onclick=generate;$('draftBtn').onclick=createDraft;$('evidenceConfirm').onchange=confirmEvidence;$('approveBtn').onclick=approveDraft;$('renderBtn').onclick=renderDraft;$('resetBtn').onclick=()=>{if(state.poll)clearTimeout(state.poll);state.result=null;state.draft=null;state.review=null;state.renderJob=null;state.mediaSelected=new Set();state.scenePlan=[];sessionStorage.removeItem('healthDraftId');$('result').classList.add('hidden');$('reviewPanel').classList.add('hidden');$('renderVideo').classList.add('hidden');$('renderVideo').removeAttribute('src');$('draftBtn').textContent='TẠO DRAFT & REVIEW';window.scrollTo({top:0,behavior:'smooth'})};
-    try{const c=await fetch('/api/public-config',{cache:'no-store'}).then(r=>r.json());state.publicConfig=c;if(c.clerkEnabled){try{state.clerk=await ensureClerk(c)}catch(e){if(!apiKey())throw e}if(!state.clerk?.isSignedIn&&!apiKey())throw Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')}const [s,a]=await Promise.all([api('/api/health-studio/status'),api('/api/account/me')]);await Promise.all([loadVoiceStudio(),loadSettings(),loadUploadedMedia(),loadRenderHistory()]);$('runtimeBadge').textContent=`ONLINE • Multi-Content Studio ${s.version} • Copyright Safe ${s.copyrightSafeMode?'ON':'OFF'}`;$('runtimeBadge').className='badge gate-pass';drawAccount(a,c);const saved=sessionStorage.getItem('healthDraftId');if(saved){try{state.draft={id:saved};await openReview(saved)}catch{sessionStorage.removeItem('healthDraftId')}}$('signOut').onclick=async()=>{try{const clerk=state.clerk||await ensureClerk(c);await clerk.signOut();sessionStorage.removeItem('renderApiKey');location.href='/'}catch(e){alert('Không thể đăng xuất: '+e.message)}}}
+    try{const c=await fetch('/api/public-config',{cache:'no-store'}).then(r=>r.json());state.publicConfig=c;if(c.clerkEnabled){try{state.clerk=await ensureClerk(c)}catch(e){if(!apiKey())throw e}if(!state.clerk?.isSignedIn&&!apiKey())throw Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')}const [s,a]=await Promise.all([api('/api/health-studio/status'),api('/api/account/me')]);await Promise.all([loadVoiceStudio(),loadSettings(),loadUploadedMedia(),loadRenderHistory(),loadContentStudioV2()]);$('runtimeBadge').textContent=`ONLINE • Multi-Content Studio ${s.version} • Copyright Safe ${s.copyrightSafeMode?'ON':'OFF'}`;$('runtimeBadge').className='badge gate-pass';drawAccount(a,c);const saved=sessionStorage.getItem('healthDraftId');if(saved){try{state.draft={id:saved};await openReview(saved)}catch{sessionStorage.removeItem('healthDraftId')}}$('signOut').onclick=async()=>{try{const clerk=state.clerk||await ensureClerk(c);await clerk.signOut();sessionStorage.removeItem('renderApiKey');location.href='/'}catch(e){alert('Không thể đăng xuất: '+e.message)}}}
   catch(e){$('runtimeBadge').textContent='CẦN XÁC THỰC';$('runtimeBadge').className='badge gate-review';$('accountName').textContent='Chưa xác thực';$('accountEmail').textContent='Vui lòng đăng nhập lại để tiếp tục.';$('accountAvatar').textContent='!';$('accountCard').classList.remove('loading');$('authStatus').textContent='Không truy cập được API: '+e.message}
  }
  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('configPanel')?.classList.contains('hidden'))closeConfigPanel()});

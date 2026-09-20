@@ -65,7 +65,8 @@
     "smoke:content-studio-v2-phase3": "tsx scripts/smoke-content-studio-v2-phase3.ts",
     "smoke:content-studio-landscape": "node scripts/smoke-content-studio-landscape.mjs",
     "smoke:content-studio-static": "node scripts/smoke-content-studio-static.mjs",
-    "smoke:content-studio-v2-phase4": "tsx scripts/smoke-content-studio-v2-phase4.ts"
+    "smoke:content-studio-v2-phase4": "tsx scripts/smoke-content-studio-v2-phase4.ts",
+    "smoke:content-studio-v2-dashboard": "tsx scripts/smoke-content-studio-v2-dashboard.ts"
   },
   "dependencies": {
     "@clerk/express": "^2.1.66",

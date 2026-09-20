@@ -63,3 +63,53 @@ export async function runContentStudioDashboardAction(input:{
 
   return{action,performed,requiresHumanReview,message,detail,dashboard:contentStudioProjectDashboard(input.ownerId,input.projectId)};
 }
+
+
+export interface DashboardAutoAdvanceResult{
+  performedSteps:number;
+  stoppedOn:string;
+  requiresHumanReview:boolean;
+  trace:Array<{action:string;performed:boolean;message:string}>;
+  dashboard:ReturnType<typeof contentStudioProjectDashboard>;
+}
+
+export async function runContentStudioUntilGate(input:{
+  ownerId:string;
+  projectId:string;
+  skipExternalPrepare?:boolean;
+  maxSteps?:number;
+}):Promise<DashboardAutoAdvanceResult>{
+  const maxSteps=Math.max(1,Math.min(12,Number(input.maxSteps||8)));
+  const trace:Array<{action:string;performed:boolean;message:string}>=[];
+  let performedSteps=0;
+  let requiresHumanReview=false;
+  for(let i=0;i<maxSteps;i++){
+    const before=contentStudioProjectDashboard(input.ownerId,input.projectId);
+    const action=before.nextAction.id;
+    if(['medical-review','copyright-review','final-review','research-review','fix-research'].includes(action)){
+      requiresHumanReview=true;
+      trace.push({action,performed:false,message:'Dừng tại human review/research gate.'});
+      break;
+    }
+    if(action==='ready'||action==='render-running'){
+      trace.push({action,performed:false,message:action==='ready'?'Pipeline đã qua các gate hiện có.':'Render đang chạy; chờ worker hoàn tất.'});
+      break;
+    }
+    const result=await runContentStudioDashboardAction({
+      ownerId:input.ownerId,
+      projectId:input.projectId,
+      skipExternalPrepare:input.skipExternalPrepare,
+    });
+    trace.push({action:result.action,performed:result.performed,message:result.message});
+    if(result.performed)performedSteps++;
+    if(!result.performed||result.requiresHumanReview)break;
+  }
+  const dashboard=contentStudioProjectDashboard(input.ownerId,input.projectId);
+  return{
+    performedSteps,
+    stoppedOn:dashboard.nextAction.id,
+    requiresHumanReview:requiresHumanReview||dashboard.nextAction.hardBlocked||['medical-review','copyright-review','final-review','research-review','fix-research'].includes(dashboard.nextAction.id),
+    trace,
+    dashboard,
+  };
+}

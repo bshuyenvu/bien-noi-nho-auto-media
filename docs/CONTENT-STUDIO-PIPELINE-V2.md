@@ -99,3 +99,93 @@ npm run smoke:content-studio-v2
 3. Tạo Character & Style Bible theo series.
 4. Nối voice/subtitle và FFmpeg composer.
 5. Bổ sung dashboard Project -> Storyboard -> Render -> Review -> Export.
+
+
+## Phase 2 — Runtime orchestration
+
+Phase 2 biến project plan thành runtime manifest có thể chuyển tiếp sang provider/render worker mà không tự động bỏ qua các review gate.
+
+### Runtime artifacts
+
+Mỗi project sau khi `prepare` có:
+
+- **Research Snapshot**: nguồn official/academic, authority, topic entity match và trạng thái `PASS / REVIEW / BLOCK`.
+- **Character Bible**: continuity key theo tập, anchor nhận diện nhân vật hư cấu và continuity rules.
+- **Style Bible**: visual direction, ánh sáng, camera, typography và negative prompt chống logo/watermark/copied artwork.
+- **Scene Prompt Pack**: image prompt + video prompt cho từng scene, gắn story beat và yêu cầu evidence.
+- **ShotCraft Plan**: motion recipe, semantic timing, transition và QA.
+- **Voice Plan**: auto-cast giọng, voice style và TTS → SRT.
+- **Compose Plan**: output 16:9 / 9:16 / 1:1 / podcast / comic / thumbnail theo template.
+- **Open Media fallback**: chỉ giữ candidate có quyền sử dụng đã xác minh; không auto-use external media.
+
+### Health Story gate
+
+```
+Project
+  -> Prepare
+  -> Research PASS
+  -> Medical Review ACCEPTED
+  -> Generation Handoff
+  -> Image/Video/TTS/Compose (phase tiếp theo)
+  -> Copyright Review
+  -> Human Final Review
+  -> Publish
+```
+
+`Research REVIEW` hoặc `BLOCK` không mở Generation Gate. Medical Review không thể được ACCEPTED khi Research chưa PASS.
+
+### API Phase 2
+
+- `GET /api/content-studio-v2/projects/:id/runtime`
+- `POST /api/content-studio-v2/projects/:id/prepare`
+- `POST /api/content-studio-v2/projects/:id/medical-review`
+- `GET /api/content-studio-v2/projects/:id/generation-handoff`
+
+Medical Review payload:
+
+```json
+{
+  "status": "accepted",
+  "note": "Đã đối chiếu nội dung và Evidence Pack."
+}
+```
+
+### Generation handoff
+
+Generation handoff **không tự tạo hoặc publish nội dung**. Nó là hợp đồng dữ liệu giữa orchestration layer và media workers, gồm:
+
+- prompt nguyên bản cho từng scene;
+- continuity key + Character/Style Bible;
+- ShotCraft plan;
+- quyền media fallback đã xác minh;
+- voice/subtitle plan;
+- output profiles.
+
+Media strategy mặc định:
+
+```
+generated-original
+  -> rights-verified-open-media
+  -> original visual card
+```
+
+Không có đường tự động dùng media không rõ bản quyền.
+
+### Kiểm tra Phase 2
+
+```bash
+npm run typecheck
+npm run build
+npm run smoke:content-studio-v2
+npm run smoke:content-studio-v2-phase2
+```
+
+### Phase 3 dự kiến
+
+1. Provider router cho image generation với provider capability contract.
+2. Keyframe generation + provenance record cho từng scene.
+3. Image-to-video worker giữ continuity key.
+4. TTS/SRT worker theo Voice Plan.
+5. FFmpeg multi-output composer.
+6. Artifact manifest + copyright review sau render.
+7. Project dashboard hiển thị trạng thái từng stage.

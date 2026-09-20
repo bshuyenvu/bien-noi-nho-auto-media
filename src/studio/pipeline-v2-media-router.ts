@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir } from 'node:fs/promises';
+import { mkdir,readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { all,db,run } from '../storage/db.js';
 import { downloadRemoteImage,downloadRemoteVideo } from '../media/download.js';
 import { runFfmpeg } from '../video/ffmpeg.js';
 import { createSceneVisualCard } from '../video/scene-card.js';
 import { buildGenerationHandoff } from './pipeline-v2-runtime.js';
+import { recordStudioArtifact } from './pipeline-v2-generation.js';
 import { getPipelineProject } from './pipeline-v2.js';
 
 export type SceneMediaKind='image'|'video';
@@ -89,13 +90,19 @@ async function remoteCall(job:SceneMediaJob){
  if(!remoteEnabled())throw new Error('Remote media execution đang bị khóa.');
  const endpoint=job.kind==='image'?imageEndpoint():videoEndpoint();if(!endpoint)throw new Error('Remote media endpoint chưa cấu hình.');
  const timeout=Math.max(15000,Number(process.env.CONTENT_STUDIO_REMOTE_MEDIA_TIMEOUT_MS||120000));
- const body={version:'content-studio-media-v1',jobId:job.id,projectId:job.projectId,sceneIndex:job.sceneIndex,kind:job.kind,model:job.model,prompt:job.prompt,negativePrompt:job.negativePrompt,continuityKey:job.continuityKey,inputArtifactPath:job.inputArtifactPath||null};
+ let inputArtifactData:string|undefined;
+ if(job.kind==='video'&&job.inputArtifactPath){
+   const bytes=await readFile(job.inputArtifactPath);if(bytes.length>8*1024*1024)throw new Error('Keyframe đầu vào vượt giới hạn 8MB cho remote video provider.');
+   const ext=job.inputArtifactPath.toLowerCase().endsWith('.png')?'image/png':job.inputArtifactPath.toLowerCase().endsWith('.webp')?'image/webp':'image/jpeg';
+   inputArtifactData=`data:${ext};base64,${bytes.toString('base64')}`;
+ }
+ const body={version:'content-studio-media-v1',jobId:job.id,projectId:job.projectId,sceneIndex:job.sceneIndex,kind:job.kind,model:job.model,prompt:job.prompt,negativePrompt:job.negativePrompt,continuityKey:job.continuityKey,inputArtifactPath:job.inputArtifactPath||null,inputArtifactData:inputArtifactData||null};
  const token=providerToken(job.kind),r=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/json',...(token?{authorization:`Bearer ${token}`}:{})},body:JSON.stringify(body),signal:AbortSignal.timeout(timeout)});
  const text=await r.text();if(!r.ok)throw new Error(`Remote ${job.kind} provider HTTP ${r.status}: ${text.slice(0,500)}`);let data:any;try{data=JSON.parse(text)}catch{throw new Error('Remote media provider không trả JSON hợp lệ')}
  const assetUrl=String(data.assetUrl||data.outputUrl||'').trim();if(!assetUrl)throw new Error('Remote media provider thiếu assetUrl/outputUrl');
  const localBase=projectDir(job.projectId,job.id);await mkdir(dirname(localBase),{recursive:true});
  const outputPath=job.kind==='image'?await downloadRemoteImage(assetUrl,localBase):await downloadRemoteVideo(assetUrl,localBase);
- return{outputPath,assetUrl,model:String(data.model||job.model).slice(0,160),seed:data.seed==null?undefined:String(data.seed).slice(0,160),costMicrousd:Number.isFinite(Number(data.costUsd))?Math.max(0,Math.round(Number(data.costUsd)*1_000_000)):undefined,providerMeta:data.provenance&&typeof data.provenance==='object'?data.provenance:{}};
+ return{outputPath,assetUrl,model:String(data.model||job.model).slice(0,160),seed:data.seed==null?undefined:String(data.seed).slice(0,160),costMicrousd:Number.isFinite(Number(data.costMicrousd))?Math.max(0,Math.round(Number(data.costMicrousd))):Number.isFinite(Number(data.costUsd))?Math.max(0,Math.round(Number(data.costUsd)*1_000_000)):undefined,providerMeta:data.provenance&&typeof data.provenance==='object'?data.provenance:{}};
 }
 
 async function localImage(job:SceneMediaJob){
@@ -112,7 +119,9 @@ export async function runSceneMediaJob(ownerId:string,id:string){
    const result=job.providerId==='local-original-card'?await localImage(job):await remoteCall(job);
    job.status='ready';job.outputPath=result.outputPath;job.remoteAssetUrl='assetUrl'in result?result.assetUrl:undefined;job.model=result.model;job.seed=result.seed;job.costMicrousd='costMicrousd'in result?result.costMicrousd:undefined;
    job.provenance={schema:'content-studio.scene-media.v1',rights:'generated',projectId:job.projectId,sceneIndex:job.sceneIndex,kind:job.kind,providerId:job.providerId,model:job.model,seed:job.seed||null,prompt:job.prompt,negativePrompt:job.negativePrompt||null,continuityKey:job.continuityKey,inputArtifactPath:job.inputArtifactPath||null,outputPath:job.outputPath,remoteAssetUrl:job.remoteAssetUrl||null,costMicrousd:job.costMicrousd??null,providerMeta:result.providerMeta,createdAt:new Date().toISOString()};
-   return save(job);
+   const saved=save(job);
+   if(saved.outputPath)recordStudioArtifact({projectId:saved.projectId,ownerId:saved.ownerId,outputId:`scene-${saved.sceneIndex}-${saved.kind}`,kind:saved.kind,path:saved.outputPath,generator:`scene-media:${saved.providerId}`,metadata:{sceneIndex:saved.sceneIndex,providerId:saved.providerId,model:saved.model,seed:saved.seed||null,costMicrousd:saved.costMicrousd??null,continuityKey:saved.continuityKey,provenance:saved.provenance}});
+   return saved;
  }catch(e){job.status='failed';job.error=e instanceof Error?e.message:String(e);save(job);throw e}
 }
 

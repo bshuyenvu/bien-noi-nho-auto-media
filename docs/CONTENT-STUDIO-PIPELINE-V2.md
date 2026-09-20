@@ -537,3 +537,58 @@ npm run build
 npm run smoke:content-studio-v2-dashboard
 npm run smoke:ui
 ```
+
+
+## Phase 5B — State-checked Dashboard Actions
+
+Phase 5B biến dashboard từ read-only thành bảng điều khiển có thao tác **giới hạn và có kiểm tra trạng thái lại ở server**.
+
+### Action được phép từ dashboard
+
+- `prepare`: chạy Prepare / Research Runtime.
+- `generate-keyframes`: chỉ tạo job keyframe bằng `local-original-card` cho scene còn thiếu.
+- `run-scene-media`: chỉ chạy local scene-media job đang queued.
+- `retry-scene-media`: chỉ retry local scene-media job failed.
+- `render`: enqueue output generation bằng generated media READY hiện có.
+
+### Action không tự động hóa
+
+Dashboard không tự thực hiện:
+
+- Research Review;
+- Medical Review;
+- remote image/video provider execution;
+- retry remote scene media;
+- Copyright Review;
+- Human Final Review;
+- publish.
+
+Các bước này tiếp tục hiển thị như trạng thái cần người duyệt hoặc workflow riêng.
+
+### Stale-state guard
+
+Endpoint:
+
+```
+POST /api/content-studio-v2/projects/:id/dashboard-action
+```
+
+Payload:
+
+```json
+{"action":"generate-keyframes"}
+```
+
+Server tải lại dashboard trước khi mutation. Nếu `nextAction` đã thay đổi so với action gửi lên, request bị từ chối và UI phải refresh. Điều này ngăn thao tác từ snapshot cũ.
+
+### UI V3.5.1
+
+Panel Content Studio V2 có nút **Thực hiện bước tiếp theo**. Nút chỉ active cho action local/render được phép. Ở Medical/Copyright/Final Review hoặc khi render đang chạy, nút bị khóa và chỉ hiển thị trạng thái.
+
+### Safety
+
+- Không có auto-approve.
+- Không tự bật remote provider.
+- Không tự publish.
+- Render vẫn yêu cầu Generation Gate.
+- State được kiểm lại ở server ngay trước mutation.

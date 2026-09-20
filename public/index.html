@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Multi-Content Studio • Nội dung, giọng đọc và video AI</title>
-  <link rel="stylesheet" href="/health-studio.css?v=3.4.2">
+  <link rel="stylesheet" href="/health-studio.css?v=3.5.0">
 </head>
 <body>
 <div class="wrap">
   <header class="hero">
-    <div class="eyebrow">🎬 MULTI-CONTENT STUDIO V3.4.3</div>
+    <div class="eyebrow">🎬 MULTI-CONTENT STUDIO V3.5.0</div>
     <h1>Studio nội dung AI đa chủ đề, có kiểm chứng và an toàn bản quyền</h1>
     <p>Từ một chủ đề, Studio có thể nghiên cứu nguồn, viết kịch bản, chọn media có quyền sử dụng, chọn giọng đọc, tạo audio theo SRT và lồng tiếng video trước khi Review → Render.</p>
     <div class="hero-actions"><span id="runtimeBadge" class="badge muted">Đang kiểm tra hệ thống…</span></div>
@@ -22,8 +22,9 @@
     <button data-task-target="voiceStudioPanel">③ Voice</button>
     <button data-task-target="reviewPanel">④ Review</button>
     <button data-task-target="renderArea">⑤ Render</button>
-    <button data-task-target="renderHistoryPanel">⑥ Lịch sử</button>
-    <button data-task-target="configPanel">⑦ Cấu hình</button>
+    <button data-task-target="contentStudioV2Panel">⑥ Pipeline V2</button>
+    <button data-task-target="renderHistoryPanel">⑦ Lịch sử</button>
+    <button data-task-target="configPanel">⑧ Cấu hình</button>
   </nav>
 
   <section class="gate-strip" aria-label="Safety gates">
@@ -139,6 +140,24 @@ Nội dung câu đầu..."></textarea><div class="actions"><button id="analyzeSr
     </div>
   </section>
 
+  <section id="contentStudioV2Panel" class="panel content-studio-v2-panel">
+    <div class="section-head content-studio-v2-head">
+      <div><div class="step">CONTENT STUDIO V2 • PROJECT PIPELINE</div><h2>Project → Gate → Scene Media → Render → Artifact</h2></div>
+      <div class="actions"><span id="contentStudioV2Badge" class="badge">READ-ONLY</span><button id="refreshContentStudioV2Btn" class="btn ghost small">LÀM MỚI</button></div>
+    </div>
+    <p class="muted">Bảng điều khiển tổng hợp trạng thái pipeline. Phase 5A chỉ đọc trạng thái; không tự chạy hoặc bỏ qua bất kỳ review gate nào.</p>
+    <div class="content-studio-v2-toolbar"><label>Project<select id="contentStudioProjectSelect"><option value="">Đang tải project…</option></select></label><div id="contentStudioV2Status" class="status-line muted">Đang tải Content Studio V2…</div></div>
+    <div id="contentStudioV2Empty" class="content-studio-v2-empty hidden">Chưa có project Content Studio V2.</div>
+    <div id="contentStudioV2Body" class="hidden">
+      <div id="contentStudioNextAction" class="pipeline-next-action"></div>
+      <div id="contentStudioGateGrid" class="pipeline-gate-grid"></div>
+      <div class="pipeline-columns">
+        <section class="pipeline-block"><div class="meta-label">SCENE MEDIA</div><div id="contentStudioSceneSummary" class="pipeline-summary"></div><div id="contentStudioSceneList" class="pipeline-scene-list"></div></section>
+        <section class="pipeline-block"><div class="meta-label">OUTPUT / ARTIFACT</div><div id="contentStudioOutputSummary" class="pipeline-summary"></div><div id="contentStudioOutputList" class="pipeline-output-list"></div><div id="contentStudioArtifactSummary" class="pipeline-artifact-summary"></div></section>
+      </div>
+    </div>
+  </section>
+
   <section id="renderHistoryPanel" class="panel render-history-panel">
     <div class="section-head history-head"><div><div class="step">LỊCH SỬ RENDER</div><h2>Xem lại video đã tạo</h2></div><button id="refreshRenderHistoryBtn" class="btn ghost small">LÀM MỚI</button></div>
     <p class="muted">Hiển thị các render gần đây của đúng tài khoản đang đăng nhập. Có thể xem lại hoặc xóa các render đã hoàn tất/lỗi.</p>
@@ -146,8 +165,8 @@ Nội dung câu đầu..."></textarea><div class="actions"><button id="analyzeSr
     <div id="renderHistoryList" class="render-history-list"></div>
   </section>
 
-  <footer>Multi-Content Studio V3.4.3 • Open-source voices • Personal Voice Clone • Rights-safe • Review → Render</footer>
+  <footer>Multi-Content Studio V3.5.0 • Open-source voices • Personal Voice Clone • Rights-safe • Review → Render</footer>
 </div>
-<script src="/health-studio.js?v=3.4.3"></script>
+<script src="/health-studio.js?v=3.5.0"></script>
 </body>
 </html>

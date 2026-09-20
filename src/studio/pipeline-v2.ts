@@ -87,7 +87,7 @@ export interface PipelineProject {
   script: string;
   seriesName?: string;
   episode?: number;
-  status: 'planned';
+  status: 'planned' | 'prepared' | 'blocked' | 'review_required' | 'generation_ready';
   plan: PipelinePlan;
   createdAt: string;
   updatedAt: string;
@@ -374,7 +374,7 @@ type ProjectRow = {
   script: string;
   series_name: string | null;
   episode: number | null;
-  status: 'planned';
+  status: PipelineProject['status'];
   plan_json: string;
   created_at: string;
   updated_at: string;

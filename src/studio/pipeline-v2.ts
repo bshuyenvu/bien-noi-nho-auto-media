@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { all, db, run } from '../storage/db.js';
 
 export type PipelineTemplateId =
@@ -179,7 +179,7 @@ const TEMPLATES: readonly PipelineTemplate[] = [
       { id: 'thumbnail', kind: 'thumbnail', label: 'Episode cover', aspectRatio: '16:9', width: 1280, height: 720 },
     ],
   },
-] as const;
+];
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS content_studio_projects (
@@ -334,7 +334,7 @@ export function createPipelineProject(input: CreatePipelineProjectInput): Pipeli
   const plan = buildPipelinePlan(input);
   const now = new Date().toISOString();
   const project: PipelineProject = {
-    id: crypto.randomUUID(),
+    id: randomUUID(),
     ownerId,
     templateId: input.templateId,
     topic: plan.topic,

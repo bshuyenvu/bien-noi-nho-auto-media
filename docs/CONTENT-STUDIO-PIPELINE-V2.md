@@ -473,3 +473,67 @@ Docker smoke xác minh:
 - render job payload chứa đúng generated media path và scene index.
 
 Nhờ vậy có thể retry/tạo lại riêng một scene rồi render lại project mà không cần thay toàn bộ media.
+
+
+## Phase 5A — Project Pipeline Dashboard
+
+Phase 5A bổ sung dashboard **read-only** để nhìn toàn bộ trạng thái một project mà không phải ghép thủ công nhiều API.
+
+### Snapshot backend
+
+`GET /api/content-studio-v2/projects/:id/dashboard` trả:
+
+- Project/template/topic/series.
+- Research, Medical, Generation, Copyright và Final Review gates.
+- Scene media theo từng scene: image/video job, provider, model, status, attempts.
+- Generation batch mới nhất và từng output.
+- Artifact registry theo loại.
+- Review events gần nhất.
+- `nextAction` deterministic dựa trên trạng thái workflow.
+
+`GET /api/content-studio-v2/dashboard?limit=20` trả danh sách project card rút gọn.
+
+### Next Action
+
+Các trạng thái có thể gồm:
+
+```
+prepare
+fix-research
+research-review
+medical-review
+retry-scene-media
+run-scene-media
+generate-keyframes
+render
+render-running
+retry-render
+copyright-review
+final-review
+ready
+```
+
+`nextAction` chỉ là chỉ dẫn workflow; Phase 5A **không tự chạy** hành động và không bỏ qua gate.
+
+### UI V3.5
+
+Panel **Content Studio V2 • Project Pipeline** được thêm vào workspace chính:
+
+- chọn project;
+- overall status;
+- next action;
+- 5 gate cards;
+- scene media coverage;
+- output/render status;
+- artifact counts.
+
+Panel luôn hiển thị như một tác vụ chính, tương thích desktop/mobile, và giữ toàn bộ UI cũ.
+
+### Verify
+
+```bash
+npm run typecheck
+npm run build
+npm run smoke:content-studio-v2-dashboard
+npm run smoke:ui
+```

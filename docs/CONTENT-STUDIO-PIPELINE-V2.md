@@ -537,3 +537,63 @@ npm run build
 npm run smoke:content-studio-v2-dashboard
 npm run smoke:ui
 ```
+
+
+## Phase 5B — Actionable Dashboard
+
+Phase 5B biến dashboard read-only thành **operator-controlled workflow**.
+
+### Nút kỹ thuật có thể chạy
+
+`POST /api/content-studio-v2/projects/:id/dashboard/action` chỉ thực hiện action hiện tại do backend tính toán:
+
+- `prepare`
+- `generate-keyframes`
+- `run-scene-media`
+- `retry-scene-media`
+- `render`
+- `retry-render`
+- `render-running` chỉ refresh trạng thái
+
+Client không truyền tên action đích nên không thể nhảy qua gate.
+
+### Human review vẫn tách riêng
+
+Dashboard không tự ACCEPT:
+
+- Medical Review
+- Research/Evidence Review
+- Copyright Review
+- Human Final Review
+
+Copyright/Final có endpoint riêng:
+
+```
+POST /api/content-studio-v2/projects/:id/release-review/copyright
+POST /api/content-studio-v2/projects/:id/release-review/final
+```
+
+Payload:
+
+```json
+{
+  "status": "accepted",
+  "note": "Đã kiểm tra artifact và provenance."
+}
+```
+
+`needs_fix` bắt buộc có ghi chú. Final chỉ ACCEPT sau khi Copyright đã ACCEPT. Copyright/Final không thể ACCEPT nếu project chưa có artifact.
+
+### UI
+
+Project Pipeline panel có **CHẠY BƯỚC TIẾP**, trạng thái thao tác, và form Human Review khi workflow tới Medical/Copyright/Final. Quyết định review được ghi audit trail.
+
+### Verify
+
+```bash
+npm run typecheck
+npm run build
+npm run smoke:content-studio-v2-dashboard
+npm run smoke:content-studio-v2-actions
+npm run smoke:ui
+```

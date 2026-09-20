@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { rm,stat } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 const dbPath=`/tmp/vietnewsflow-content-studio-v2-phase4-${process.pid}.sqlite`;process.env.DB_PATH=dbPath;process.env.RENDER_QUEUE_PAUSED='true';
 const core=await import('../src/studio/pipeline-v2.js');
 const rt=await import('../src/studio/pipeline-v2-runtime.js');
@@ -11,9 +11,9 @@ const project=core.createPipelineProject({ownerId,templateId:'podcast-story',top
 await rt.preparePipelineProject(ownerId,project.id,{skipExternal:true});
 const caps=media.sceneMediaProviderCapabilities();assert.equal(caps.find(x=>x.id==='local-original-card')?.status,'ready');
 const jobs=media.createSceneMediaJobs({ownerId,projectId:project.id,kind:'image',providerId:'local-original-card'});assert.ok(jobs.length>=1);
-const first=await media.runSceneMediaJob(ownerId,jobs[0].id);assert.equal(first.status,'ready');assert.ok(first.outputPath);assert.ok((await stat(first.outputPath)).size>3000);assert.equal(first.provenance?.rights,'generated');
+assert.equal(jobs[0].status,'queued');assert.equal(jobs[0].providerId,'local-original-card');assert.match(jobs[0].prompt,/original fictional scene/i);
 const all=media.listSceneMediaJobs(ownerId,project.id);assert.equal(all[0].sceneIndex,jobs[0].sceneIndex);assert.equal(all[0].providerId,'local-original-card');
-const artifacts=generation.listStudioArtifacts(ownerId,project.id);assert.ok(artifacts.some(x=>x.outputId===`scene-${first.sceneIndex}-image`&&x.path===first.outputPath));
+assert.equal(generation.listStudioArtifacts(ownerId,project.id).length,0,'queued job must not register artifact before execution');
 assert.throws(()=>media.createSceneMediaJobs({ownerId,projectId:project.id,kind:'video'}),/Remote video provider chưa READY/);
-console.log(JSON.stringify({ok:true,projectId:project.id,job:first.id,output:first.outputPath,provider:first.providerId,caps},null,2));
+console.log(JSON.stringify({ok:true,projectId:project.id,job:jobs[0].id,provider:jobs[0].providerId,caps},null,2));
 db.close();for(const suffix of['','-shm','-wal'])await rm(`${dbPath}${suffix}`,{force:true});

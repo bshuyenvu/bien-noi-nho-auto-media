@@ -276,3 +276,48 @@ npm run build
 npm run smoke:content-studio-v2-phase3
 npm run smoke:content-studio-landscape
 ```
+
+
+## Phase 3C — Comic, cover & artifact registry
+
+Phase 3C hoàn thiện bộ output mặc định của Content Studio mà không cần phụ thuộc provider ảnh bên ngoài.
+
+### Output mới được bật
+
+- **Comic**: panel PNG 1080×1080 theo từng scene + `comic-manifest.json`.
+- **Thumbnail/Cover**: PNG 1280×720.
+- Cả hai được tạo bằng renderer deterministic, nội dung nguyên bản và đánh dấu `rights=generated`.
+
+### Artifact registry
+
+Mọi artifact sau khi sẵn sàng được ghi vào `content_studio_artifacts` với:
+
+- project / owner / output;
+- loại artifact;
+- path;
+- quyền sử dụng;
+- generator;
+- metadata;
+- thời điểm tạo.
+
+API:
+
+```
+GET /api/content-studio-v2/projects/:id/artifacts
+```
+
+### Health Story package sau Phase 3C
+
+```
+Video 16:9  -> FFmpeg 1920x1080
+Short 9:16  -> FFmpeg 1080x1920
+Podcast     -> MP3
+Comic       -> 1080x1080 PNG panels + manifest
+Thumbnail   -> 1280x720 PNG
+```
+
+Research/Medical Review vẫn phải mở Generation Gate trước khi tạo bất kỳ output nào. Copyright Review và Human Final Review vẫn khóa trước publish.
+
+### Acceptance
+
+Comic/cover được render thật trong Docker, kiểm tra file PNG và manifest có kích thước thực. Remote AI image/video provider vẫn chưa được tự động kích hoạt nếu chưa có provenance contract.

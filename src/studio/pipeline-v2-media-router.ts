@@ -114,7 +114,7 @@ async function localImage(job:SceneMediaJob){
 
 export async function runSceneMediaJob(ownerId:string,id:string){
  const existing=getSceneMediaJob(ownerId,id);if(!existing)throw new Error('Scene media job not found');if(existing.status==='ready')return existing;if(existing.attempts>=existing.maxAttempts)throw new Error('Scene media job đã hết số lần thử; dùng retry để mở lại.');
- const job={...existing,status:'running' as const,attempts:existing.attempts+1,error:undefined};save(job);
+ const job:SceneMediaJob={...existing,status:'running',attempts:existing.attempts+1,error:undefined};save(job);
  try{
    const result=job.providerId==='local-original-card'?await localImage(job):await remoteCall(job);
    job.status='ready';job.outputPath=result.outputPath;job.remoteAssetUrl='assetUrl'in result?result.assetUrl:undefined;job.model=result.model;job.seed=result.seed;job.costMicrousd='costMicrousd'in result?result.costMicrousd:undefined;

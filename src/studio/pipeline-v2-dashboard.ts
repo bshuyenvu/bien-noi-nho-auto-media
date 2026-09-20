@@ -1,7 +1,9 @@
 import { getPipelineProject,listPipelineProjects } from './pipeline-v2.js';
-import { getPipelineRuntime,listPipelineReviewEvents } from './pipeline-v2-runtime.js';
-import { listGenerationBatches,listStudioArtifacts } from './pipeline-v2-generation.js';
-import { listSceneMediaJobs,type SceneMediaJob } from './pipeline-v2-media-router.js';
+import { getPipelineRuntime,listPipelineReviewEvents,preparePipelineProject } from './pipeline-v2-runtime.js';
+import { enqueuePipelineGeneration,listGenerationBatches,listStudioArtifacts } from './pipeline-v2-generation.js';
+import { createSceneMediaJobs,listSceneMediaJobs,readySceneMediaForRender,retrySceneMediaJob,runSceneMediaJob,type SceneMediaJob } from './pipeline-v2-media-router.js';
+
+export type ContentStudioDashboardAction='prepare'|'generate-keyframes'|'run-scene-media'|'retry-scene-media'|'render';
 
 export type ContentStudioNextAction =
   | 'prepare'
@@ -226,4 +228,78 @@ export function listContentStudioDashboardProjects(ownerId:string,limit=20){
       artifactCount:snapshot.artifacts.total,
     };
   });
+}
+
+
+function assertDashboardActionAllowed(current:ContentStudioNextAction,requested:ContentStudioDashboardAction){
+  if(current!==requested)throw new Error(`Workflow đã thay đổi: action hiện tại là ${current}, không phải ${requested}. Hãy làm mới dashboard.`);
+}
+
+export async function runContentStudioDashboardAction(input:{
+  ownerId:string;
+  projectId:string;
+  action:ContentStudioDashboardAction;
+}){
+  const before=contentStudioProjectDashboard(input.ownerId,input.projectId);
+  assertDashboardActionAllowed(before.nextAction.id,input.action);
+  let result:Record<string,unknown>={};
+
+  if(input.action==='prepare'){
+    const runtime=await preparePipelineProject(input.ownerId,input.projectId);
+    result={runtimeStatus:runtime.status,currentStage:runtime.currentStage,research:runtime.research.status,generationAllowed:runtime.generationAllowed};
+  }else if(input.action==='generate-keyframes'){
+    const missing=before.scenes.items
+      .filter(scene=>scene.preferredMedia==='fallback'&&!scene.image&&!scene.video)
+      .map(scene=>scene.sceneIndex);
+    if(!missing.length)throw new Error('Không còn scene trống để tạo keyframe local.');
+    const jobs=createSceneMediaJobs({
+      ownerId:input.ownerId,
+      projectId:input.projectId,
+      kind:'image',
+      providerId:'local-original-card',
+      sceneIndices:missing,
+    });
+    result={created:jobs.length,jobIds:jobs.map(job=>job.id),providerId:'local-original-card'};
+  }else if(input.action==='run-scene-media'){
+    const queued=listSceneMediaJobs(input.ownerId,input.projectId)
+      .filter(job=>job.status==='queued'&&job.providerId==='local-original-card')
+      .slice(0,12);
+    if(!queued.length)throw new Error('Không có local scene-media job đang chờ. Remote job phải được chạy bằng workflow có xác nhận riêng.');
+    const completed=[] as Array<{id:string;status:string;sceneIndex:number;outputPath?:string;error?:string}>;
+    for(const job of queued){
+      try{
+        const next=await runSceneMediaJob(input.ownerId,job.id);
+        completed.push({id:next.id,status:next.status,sceneIndex:next.sceneIndex,outputPath:next.outputPath});
+      }catch(error){
+        completed.push({id:job.id,status:'failed',sceneIndex:job.sceneIndex,error:error instanceof Error?error.message:String(error)});
+      }
+    }
+    result={processed:completed.length,jobs:completed};
+  }else if(input.action==='retry-scene-media'){
+    const failed=listSceneMediaJobs(input.ownerId,input.projectId)
+      .filter(job=>job.status==='failed'&&job.providerId==='local-original-card')
+      .slice(0,12);
+    if(!failed.length)throw new Error('Không có local scene-media job failed để retry. Remote job phải retry bằng workflow có xác nhận riêng.');
+    const retried=[] as Array<{id:string;status:string;sceneIndex:number;outputPath?:string;error?:string}>;
+    for(const job of failed){
+      try{
+        const next=await retrySceneMediaJob(input.ownerId,job.id);
+        retried.push({id:next.id,status:next.status,sceneIndex:next.sceneIndex,outputPath:next.outputPath});
+      }catch(error){
+        retried.push({id:job.id,status:'failed',sceneIndex:job.sceneIndex,error:error instanceof Error?error.message:String(error)});
+      }
+    }
+    result={processed:retried.length,jobs:retried};
+  }else if(input.action==='render'){
+    const localMedia=readySceneMediaForRender(input.ownerId,input.projectId);
+    const batch=await enqueuePipelineGeneration({ownerId:input.ownerId,projectId:input.projectId,localMedia});
+    result={batchId:batch.id,status:batch.status,primaryOutputId:batch.primaryOutputId,outputs:batch.outputs.map(output=>({outputId:output.outputId,status:output.status,renderJobId:output.renderJobId}))};
+  }
+
+  return{
+    ok:true,
+    action:input.action,
+    result,
+    dashboard:contentStudioProjectDashboard(input.ownerId,input.projectId),
+  };
 }

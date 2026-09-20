@@ -217,7 +217,7 @@ function sentenceChunks(script: string, maxScenes: number): string[] {
 
   if (!sentences.length) return [];
 
-  const desired = Math.min(maxScenes, Math.max(1, Math.ceil(normalized.length / 360)));
+  const desired = Math.min(maxScenes, Math.max(Math.min(3, sentences.length), Math.ceil(normalized.length / 360)));
   const chunks: string[] = [];
   let bucket: string[] = [];
   let bucketLength = 0;

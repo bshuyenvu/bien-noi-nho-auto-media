@@ -287,8 +287,15 @@
       ?`/api/content-studio-v2/projects/${encodeURIComponent(projectId)}/medical-review`
       :`/api/content-studio-v2/projects/${encodeURIComponent(projectId)}/release-review/${encodeURIComponent(gate)}`;
     await api(url,{method:'POST',body:JSON.stringify({status:statusValue,note:note||undefined})});
-    if(status)status.textContent=`✓ Đã ghi ${String(gate).toUpperCase()} Review: ${String(statusValue).toUpperCase()}.`;
-    await loadContentStudioDashboard(projectId);
+    if(statusValue==='accepted'){
+      if(status)status.textContent=`✓ Đã ACCEPT ${String(gate).toUpperCase()} Review • đang chạy tiếp đến gate kế tiếp…`;
+      const x=await api(`/api/content-studio-v2/projects/${encodeURIComponent(projectId)}/dashboard/auto-advance`,{method:'POST',body:JSON.stringify({skipExternalPrepare:false,maxSteps:8})});
+      renderContentStudioDashboard(x.dashboard);
+      if(status)status.textContent=`✓ ${String(gate).toUpperCase()} ACCEPTED • chạy tiếp ${x.performedSteps||0} bước • dừng tại ${x.stoppedOn||x.dashboard?.nextAction?.id||'—'}.`;
+    }else{
+      if(status)status.textContent=`✓ Đã ghi ${String(gate).toUpperCase()} Review: ${String(statusValue).toUpperCase()}.`;
+      await loadContentStudioDashboard(projectId);
+    }
   }catch(e){if(status)status.textContent='⚠ '+e.message;alert(e.message)}
  }
  async function loadContentStudioV2(){

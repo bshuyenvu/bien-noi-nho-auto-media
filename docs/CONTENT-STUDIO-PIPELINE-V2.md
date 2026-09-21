@@ -888,3 +888,79 @@ npm run smoke:content-studio-v2-wizard
 npm run smoke:content-studio-v2-user-evidence
 npm run smoke:ui
 ```
+
+
+## Phase 7B — Topic → Research → Script Autodraft
+
+Project Creator chuyển sang chế độ **topic-first**.
+
+### Trải nghiệm mặc định
+
+Người dùng chỉ cần nhập:
+
+- Template;
+- Chủ đề;
+- Series / số tập nếu cần.
+
+Sau đó có hai cách tương đương:
+
+1. Bấm **AI TẠO KỊCH BẢN + TÌM NGUỒN** để xem trước.
+2. Để trống kịch bản và bấm **TẠO PROJECT & BẮT ĐẦU**; wizard tự chạy Auto Draft trước khi tạo project.
+
+### Health / medical topic
+
+Pipeline:
+
+```
+Topic
+→ medical topic detection
+→ official + academic research
+→ Evidence Pack
+→ original Vietnamese script
+→ source URLs
+→ create project
+→ Research Gate
+→ Medical Review
+```
+
+Yêu cầu tối thiểu cho Auto Draft y khoa:
+
+- ít nhất 2 nguồn;
+- ít nhất 1 nguồn authority cao;
+- không tự bịa số liệu/liều thuốc/chẩn đoán;
+- không sao chép nguyên văn nguồn;
+- Medical Review vẫn bắt buộc.
+
+### General topic
+
+Nội dung không y khoa dùng trusted foreign source discovery. Nếu không tìm đủ nguồn, hệ thống cảnh báo thay vì giả lập nguồn.
+
+### Endpoint
+
+```
+POST /api/content-studio-v2/wizard/autodraft
+```
+
+Payload:
+
+```json
+{
+  "templateId": "health-story",
+  "topic": "Dấu hiệu cảnh báo nhồi máu cơ tim",
+  "seriesName": "Chuyện Sức Khỏe Quanh Ta"
+}
+```
+
+Trả về:
+
+- script;
+- headline / hook;
+- source URLs;
+- source preview;
+- authority / kind;
+- warnings;
+- editor provider/mode.
+
+### CI
+
+`smoke:content-studio-v2-autodraft` dùng nguồn giả lập NHS/NHLBI/Europe PMC để kiểm toàn bộ luồng mà không phụ thuộc Internet.

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { all, db, run } from '../storage/db.js';
-import { enqueueRender, renderJobs } from '../video/job.js';
+import { enqueueRender } from '../video/job.js';
 import type { RenderMediaItem } from '../video/ffmpeg.js';
 import { isVoiceId, isVoiceStyle, type VoiceId, type VoiceStyle } from '../tts/edge.js';
 import { buildGenerationHandoff, getPipelineRuntime } from './pipeline-v2-runtime.js';
@@ -233,7 +233,10 @@ function syncBatch(batch: PipelineGenerationBatch) {
   let changed = false;
   const outputs = batch.outputs.map((output) => {
     if (!output.renderJobId) return output;
-    const job = renderJobs.find((item) => item.id === output.renderJobId);
+    const job = all<{id:string;status:string;output?:string;error?:string}>(
+      'SELECT id,status,output,error FROM render_jobs WHERE id=? LIMIT 1',
+      output.renderJobId,
+    )[0];
     if (!job) return output;
     const mapped: PipelineGenerationOutput['status'] =
       job.status === 'ready'
@@ -323,7 +326,9 @@ export async function enqueuePipelineGeneration(input: {
     return{imageIndex:index,startRatio:start,endRatio:smartCursor/smartTotal,transition:index?'soft-dip':'cut'} as const;
   });
   const jobs=new Map<string,ReturnType<typeof enqueueRender>>();
-  for(const output of selected.filter(x=>x.kind!=='comic'&&x.kind!=='thumbnail')){
+  const renderPriority=(output:typeof selected[number])=>output.kind==='podcast'?0:output.kind==='short'?1:output.aspectRatio==='9:16'?2:3;
+  const renderable=selected.filter(x=>x.kind!=='comic'&&x.kind!=='thumbnail').sort((a,b)=>renderPriority(a)-renderPriority(b));
+  for(const output of renderable){
     const renderMode=output.kind==='podcast'?'audio':output.aspectRatio==='16:9'?'landscape':'vertical';
     const job=enqueueRender({
       draftId:project.id,ownerId:input.ownerId,text:project.script,headline:project.topic,source:project.seriesName,

@@ -75,7 +75,8 @@
     "smoke:content-studio-v2-user-evidence": "tsx scripts/smoke-content-studio-v2-user-evidence.ts",
     "smoke:health-evidence-bilingual": "tsx scripts/smoke-health-evidence-bilingual.ts",
     "smoke:content-studio-v2-phase7a": "tsx scripts/smoke-content-studio-v2-phase7a.ts",
-    "smoke:content-studio-v2-autodraft": "tsx scripts/smoke-content-studio-v2-autodraft.ts"
+    "smoke:content-studio-v2-autodraft": "tsx scripts/smoke-content-studio-v2-autodraft.ts",
+    "smoke:content-studio-render-reconcile": "tsx scripts/smoke-content-studio-render-reconcile.ts"
   },
   "dependencies": {
     "@clerk/express": "^2.1.66",

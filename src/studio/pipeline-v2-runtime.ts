@@ -465,7 +465,7 @@ export async function preparePipelineProject(
   let pack: HealthResearchPack | undefined;
   if (project.plan.template.researchRequired && !options.skipExternal) {
     try {
-      pack = await researchHealthTopic(project.topic, 5);
+      pack = await researchHealthTopic(project.topic, 5, project.plan.sourceUrls);
     } catch {
       pack = undefined;
     }

@@ -119,7 +119,7 @@ app.post('/api/content-studio-v2/projects/:id/prepare',async(q,r)=>{const ownerI
 const ContentStudioMedicalReviewPayload=z.object({status:z.enum(['accepted','needs_fix']),note:z.string().max(1200).optional()});
 app.post('/api/content-studio-v2/projects/:id/medical-review',(q,r)=>{const p=ContentStudioMedicalReviewPayload.safeParse(q.body||{});if(!p.success)return r.status(400).json({error:'Dữ liệu Medical Review không hợp lệ'});try{const ownerId=accessOf(r).accountId;return r.json({runtime:setPipelineMedicalReview({ownerId,projectId:q.params.id,status:p.data.status,note:p.data.note,actor:reviewActor(r)}),reviewEvents:listPipelineReviewEvents(ownerId,q.params.id)})}catch(e){return r.status(409).json({error:e instanceof Error?e.message:String(e)})}});
 app.get('/api/content-studio-v2/projects/:id/generation-handoff',(q,r)=>{try{return r.json(buildGenerationHandoff(accessOf(r).accountId,q.params.id))}catch(e){return r.status(409).json({error:e instanceof Error?e.message:String(e)})}});
-app.get('/api/content-studio-v2/generation-capabilities',(_q,r)=>r.json({phase:'3A',capabilities:generationCapabilities()}));
+app.get('/api/content-studio-v2/generation-capabilities',(_q,r)=>r.json({phase:'7A',capabilities:generationCapabilities()}));
 app.get('/api/content-studio-v2/projects/:id/generation-batches',(q,r)=>r.json(listGenerationBatches(accessOf(r).accountId,q.params.id)));
 app.get('/api/content-studio-v2/generation-batches/:batchId',(q,r)=>{const batch=getGenerationBatch(accessOf(r).accountId,q.params.batchId);return batch?r.json(batch):r.status(404).json({error:'Generation batch not found'})});
 const ContentStudioGenerationPayload=z.object({outputId:z.string().max(80).optional()});

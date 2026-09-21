@@ -183,6 +183,13 @@ Nội dung câu đầu..."></textarea><div class="actions"><button id="analyzeSr
         <section class="pipeline-block"><div class="meta-label">SCENE MEDIA</div><div id="contentStudioSceneSummary" class="pipeline-summary"></div><div id="contentStudioSceneList" class="pipeline-scene-list"></div></section>
         <section class="pipeline-block"><div class="meta-label">OUTPUT / ARTIFACT</div><div id="contentStudioOutputSummary" class="pipeline-summary"></div><div id="contentStudioOutputList" class="pipeline-output-list"></div><div id="contentStudioArtifactSummary" class="pipeline-artifact-summary"></div></section>
       </div>
+      <section class="pipeline-release-center">
+        <div class="pipeline-review-head"><div><small class="meta-label">RELEASE PACKAGE CENTER</small><b>ZIP + SHA-256 + Review Report</b></div><span id="contentStudioPackageGate">Chờ Final Review.</span></div>
+        <p class="muted">Gói phát hành gồm artifact, SRT/manifest liên quan, script, provenance inventory và review-report. Chỉ tạo khi Release Gate đã mở.</p>
+        <div class="actions"><button id="contentStudioCreatePackageBtn" class="btn success small" disabled>TẠO GÓI PHÁT HÀNH</button><button id="contentStudioRefreshPackagesBtn" class="btn ghost small">LÀM MỚI GÓI</button></div>
+        <div id="contentStudioPackageStatus" class="status-line muted"></div>
+        <div id="contentStudioPackageList" class="pipeline-package-list"></div>
+      </section>
     </div>
   </section>
 

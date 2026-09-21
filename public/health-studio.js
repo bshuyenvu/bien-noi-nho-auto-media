@@ -1,5 +1,5 @@
 (()=>{
- const $=id=>document.getElementById(id),state={result:null,draft:null,review:null,renderJob:null,poll:null,clerk:null,publicConfig:null,mediaSelected:new Set(),profile:'health',voiceCatalog:[],voiceSelected:'vieneu-minh-duc',voiceMode:'text',voiceStudioStatus:null,uploadedMedia:[],uploadedSelected:new Set(),scenePlan:[],studioSettings:null,aiSettings:null,accountProfile:null,contentStudioProjects:[],contentStudioTemplates:[],contentStudioPackages:[],contentStudioSelected:null,contentStudioDashboard:null};
+ const $=id=>document.getElementById(id),state={result:null,draft:null,review:null,renderJob:null,poll:null,clerk:null,publicConfig:null,mediaSelected:new Set(),profile:'health',voiceCatalog:[],voiceSelected:'vieneu-minh-duc',voiceMode:'text',voiceStudioStatus:null,uploadedMedia:[],uploadedSelected:new Set(),scenePlan:[],studioSettings:null,aiSettings:null,accountProfile:null,contentStudioProjects:[],contentStudioTemplates:[],contentStudioPackages:[],contentStudioSelected:null,contentStudioDashboard:null,contentStudioAutoDraftTimer:null,contentStudioAutoDraftKey:'',contentStudioAutoDraftRunning:false};
  const apiKey=()=>sessionStorage.getItem('renderApiKey')||'';
  function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
  async function headers(json=false){const h={...(json?{'content-type':'application/json'}:{})},session=state.clerk?.session;if(session?.getToken){try{const token=await session.getToken();if(token){h.authorization='Bearer '+token;return h}}catch{}}const legacy=apiKey();if(legacy)h.authorization='Bearer '+legacy;return h}
@@ -194,10 +194,29 @@
   if(topic)topic.placeholder=t.id==='knowledge-compare'?'Ví dụ: Troponin I vs Troponin T':t.id==='url-story'?'Tiêu đề/chủ đề video':t.id==='topic-explainer'?'Ví dụ: Vì sao huyết áp tăng?':'Ví dụ: Dấu hiệu cảnh báo đột quỵ';
   if(!$('contentStudioCreateSeries').value.trim()&&t.id==='health-story')$('contentStudioCreateSeries').value='Chuyện Sức Khỏe Quanh Ta';
  }
+ function scheduleContentStudioAutodraft(){
+  const auto=$('contentStudioAutoDraftAuto');if(!auto?.checked)return;
+  const topic=$('contentStudioCreateTopic')?.value?.trim()||'',templateId=$('contentStudioCreateTemplate')?.value||'';
+  if(topic.length<6)return;
+  const key=templateId+'|'+topic.toLocaleLowerCase('vi-VN');
+  clearTimeout(state.contentStudioAutoDraftTimer);
+  if(key===state.contentStudioAutoDraftKey||state.contentStudioAutoDraftRunning)return;
+  const status=$('contentStudioAutoDraftStatus');if(status)status.textContent='AUTO AI đang chờ bạn nhập xong chủ đề…';
+  state.contentStudioAutoDraftTimer=setTimeout(async()=>{
+    const latest=($('contentStudioCreateTemplate')?.value||'')+'|'+($('contentStudioCreateTopic')?.value?.trim()||'').toLocaleLowerCase('vi-VN');
+    if(latest!==key||!$('contentStudioAutoDraftAuto')?.checked)return;
+    state.contentStudioAutoDraftRunning=true;
+    try{
+      const x=await prepareContentStudioAutodraft({silent:true,auto:true});
+      if(x)state.contentStudioAutoDraftKey=key;
+    }finally{state.contentStudioAutoDraftRunning=false}
+  },1400);
+ }
  async function prepareContentStudioAutodraft(options={}){
   const templateId=$('contentStudioCreateTemplate')?.value,topic=$('contentStudioCreateTopic')?.value?.trim()||'',seriesName=$('contentStudioCreateSeries')?.value?.trim()||undefined;
   if(topic.length<3){if(!options.silent)alert('Hãy nhập chủ đề trước.');return null}
   const btn=$('contentStudioAutoDraftBtn'),status=$('contentStudioAutoDraftStatus'),preview=$('contentStudioAutoDraftSources');
+  if(options.auto&&state.contentStudioAutoDraftRunning&&btn)btn.dataset.auto='1';
   if(btn)btn.disabled=true;if(status)status.textContent='AI đang tìm nguồn phù hợp và soạn kịch bản…';
   try{
     const x=await api('/api/content-studio-v2/wizard/autodraft',{method:'POST',body:JSON.stringify({templateId,topic,seriesName})});
@@ -205,7 +224,7 @@
     $('contentStudioCreateSources').value=(x.sourceUrls||[]).join('\n');
     if(x.headline&&topic.length<6)$('contentStudioCreateTopic').value=x.headline;
     const authority=(x.sources||[]).filter(v=>Number(v.authority||0)>=90).length;
-    if(status)status.textContent=`✓ AI đã chuẩn bị kịch bản • ${(x.sources||[]).length} nguồn${x.medicalSensitive?' • '+authority+' authority • Medical/Evidence gate sẽ áp dụng':''} • ${x.editor?.provider||x.editor?.mode||'editor'}.`;
+    if(status)status.textContent=`✓ ${options.auto?'AUTO AI ':'AI '}đã chuẩn bị kịch bản • ${(x.sources||[]).length} nguồn${x.medicalSensitive?' • '+authority+' authority • Medical/Evidence gate sẽ áp dụng':''} • ${x.editor?.provider||x.editor?.mode||'editor'}.`;
     if(preview)preview.innerHTML=(x.sources||[]).slice(0,6).map(v=>`<div class="creator-source-card"><div><b>${esc(v.name||'Nguồn')}</b><span>${esc(v.title||'')}</span></div><small>${v.authority?esc(String(v.authority))+' authority • ':''}${esc(v.kind||x.researchMode||'source')}</small></div>`).join('')+(x.warnings?.length?`<div class="warning">${esc(x.warnings.slice(0,3).join(' • '))}</div>`:'');
     return x;
   }catch(e){if(status)status.textContent='⚠ '+e.message;if(!options.silent)alert(e.message);return null}
@@ -392,7 +411,7 @@
   document.querySelectorAll('.profile-card').forEach(b=>b.onclick=()=>selectProfile(b.dataset.profile||'health'));selectProfile('health');
   document.querySelectorAll('.voice-tab').forEach(b=>b.onclick=()=>setVoiceTab(b.dataset.voiceTab||'text'));setVoiceTab('text');
   ['voiceSearch','voiceLanguage','voiceRegion','voiceGender','voiceCategory'].forEach(id=>{const el=$(id);if(el){el.oninput=renderVoiceLibrary;el.onchange=renderVoiceLibrary}});
-  $('previewVoiceBtn').onclick=()=>previewVoice(undefined,true);$('previewTextBtn').onclick=()=>previewVoice($('voiceText').value,false);$('analyzeSrtBtn').onclick=analyzeSrt;$('srtSpeechBtn').onclick=srtSpeech;$('dubBtn').onclick=dubVideo;$('enrollVoiceBtn').onclick=enrollPersonalVoice;$('deleteVoiceBtn').onclick=deletePersonalVoice;$('refreshRenderHistoryBtn').onclick=loadRenderHistory;$('refreshContentStudioV2Btn').onclick=loadContentStudioV2;$('contentStudioCreateTemplate').onchange=renderCreatorTemplate;$('contentStudioAutoDraftBtn').onclick=()=>prepareContentStudioAutodraft();$('contentStudioCreateBtn').onclick=createContentStudioProject;$('contentStudioCreatePackageBtn').onclick=createContentStudioPackage;$('contentStudioRefreshPackagesBtn').onclick=()=>loadContentStudioPackages(state.contentStudioSelected||$('contentStudioProjectSelect').value);$('contentStudioActionBtn').onclick=runContentStudioNextAction;$('contentStudioAutoAdvanceBtn').onclick=runContentStudioAutoAdvance;$('contentStudioReviewControls').onclick=e=>{const b=e.target.closest?.('[data-pipeline-review]');if(b)void submitContentStudioReview(b.dataset.pipelineGate,b.dataset.pipelineReview)};$('contentStudioProjectSelect').onchange=()=>loadContentStudioDashboard($('contentStudioProjectSelect').value);$('saveChannelBtn').onclick=saveChannelProfile;$('openAccountConfigBtn').onclick=openConfigPanel;$('closeConfigBtn').onclick=closeConfigPanel;bindTaskNav();
+  $('previewVoiceBtn').onclick=()=>previewVoice(undefined,true);$('previewTextBtn').onclick=()=>previewVoice($('voiceText').value,false);$('analyzeSrtBtn').onclick=analyzeSrt;$('srtSpeechBtn').onclick=srtSpeech;$('dubBtn').onclick=dubVideo;$('enrollVoiceBtn').onclick=enrollPersonalVoice;$('deleteVoiceBtn').onclick=deletePersonalVoice;$('refreshRenderHistoryBtn').onclick=loadRenderHistory;$('refreshContentStudioV2Btn').onclick=loadContentStudioV2;$('contentStudioCreateTemplate').onchange=()=>{state.contentStudioAutoDraftKey='';renderCreatorTemplate();scheduleContentStudioAutodraft()};$('contentStudioCreateTopic').oninput=scheduleContentStudioAutodraft;$('contentStudioCreateTopic').onblur=scheduleContentStudioAutodraft;$('contentStudioAutoDraftAuto').onchange=()=>{if($('contentStudioAutoDraftAuto').checked){state.contentStudioAutoDraftKey='';scheduleContentStudioAutodraft()}else{clearTimeout(state.contentStudioAutoDraftTimer);$('contentStudioAutoDraftStatus').textContent='AUTO AI đã tắt; có thể bấm TẠO LẠI KỊCH BẢN + TÌM NGUỒN.'}};$('contentStudioAutoDraftBtn').onclick=()=>{state.contentStudioAutoDraftKey='';prepareContentStudioAutodraft()};$('contentStudioCreateBtn').onclick=createContentStudioProject;$('contentStudioCreatePackageBtn').onclick=createContentStudioPackage;$('contentStudioRefreshPackagesBtn').onclick=()=>loadContentStudioPackages(state.contentStudioSelected||$('contentStudioProjectSelect').value);$('contentStudioActionBtn').onclick=runContentStudioNextAction;$('contentStudioAutoAdvanceBtn').onclick=runContentStudioAutoAdvance;$('contentStudioReviewControls').onclick=e=>{const b=e.target.closest?.('[data-pipeline-review]');if(b)void submitContentStudioReview(b.dataset.pipelineGate,b.dataset.pipelineReview)};$('contentStudioProjectSelect').onchange=()=>loadContentStudioDashboard($('contentStudioProjectSelect').value);$('saveChannelBtn').onclick=saveChannelProfile;$('openAccountConfigBtn').onclick=openConfigPanel;$('closeConfigBtn').onclick=closeConfigPanel;bindTaskNav();
   document.querySelectorAll('.theme-card').forEach(b=>b.onclick=()=>chooseTheme(b.dataset.theme||'clean'));$('renderMode').onchange=()=>{if($('renderMode').value==='breaking')chooseTheme('breaking');else if($('renderMode').value==='latest'&&$('renderTemplate').value==='breaking')chooseTheme('classic');state.scenePlan=[]};$('renderTicker').onchange=()=>$('tickerText').classList.toggle('hidden',$('renderTicker').value!=='custom');$('mediaUploadBtn').onclick=uploadMedia;$('refreshUploadsBtn').onclick=loadUploadedMedia;$('previewScenesBtn').onclick=previewScenes;$('clearScenePlanBtn').onclick=()=>{state.scenePlan=[];$('scenePreview').textContent='Scene sẽ được tự tạo lại và đồng bộ theo audio thật khi render.'};$('saveAiBtn').onclick=saveAiSettings;$('testAiBtn').onclick=testAi;$('saveStudioSettingsBtn').onclick=saveStudioSettings;
   $('srtFile').onchange=async()=>{const f=$('srtFile').files?.[0];if(!f)return;if(f.size>100000)return alert('File SRT quá lớn.');$('srtInput').value=await f.text();await analyzeSrt()};
   $('generateBtn').onclick=generate;$('draftBtn').onclick=createDraft;$('evidenceConfirm').onchange=confirmEvidence;$('approveBtn').onclick=approveDraft;$('renderBtn').onclick=renderDraft;$('resetBtn').onclick=()=>{if(state.poll)clearTimeout(state.poll);state.result=null;state.draft=null;state.review=null;state.renderJob=null;state.mediaSelected=new Set();state.scenePlan=[];sessionStorage.removeItem('healthDraftId');$('result').classList.add('hidden');$('reviewPanel').classList.add('hidden');$('renderVideo').classList.add('hidden');$('renderVideo').removeAttribute('src');$('draftBtn').textContent='TẠO DRAFT & REVIEW';window.scrollTo({top:0,behavior:'smooth'})};

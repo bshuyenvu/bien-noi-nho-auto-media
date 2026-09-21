@@ -714,3 +714,62 @@ npm run smoke:content-studio-v2-wizard
 npm run smoke:content-studio-v2-auto-advance
 npm run smoke:ui
 ```
+
+
+## Phase 6B — Release Package Center
+
+Phase 6B đóng gói project đã qua review thành ZIP phát hành có kiểm chứng.
+
+### Release Gate
+
+Package chỉ được tạo khi:
+
+- generation gate đã mở;
+- Copyright Review = `accepted`;
+- Final Review = `accepted`;
+- có artifact thực tế trên disk.
+
+### Nội dung ZIP
+
+- MP4 / MP3 / PNG / JSON artifact hiện có;
+- SRT và render manifest liên quan nếu tồn tại;
+- `script.txt`;
+- `manifest.json`;
+- `review-report.json`.
+
+`manifest.json` ghi inventory từng file với SHA-256, size, output/kind, thông tin project, Research Gate và review gate.
+
+### Streaming ZIP
+
+ZIP dùng chế độ store và được ghi theo stream, không nạp toàn bộ video vào RAM. Điều này phù hợp với server cấu hình nhẹ và tránh tăng memory theo kích thước MP4.
+
+### API
+
+```
+GET  /api/content-studio-v2/projects/:id/packages
+POST /api/content-studio-v2/projects/:id/packages
+GET  /api/content-studio-v2/packages/:packageId/download
+```
+
+Download vẫn đi qua tenant authentication.
+
+### UI
+
+Project Pipeline có **Release Package Center**:
+
+- trạng thái Release Gate;
+- nút tạo ZIP;
+- SHA-256;
+- số file;
+- dung lượng;
+- lịch sử package;
+- tải ZIP qua session hiện tại.
+
+### Verify
+
+```bash
+npm run typecheck
+npm run build
+npm run smoke:content-studio-v2-package
+npm run smoke:ui
+```

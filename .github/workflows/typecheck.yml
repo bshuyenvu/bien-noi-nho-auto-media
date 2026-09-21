@@ -65,6 +65,8 @@ jobs:
         run: npm run smoke:content-studio-v2-auto-advance
       - name: Content Studio Pipeline v2 Phase 6A Project Creator wizard smoke test
         run: npm run smoke:content-studio-v2-wizard
+      - name: Content Studio Pipeline v2 Phase 6B release package smoke test
+        run: npm run smoke:content-studio-v2-package
       - name: ShotCraft Lite cinematic scene planning smoke test
         run: npm run smoke:shotcraft-lite
       - name: ShotCraft render manifest smoke test

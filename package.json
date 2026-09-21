@@ -69,7 +69,8 @@
     "smoke:content-studio-v2-dashboard": "tsx scripts/smoke-content-studio-v2-dashboard.ts",
     "smoke:content-studio-v2-actions": "tsx scripts/smoke-content-studio-v2-actions.ts",
     "smoke:content-studio-v2-auto-advance": "tsx scripts/smoke-content-studio-v2-auto-advance.ts",
-    "smoke:content-studio-v2-wizard": "tsx scripts/smoke-content-studio-v2-wizard.ts"
+    "smoke:content-studio-v2-wizard": "tsx scripts/smoke-content-studio-v2-wizard.ts",
+    "smoke:content-studio-v2-package": "tsx scripts/smoke-content-studio-v2-package.ts"
   },
   "dependencies": {
     "@clerk/express": "^2.1.66",

@@ -1,6 +1,6 @@
 import { createHash,randomUUID } from 'node:crypto';
 import { createReadStream,createWriteStream,existsSync } from 'node:fs';
-import { mkdir,readFile,stat,writeFile } from 'node:fs/promises';
+import { mkdir,open,rm,stat,unlink,writeFile } from 'node:fs/promises';
 import { basename,dirname,extname,join,resolve } from 'node:path';
 import { once } from 'node:events';
 import { db,all,run } from '../storage/db.js';
@@ -10,9 +10,9 @@ import { listStudioArtifacts } from './pipeline-v2-generation.js';
 
 type ZipEntry={sourcePath:string;archivePath:string;sha256:string;size:number;crc32:number;mtime:Date};
 export interface ContentStudioExportPackage{
-  id:string;projectId:string;ownerId:string;status:'ready';path:string;sha256:string;size:number;fileCount:number;createdAt:string;
+  id:string;projectId:string;ownerId:string;status:'ready';path:string;sha256:string;size:number;fileCount:number;createdAt:string;verificationStatus?:'unverified'|'verified'|'tampered'|'missing';verifiedAt?:string;
 }
-type PackageRow={id:string;project_id:string;owner_id:string;status:'ready';path:string;sha256:string;size:number;file_count:number;created_at:string};
+type PackageRow={id:string;project_id:string;owner_id:string;status:'ready';path:string;sha256:string;size:number;file_count:number;created_at:string;verification_status?:'unverified'|'verified'|'tampered'|'missing';verified_at?:string};
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS content_studio_export_packages(
@@ -29,6 +29,11 @@ CREATE TABLE IF NOT EXISTS content_studio_export_packages(
 CREATE INDEX IF NOT EXISTS idx_content_studio_export_packages_owner_project
 ON content_studio_export_packages(owner_id,project_id,created_at DESC);
 `);
+for(const sql of [
+ 'ALTER TABLE content_studio_export_packages ADD COLUMN verification_status TEXT NOT NULL DEFAULT \'unverified\'',
+ 'ALTER TABLE content_studio_export_packages ADD COLUMN verified_at TEXT'
+])try{db.exec(sql)}catch{}
+
 
 const CRC_TABLE=(()=>{
  const t=new Uint32Array(256);
@@ -62,7 +67,7 @@ async function writeStoredZip(entries:ZipEntry[],dest:string){
  const centralSize=offset-centralStart,eocd=Buffer.alloc(22);eocd.writeUInt32LE(0x06054b50,0);eocd.writeUInt16LE(0,4);eocd.writeUInt16LE(0,6);eocd.writeUInt16LE(entries.length,8);eocd.writeUInt16LE(entries.length,10);eocd.writeUInt32LE(centralSize,12);eocd.writeUInt32LE(centralStart,16);eocd.writeUInt16LE(0,20);await writeChunk(out,eocd);out.end();await once(out,'finish');
 }
 
-function mapRow(r:PackageRow):ContentStudioExportPackage{return{id:r.id,projectId:r.project_id,ownerId:r.owner_id,status:r.status,path:r.path,sha256:r.sha256,size:Number(r.size),fileCount:Number(r.file_count),createdAt:r.created_at}}
+function mapRow(r:PackageRow):ContentStudioExportPackage{return{id:r.id,projectId:r.project_id,ownerId:r.owner_id,status:r.status,path:r.path,sha256:r.sha256,size:Number(r.size),fileCount:Number(r.file_count),createdAt:r.created_at,verificationStatus:r.verification_status||'unverified',verifiedAt:r.verified_at||undefined}}
 export function listContentStudioExportPackages(ownerId:string,projectId:string){
  return all<PackageRow>('SELECT * FROM content_studio_export_packages WHERE owner_id=? AND project_id=? ORDER BY created_at DESC LIMIT 20',ownerId,projectId).map(mapRow);
 }
@@ -76,6 +81,38 @@ function candidatePaths(path:string,metadata?:Record<string,unknown>){
  const ext=extname(path).toLowerCase(),base=path.slice(0,path.length-ext.length);
  if(ext==='.mp4'||ext==='.mp3'){for(const suffix of['.srt','.render-manifest.json','.shotcraft.json']){const p=base+suffix;if(existsSync(p))out.push(p)}}
  return [...new Set(out)];
+}
+
+export async function verifyContentStudioExportPackage(ownerId:string,id:string){
+ const pkg=getContentStudioExportPackage(ownerId,id);if(!pkg)throw new Error('Export package not found');
+ const now=new Date().toISOString();
+ if(!existsSync(pkg.path)){
+  run('UPDATE content_studio_export_packages SET verification_status=?,verified_at=? WHERE id=? AND owner_id=?','missing',now,id,ownerId);
+  return{ok:false,status:'missing' as const,reason:'package_file_missing',package:getContentStudioExportPackage(ownerId,id)};
+ }
+ let statusValue:'verified'|'tampered'='verified',reason='ok';
+ const fileStat=await stat(pkg.path);
+ if(fileStat.size!==pkg.size){statusValue='tampered';reason='size_mismatch'}
+ const analyzed=await analyzeFile(pkg.path);
+ if(statusValue==='verified'&&analyzed.sha256!==pkg.sha256){statusValue='tampered';reason='sha256_mismatch'}
+ if(statusValue==='verified'){
+  const h=await open(pkg.path,'r');
+  try{
+   const first=Buffer.alloc(4),last=Buffer.alloc(22);await h.read(first,0,4,0);await h.read(last,0,22,Math.max(0,fileStat.size-22));
+   if(first.readUInt32LE(0)!==0x04034b50||last.readUInt32LE(0)!==0x06054b50){statusValue='tampered';reason='zip_signature_invalid'}
+  }finally{await h.close()}
+ }
+ run('UPDATE content_studio_export_packages SET verification_status=?,verified_at=? WHERE id=? AND owner_id=?',statusValue,now,id,ownerId);
+ return{ok:statusValue==='verified',status:statusValue,reason,actualSha256:analyzed.sha256,actualSize:analyzed.size,package:getContentStudioExportPackage(ownerId,id)};
+}
+
+export async function deleteContentStudioExportPackage(ownerId:string,id:string){
+ const pkg=getContentStudioExportPackage(ownerId,id);if(!pkg)return false;
+ try{await unlink(pkg.path)}catch{}
+ const root=resolve(process.env.CONTENT_STUDIO_PACKAGE_DIR||'output/content-studio-packages'),work=join(root,safeSegment(pkg.projectId),safeSegment(pkg.id));
+ await rm(work,{recursive:true,force:true}).catch(()=>undefined);
+ run('DELETE FROM content_studio_export_packages WHERE id=? AND owner_id=?',id,ownerId);
+ return true;
 }
 
 export async function createContentStudioExportPackage(ownerId:string,projectId:string):Promise<ContentStudioExportPackage>{

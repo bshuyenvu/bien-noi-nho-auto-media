@@ -83,9 +83,29 @@ export function medicalQuery(topic:string){
 const INTENT_SUFFIX=/(?:\s+(?:symptoms warning signs|treatment management|prevention|risk factors|complications|diagnosis|causes|emergency))+$/i;
 function coreCondition(q:string){return q.replace(INTENT_SUFFIX,'').trim().toLowerCase()}
 function coreMatch(q:string,hay:string){const c=coreCondition(q);if(!c)return true;const h=hay.toLowerCase().replace(/[-–—]/g,' ');const normalized=c.replace(/[-–—]/g,' ');return h.includes(normalized)}
+const MEDICAL_ENTITY_ALIASES:Record<string,string[]>={
+ 'myocardial infarction':['myocardial infarction','heart attack','acute coronary syndrome'],
+ 'stroke':['stroke','cerebrovascular accident'],
+ 'hypoglycemia':['hypoglycemia','low blood sugar'],
+ 'hyperglycemia':['hyperglycemia','high blood sugar'],
+ 'hypertension':['hypertension','high blood pressure'],
+ 'hypotension':['hypotension','low blood pressure'],
+ 'diabetes':['diabetes','diabetes mellitus'],
+ 'heart failure':['heart failure','cardiac failure'],
+ 'dyspnea':['dyspnea','shortness of breath','breathlessness'],
+ 'chest pain':['chest pain','chest discomfort'],
+ 'chronic kidney disease':['chronic kidney disease','ckd'],
+ 'acute kidney injury':['acute kidney injury','aki'],
+ 'gastroesophageal reflux disease':['gastroesophageal reflux disease','gastro-oesophageal reflux disease','gerd'],
+ 'chronic obstructive pulmonary disease':['chronic obstructive pulmonary disease','copd'],
+};
 export function medicalTopicEntityMatch(topic:string,text:string){
  const ft=fold(topic),fx=fold(text),matches=MEDICAL_TERMS.filter(([re])=>re.test(ft));
- if(matches.length)return matches.every(([re])=>re.test(fx));
+ if(matches.length)return matches.every(([re,canonical])=>{
+  if(re.test(fx))return true;
+  const aliases=MEDICAL_ENTITY_ALIASES[canonical]||[canonical];
+  return aliases.some(alias=>fx.includes(fold(alias)));
+ });
  const topicWords=ft.replace(/[^a-z0-9 ]+/g,' ').split(/\s+/).filter(x=>x.length>=4&&!['dau','hieu','trieu','chung','canh','bao','dieu','tri','phong','ngua','nguyen','nhan','bien'].includes(x));
  if(!topicWords.length)return true;const unique=[...new Set(topicWords)],hits=unique.filter(x=>fx.includes(x)).length;return hits>=Math.max(1,Math.ceil(unique.length*.5));
 }
@@ -96,6 +116,7 @@ const OFFICIAL:Array<{re:RegExp;name:string;title:string;url:string}>=[
  {re:/\bhypoglycemia\b/i,name:'NHS',title:'Low blood sugar (hypoglycaemia)',url:'https://www.nhs.uk/conditions/low-blood-sugar-hypoglycaemia/'},
  {re:/\bhypotension\b/i,name:'NHS',title:'Low blood pressure (hypotension)',url:'https://www.nhs.uk/conditions/low-blood-pressure-hypotension/'},
  {re:/\bmyocardial infarction\b/i,name:'NHS',title:'Heart attack',url:'https://www.nhs.uk/conditions/heart-attack/'},
+ {re:/\bmyocardial infarction\b/i,name:'NHLBI',title:'Heart Attack',url:'https://www.nhlbi.nih.gov/health/heart-attack'},
  {re:/\bheart failure\b/i,name:'NHS',title:'Heart failure',url:'https://www.nhs.uk/conditions/heart-failure/'},
  {re:/\bpneumonia\b/i,name:'NHS',title:'Pneumonia',url:'https://www.nhs.uk/conditions/pneumonia/'},
  {re:/\bdehydration\b/i,name:'NHS',title:'Dehydration',url:'https://www.nhs.uk/conditions/dehydration/'},

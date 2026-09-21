@@ -6,7 +6,10 @@ export type PipelineTemplateId =
   | 'health-short'
   | 'podcast-story'
   | 'social-short'
-  | 'comic-episode';
+  | 'comic-episode'
+  | 'topic-explainer'
+  | 'url-story'
+  | 'knowledge-compare';
 
 export type PipelineOutputKind = 'video' | 'short' | 'podcast' | 'comic' | 'thumbnail';
 export type PipelineAspectRatio = '16:9' | '9:16' | '1:1';
@@ -32,6 +35,7 @@ export interface PipelineTemplate {
   maxScenes: number;
   visualStyle: string;
   voiceStyle: string;
+  inputMode?: 'topic' | 'url' | 'compare' | 'script';
   outputs: PipelineOutputProfile[];
 }
 
@@ -179,6 +183,62 @@ const TEMPLATES: readonly PipelineTemplate[] = [
       { id: 'thumbnail', kind: 'thumbnail', label: 'Episode cover', aspectRatio: '16:9', width: 1280, height: 720 },
     ],
   },
+  {
+    id: 'topic-explainer',
+    name: 'Giải thích một chủ đề',
+    description: 'Code-to-video giải thích kiến thức theo Hook → Context → Explanation → Takeaway → CTA; tự chọn motion graphics hoặc media.',
+    contentProfile: 'life_tips',
+    researchRequired: false,
+    medicalReviewRequired: false,
+    defaultDurationSeconds: 60,
+    maxScenes: 8,
+    visualStyle: 'clean educational explainer, code-to-video motion cards mixed with original visuals',
+    voiceStyle: 'news',
+    inputMode: 'topic',
+    outputs: [
+      { id: 'short-9x16', kind: 'short', label: 'Short/Reels 9:16', aspectRatio: '9:16', width: 1080, height: 1920, targetSeconds: 60 },
+      { id: 'video-16x9', kind: 'video', label: 'Video 16:9', aspectRatio: '16:9', width: 1920, height: 1080, targetSeconds: 60 },
+      { id: 'podcast', kind: 'podcast', label: 'Podcast audio', targetSeconds: 60 },
+      { id: 'thumbnail', kind: 'thumbnail', label: 'Thumbnail', aspectRatio: '16:9', width: 1280, height: 720 },
+    ],
+  },
+  {
+    id: 'url-story',
+    name: 'URL / Bài viết → Video',
+    description: 'Biến bài viết hoặc URL thành storyboard/video; nguồn được giữ để kiểm tra provenance, nội dung sức khỏe tự bật Research + Medical Review.',
+    contentProfile: 'event_commentary',
+    researchRequired: false,
+    medicalReviewRequired: false,
+    defaultDurationSeconds: 60,
+    maxScenes: 8,
+    visualStyle: 'source-grounded editorial explainer, original motion graphics and rights-verified visuals',
+    voiceStyle: 'news',
+    inputMode: 'url',
+    outputs: [
+      { id: 'short-9x16', kind: 'short', label: 'Short/Reels 9:16', aspectRatio: '9:16', width: 1080, height: 1920, targetSeconds: 60 },
+      { id: 'video-16x9', kind: 'video', label: 'Video 16:9', aspectRatio: '16:9', width: 1920, height: 1080, targetSeconds: 60 },
+      { id: 'podcast', kind: 'podcast', label: 'Audio', targetSeconds: 60 },
+      { id: 'thumbnail', kind: 'thumbnail', label: 'Thumbnail', aspectRatio: '16:9', width: 1280, height: 720 },
+    ],
+  },
+  {
+    id: 'knowledge-compare',
+    name: 'So sánh kiến thức A vs B',
+    description: 'Video so sánh hai khái niệm bằng split cards, số liệu, điểm khác biệt và takeaway; tự bật gate y khoa khi chủ đề có tính y tế.',
+    contentProfile: 'life_tips',
+    researchRequired: false,
+    medicalReviewRequired: false,
+    defaultDurationSeconds: 50,
+    maxScenes: 8,
+    visualStyle: 'high-clarity split comparison, original motion graphics, strong typography',
+    voiceStyle: 'news',
+    inputMode: 'compare',
+    outputs: [
+      { id: 'short-9x16', kind: 'short', label: 'Short/Reels 9:16', aspectRatio: '9:16', width: 1080, height: 1920, targetSeconds: 50 },
+      { id: 'video-16x9', kind: 'video', label: 'Video 16:9', aspectRatio: '16:9', width: 1920, height: 1080, targetSeconds: 50 },
+      { id: 'thumbnail', kind: 'thumbnail', label: 'Comparison cover', aspectRatio: '16:9', width: 1280, height: 720 },
+    ],
+  },
 ];
 
 db.exec(`
@@ -201,6 +261,11 @@ ON content_studio_projects(owner_id, created_at DESC);
 
 const clean = (value: unknown, max: number) =>
   String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+
+function likelyMedicalTopic(value:string){
+  const v=String(value||'').toLocaleLowerCase('vi-VN').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');
+  return /\b(?:tim mach|nhoi mau|dau nguc|dot quy|tai bien|huyet ap|dai thao duong|tieu duong|troponin|bisap|apache|sofa|viem tuy|nhiem khuan|sepsis|suy tim|suy than|benh than|hen phe quan|copd|viem phoi|dengue|sot xuat huyet|thai ky|tien san giat|thuoc|y khoa|benh|trieu chung|chan doan|dieu tri|cap cuu)\b/i.test(v);
+}
 
 function resolveTemplate(id: PipelineTemplateId): PipelineTemplate {
   const template = TEMPLATES.find((item) => item.id === id);
@@ -299,6 +364,10 @@ export function buildPipelinePlan(input: Omit<CreatePipelineProjectInput, 'owner
     .filter(Boolean)
     .slice(0, 20);
 
+  const medicalSensitive = ['topic-explainer','url-story','knowledge-compare'].includes(template.id) && likelyMedicalTopic(topic+' '+script);
+  const researchRequired = template.researchRequired || medicalSensitive;
+  const medicalReviewRequired = template.medicalReviewRequired || medicalSensitive;
+
   return {
     version: '2.0.0-alpha.1',
     template,
@@ -309,15 +378,15 @@ export function buildPipelinePlan(input: Omit<CreatePipelineProjectInput, 'owner
     scenes: scenePlan(template, topic, script),
     outputs: outputs.map((output) => ({ ...output })),
     gates: {
-      research: template.researchRequired ? 'required' : 'optional',
-      medicalReview: template.medicalReviewRequired ? 'required' : 'optional',
+      research: researchRequired ? 'required' : 'optional',
+      medicalReview: medicalReviewRequired ? 'required' : 'optional',
       copyrightReview: 'required',
       humanReviewBeforePublish: 'required',
     },
     stages: [
-      { id: 'research', label: 'Research & Source Check', required: template.researchRequired },
+      { id: 'research', label: 'Research & Source Check', required: researchRequired },
       { id: 'script', label: 'Script', required: true },
-      { id: 'medical-review', label: 'Medical Review', required: template.medicalReviewRequired },
+      { id: 'medical-review', label: 'Medical Review', required: medicalReviewRequired },
       { id: 'scene-plan', label: 'Scene & Storyboard Plan', required: true },
       { id: 'media', label: 'Image/Video Generation', required: true },
       { id: 'voice', label: 'Voice & Subtitle', required: outputs.some((x) => x.kind !== 'comic' && x.kind !== 'thumbnail') },

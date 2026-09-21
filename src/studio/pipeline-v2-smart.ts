@@ -37,7 +37,10 @@ function hasList(text:string){
   return /(?:^|\s)(?:1[.)]|2[.)]|3[.)]|thứ nhất|thứ hai|thứ ba|ba điều|\d+ điều)/i.test(text);
 }
 function hasProcess(text:string){
-  return /\b(?:bước|quy trình|đầu tiên|tiếp theo|sau đó|cuối cùng|→)\b/i.test(text);
+  return /\bquy trình\b/i.test(text)
+    || /\bbước\s*(?:\d+|một|hai|ba|đầu tiên|tiếp theo|cuối cùng)\b/i.test(text)
+    || /\b(?:đầu tiên|tiếp theo|sau đó|cuối cùng)\b/i.test(text)
+    || text.includes('→');
 }
 function hasQuote(text:string){
   return /[“”"]/.test(text)&&text.length<260;

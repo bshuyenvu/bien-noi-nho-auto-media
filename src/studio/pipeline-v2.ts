@@ -262,7 +262,7 @@ ON content_studio_projects(owner_id, created_at DESC);
 const clean = (value: unknown, max: number) =>
   String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
-function likelyMedicalTopic(value:string){
+export function likelyMedicalTopic(value:string){
   const v=String(value||'').toLocaleLowerCase('vi-VN').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');
   return /\b(?:tim mach|nhoi mau|dau nguc|dot quy|tai bien|huyet ap|dai thao duong|tieu duong|troponin|bisap|apache|sofa|viem tuy|nhiem khuan|sepsis|suy tim|suy than|benh than|hen phe quan|copd|viem phoi|dengue|sot xuat huyet|thai ky|tien san giat|thuoc|y khoa|benh|trieu chung|chan doan|dieu tri|cap cuu)\b/i.test(v);
 }

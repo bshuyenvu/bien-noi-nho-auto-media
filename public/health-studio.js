@@ -159,8 +159,9 @@
   $('contentStudioSceneSummary').textContent=`${scenes.readyVisual||0}/${scenes.total||0} scene có generated media • thiếu ${scenes.missingVisual||0} • ${Object.entries(scenes.statusCounts||{}).map(([k,v])=>`${k}: ${v}`).join(' • ')||'chưa có media job'}`;
   $('contentStudioSceneList').innerHTML=(scenes.items||[]).slice(0,12).map(scene=>{
     const preferred=scene.preferredMedia||'fallback',img=scene.image,vid=scene.video,status=vid?.status==='ready'?'ready':img?.status==='ready'?'ready':vid?.status||img?.status||'fallback';
-    const meta=[`beat: ${scene.beat||'—'}`,img?`image ${img.status} • ${img.providerId}`:'image —',vid?`video ${vid.status} • ${vid.providerId}`:'video —'].join(' • ');
-    return `<div class="pipeline-scene"><div class="pipeline-scene-main"><div class="pipeline-scene-title">SCENE ${scene.sceneIndex+1} • ${esc(preferred.toUpperCase())}</div><div class="pipeline-scene-meta">${esc(meta)}</div></div><span class="pipeline-state ${pipelineStateClass(status)}">${esc(status)}</span></div>`;
+    const smart=[scene.intent&&`intent ${scene.intent}`,scene.layout&&`layout ${scene.layout}`,scene.renderer&&`renderer ${scene.renderer}`,scene.estimatedDurationSec&&`~${Number(scene.estimatedDurationSec).toFixed(1)}s`].filter(Boolean).join(' • ');
+    const meta=[`beat: ${scene.beat||'—'}`,smart,img?`image ${img.status} • ${img.providerId}`:'image —',vid?`video ${vid.status} • ${vid.providerId}`:'video —'].filter(Boolean).join(' • ');
+    return `<div class="pipeline-scene"><div class="pipeline-scene-main"><div class="pipeline-scene-title">SCENE ${scene.sceneIndex+1} • ${esc(preferred.toUpperCase())}</div><div class="pipeline-scene-meta">${esc(meta)}</div>${scene.subtitleChunks?.length?`<div class="pipeline-scene-subtitle">Subtitle: ${esc(scene.subtitleChunks.slice(0,3).join(' / '))}</div>`:''}</div><span class="pipeline-state ${pipelineStateClass(status)}">${esc(status)}</span></div>`;
   }).join('')||'<div class="muted">Chưa có scene runtime.</div>';
   const g=x.generation||{},batch=g.latestBatch;
   $('contentStudioOutputSummary').textContent=batch?`Batch ${String(batch.id).slice(0,8)}… • ${batch.status} • ${Object.entries(g.statusCounts||{}).map(([k,v])=>`${k}: ${v}`).join(' • ')}`:'Chưa có generation batch.';

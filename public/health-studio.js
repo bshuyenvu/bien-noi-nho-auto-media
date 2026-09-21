@@ -130,8 +130,13 @@
   const actionId=String(next.id||''),actionBtn=$('contentStudioActionBtn'),reviewBox=$('contentStudioReviewControls');
   const humanReview=['medical-review','copyright-review','final-review'].includes(actionId),researchHuman=['research-review','fix-research'].includes(actionId);
   if(actionBtn){
-    actionBtn.disabled=humanReview||researchHuman||actionId==='ready'||!actionId;
-    actionBtn.textContent=actionId==='render-running'?'LÀM MỚI TRẠNG THÁI':humanReview||researchHuman?'CẦN NGƯỜI DUYỆT':actionId==='ready'?'ĐÃ QUA GATE':'CHẠY BƯỚC TIẾP';
+    actionBtn.disabled=researchHuman||actionId==='ready'||!actionId;
+    actionBtn.textContent=actionId==='render-running'?'LÀM MỚI TRẠNG THÁI':
+      actionId==='medical-review'?'MỞ REVIEW Y KHOA':
+      actionId==='copyright-review'?'MỞ COPYRIGHT REVIEW':
+      actionId==='final-review'?'MỞ FINAL REVIEW':
+      researchHuman?'CẦN KIỂM TRA EVIDENCE':
+      actionId==='ready'?'ĐÃ QUA GATE':'CHẠY BƯỚC TIẾP';
   }
   const autoBtn=$('contentStudioAutoAdvanceBtn');if(autoBtn){
     autoBtn.disabled=humanReview||researchHuman||actionId==='ready'||actionId==='render-running'||!actionId;
@@ -141,7 +146,11 @@
     if(humanReview){
       const gate=actionId==='medical-review'?'medical':actionId==='copyright-review'?'copyright':'final';
       reviewBox.classList.remove('hidden');
-      reviewBox.innerHTML=`<div class="pipeline-review-head"><div><small class="meta-label">HUMAN REVIEW</small><b>${esc(gate.toUpperCase())}</b></div><span>Quyết định này được ghi vào audit trail.</span></div><textarea id="contentStudioReviewNote" rows="2" placeholder="Ghi chú review; bắt buộc nếu NEEDS FIX"></textarea><div class="actions"><button class="btn small" data-pipeline-review="accepted" data-pipeline-gate="${esc(gate)}">ACCEPT</button><button class="btn ghost small" data-pipeline-review="needs_fix" data-pipeline-gate="${esc(gate)}">NEEDS FIX</button></div>`;
+      const researchInfo=x.gates?.research||{};
+      const medicalSummary=gate==='medical'
+        ?`<div class="pipeline-review-summary"><b>Research Gate: ${esc(String(researchInfo.status||'—').toUpperCase())}</b><span>${Number.isFinite(researchInfo.sourceCount)?esc(String(researchInfo.sourceCount))+' nguồn • '+esc(String(researchInfo.authoritativeSourceCount||0))+' authority':'Đã chuẩn bị Evidence Pack'}</span><small>Đối chiếu kịch bản với Evidence Pack trước khi ACCEPT. Hệ thống không tự duyệt nội dung y khoa.</small></div>`
+        :'';
+      reviewBox.innerHTML=`<div class="pipeline-review-head"><div><small class="meta-label">HUMAN REVIEW</small><b>${esc(gate.toUpperCase())}</b></div><span>Quyết định này được ghi vào audit trail.</span></div>${medicalSummary}<textarea id="contentStudioReviewNote" rows="2" placeholder="Ghi chú review; bắt buộc nếu NEEDS FIX"></textarea><div class="actions pipeline-review-actions"><button class="btn review-accept" data-pipeline-review="accepted" data-pipeline-gate="${esc(gate)}">✓ ACCEPT & TIẾP TỤC</button><button class="btn ghost review-fix" data-pipeline-review="needs_fix" data-pipeline-gate="${esc(gate)}">NEEDS FIX</button></div>`;
     }else if(researchHuman){
       reviewBox.classList.remove('hidden');
       reviewBox.innerHTML='<div class="warning">Research/Evidence cần người duyệt hoặc bổ sung nguồn. Dashboard không tự PASS Research Gate.</div>';
@@ -236,6 +245,15 @@
   const projectId=state.contentStudioSelected||$('contentStudioProjectSelect')?.value;if(!projectId)return;
   const action=state.contentStudioDashboard?.nextAction?.id;
   const status=$('contentStudioActionStatus'),btn=$('contentStudioActionBtn');
+  if(['medical-review','copyright-review','final-review'].includes(action)){
+    const review=$('contentStudioReviewControls');
+    review?.scrollIntoView({behavior:'smooth',block:'center'});
+    review?.classList.add('review-focus');
+    setTimeout(()=>review?.classList.remove('review-focus'),1200);
+    if(status)status.textContent=action==='medical-review'?'Research đã PASS. Hãy đối chiếu Evidence Pack và chọn ACCEPT hoặc NEEDS FIX.':'Hãy hoàn tất Human Review để pipeline tiếp tục.';
+    setTimeout(()=>$('contentStudioReviewNote')?.focus(),350);
+    return;
+  }
   if(action==='render-running'){if(status)status.textContent='Đang làm mới trạng thái render…';await loadContentStudioDashboard(projectId);return}
   if(btn)btn.disabled=true;if(status)status.textContent='Đang chạy bước kỹ thuật kế tiếp…';
   try{
@@ -243,7 +261,7 @@
     if(status)status.textContent=(x.performed?'✓ ':'ℹ ')+(x.message||'Đã cập nhật pipeline.');
     renderContentStudioDashboard(x.dashboard);
   }catch(e){if(status)status.textContent='⚠ '+e.message;alert(e.message)}
-  finally{if(btn&&state.contentStudioDashboard){const a=state.contentStudioDashboard.nextAction?.id;btn.disabled=['medical-review','copyright-review','final-review','research-review','fix-research','ready'].includes(a)}}
+  finally{if(btn&&state.contentStudioDashboard){const a=state.contentStudioDashboard.nextAction?.id;btn.disabled=['research-review','fix-research','ready'].includes(a)}}
  }
  async function runContentStudioAutoAdvance(){
   const projectId=state.contentStudioSelected||$('contentStudioProjectSelect')?.value;if(!projectId)return;

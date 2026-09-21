@@ -179,6 +179,15 @@ export function generationCapabilities(): MediaGenerationCapability[] {
       notes: 'Renderer 1920x1080 dùng persistent render queue và ShotCraft scene plan.',
     },
     {
+      id: 'hyperframes-motion-graphics',
+      kind: 'compose',
+      status: process.env.CONTENT_STUDIO_HYPERFRAMES_ENABLED==='true' ? 'configured' : 'planned',
+      mode: 'scene-motion-adapter',
+      notes: process.env.CONTENT_STUDIO_HYPERFRAMES_ENABLED==='true'
+        ? 'Motion-graphics adapter được phép dùng cho scene compare/stat/list/flow; FFmpeg vẫn là production fallback.'
+        : 'Smart Scene Engine đã lập kế hoạch HyperFrames nhưng execution mặc định tắt trên server nhẹ; FFmpeg fallback luôn sẵn sàng.',
+    },
+    {
       id: 'podcast-audio-export',
       kind: 'export',
       status: 'ready',
@@ -305,12 +314,19 @@ export async function enqueuePipelineGeneration(input: {
 
   const batchId=randomUUID();
   const voice=chooseVoice(handoff.voicePlan.voice),voiceStyle=chooseStyle(handoff.voicePlan.style);
+  const smartDurations=runtime.scenePrompts.map(scene=>Math.max(.5,Number(scene.estimatedDurationSec||1)));
+  const smartTotal=smartDurations.reduce((a,b)=>a+b,0)||1;
+  let smartCursor=0;
+  const smartTimeline=runtime.scenePrompts.map((scene,index)=>{
+    const start=smartCursor/smartTotal;smartCursor+=smartDurations[index];
+    return{imageIndex:index,startRatio:start,endRatio:smartCursor/smartTotal,transition:index?'soft-dip':'cut'} as const;
+  });
   const jobs=new Map<string,ReturnType<typeof enqueueRender>>();
   for(const output of selected.filter(x=>x.kind!=='comic'&&x.kind!=='thumbnail')){
     const renderMode=output.kind==='podcast'?'audio':output.aspectRatio==='16:9'?'landscape':'vertical';
     const job=enqueueRender({
       draftId:project.id,ownerId:input.ownerId,text:project.script,headline:project.topic,source:project.seriesName,
-      autoCollectImages:false,smartScenes:true,shotCraft:true,voice,voiceStyle,template:'classic',motion:'light',
+      autoCollectImages:false,smartScenes:true,shotCraft:true,scenes:renderMode==='audio'?undefined:smartTimeline,voice,voiceStyle,template:'classic',motion:'light',
       tickerMode:'off',channelName:project.seriesName||'Content Studio',mediaProvenance:[],localMedia:renderMode==='audio'?[]:(input.localMedia||[]),renderMode
     });
     jobs.set(output.id,job);
@@ -340,7 +356,8 @@ export async function enqueuePipelineGeneration(input: {
       recordStudioArtifact({projectId:project.id,ownerId:input.ownerId,outputId:output.id,kind:'thumbnail',path:thumbResult.outputPath,generator:'local-deterministic-thumbnail',metadata:{assets:thumbResult.assets}});
       return{outputId:output.id,kind:output.kind,aspectRatio:output.aspectRatio,status:'ready',worker:'local-thumbnail-png',outputPath:thumbResult.outputPath,assets:thumbResult.assets};
     }
-    const worker=output.kind==='podcast'?'tts-audio-export':output.aspectRatio==='16:9'&&output.kind==='video'?'ffmpeg-landscape-16x9':output.aspectRatio==='9:16'&&(output.kind==='short'||output.kind==='video')?'ffmpeg-short-9x16':output.kind==='comic'?'local-comic-png':output.kind==='thumbnail'?'local-thumbnail-png':'planned';
+    const smartCompose=runtime.composePlan.find(x=>x.id===output.id)?.renderer;
+    const worker=output.kind==='podcast'?'tts-audio-export':output.kind==='comic'?'local-comic-png':output.kind==='thumbnail'?'local-thumbnail-png':smartCompose==='hybrid'?'smart-hybrid-ffmpeg-fallback':smartCompose==='hyperframes'?'smart-motion-ffmpeg-fallback':output.aspectRatio==='16:9'&&output.kind==='video'?'ffmpeg-landscape-16x9':output.aspectRatio==='9:16'&&(output.kind==='short'||output.kind==='video')?'ffmpeg-short-9x16':'planned';
     return{outputId:output.id,kind:output.kind,aspectRatio:output.aspectRatio,status:job?'queued':'planned',worker,renderJobId:job?.id};
   });
 

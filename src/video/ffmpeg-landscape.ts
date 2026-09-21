@@ -73,7 +73,7 @@ export async function renderStudioLandscapeVideo(opts:{
       const start=scene.startRatio*duration,end=scene.endRatio*duration,d=Math.max(.2,end-start),item=media[scene.imageIndex];
       chains.push(item.kind==='video'?clipVideo(scene.imageIndex+1,`ls${i}`,d,start):clipImage(scene.imageIndex+1,`ls${i}`,d,start));
     }
-    chains.push('[0:v]fps=${RENDER_FPS},setsar=1,format=yuv420p[bg0]');
+    chains.push(`[0:v]fps=${RENDER_FPS},setsar=1,format=yuv420p[bg0]`);
     let previous='bg0';
     for(const [i,scene] of scenes.entries()){
       const start=scene.startRatio*duration,end=scene.endRatio*duration,next=`scene${i}`;

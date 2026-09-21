@@ -5,6 +5,7 @@ import { searchOpenMediaForScript, type OpenMediaResult } from '../media/open-me
 import { craftShotPlan, type ShotCraftPlan } from '../video/shotcraft.js';
 import { castVietnameseVoice } from '../tts/casting.js';
 import { getPipelineProject, type PipelineOutputProfile, type PipelineProject } from './pipeline-v2.js';
+import { smartScenePlan,rendererSummary,type SmartSceneIntent,type SmartSceneLayout,type SmartSceneRenderer } from './pipeline-v2-smart.js';
 
 export type PipelineResearchStatus = 'not_required' | 'pass' | 'review' | 'block';
 export type PipelineReviewStatus = 'not_required' | 'pending' | 'accepted' | 'needs_fix';
@@ -40,6 +41,12 @@ export interface ScenePromptPack {
   imagePrompt: string;
   videoPrompt: string;
   evidenceRequired: boolean;
+  intent?: SmartSceneIntent;
+  renderer?: SmartSceneRenderer;
+  layout?: SmartSceneLayout;
+  estimatedDurationSec?: number;
+  subtitleChunks?: string[];
+  rendererReason?: string;
 }
 
 export interface VoicePlan {
@@ -54,7 +61,7 @@ export interface VoicePlan {
 
 export interface ComposeOutputPlan extends PipelineOutputProfile {
   status: 'planned';
-  renderer: 'ffmpeg' | 'audio-export' | 'image-sequence';
+  renderer: 'ffmpeg' | 'hyperframes' | 'hybrid' | 'audio-export' | 'image-sequence';
   source: 'approved-scenes';
 }
 
@@ -191,7 +198,7 @@ function hashKey(...parts: string[]) {
 }
 
 function isHealthProject(project: PipelineProject) {
-  return project.templateId === 'health-story' || project.templateId === 'health-short';
+  return project.plan.gates.medicalReview === 'required' || project.templateId === 'health-story' || project.templateId === 'health-short';
 }
 
 export function buildCharacterBible(project: PipelineProject): CharacterBible {
@@ -273,31 +280,41 @@ function buildScenePrompts(
   styleBible: StyleBible,
 ): ScenePromptPack[] {
   const anchors = characterBible.cast.map((item) => item.promptAnchor).join('; ');
-  return project.plan.scenes.map((scene) => ({
-    sceneIndex: scene.index,
-    beat: scene.beat,
-    narration: scene.narration,
-    evidenceRequired: scene.needsEvidence,
-    imagePrompt: [
-      'Create an original fictional scene.',
-      styleBible.visualDirection,
-      styleBible.lighting,
-      styleBible.camera,
-      anchors,
-      `continuity key ${characterBible.continuityKey}`,
-      `story beat ${scene.beat}`,
-      `visual intent: ${scene.visualPromptSeed}`,
-      `narration context: ${clean(scene.narration, 700)}`,
-      'no text inside image; no logo; no watermark; no copied artwork',
-    ].join('; '),
-    videoPrompt: [
-      scene.videoPromptSeed,
-      `continuity key ${characterBible.continuityKey}`,
-      'preserve face, age, wardrobe and environment identity from the approved keyframe',
-      'subtle natural body movement and environmental motion only',
-      'no morphing, no identity drift, no abrupt camera move',
-    ].join('; '),
-  }));
+  return project.plan.scenes.map((scene) => {
+    const smart=smartScenePlan({beat:scene.beat,narration:scene.narration,topic:project.topic,templateId:project.templateId,evidenceRequired:scene.needsEvidence});
+    return {
+      sceneIndex: scene.index,
+      beat: scene.beat,
+      narration: scene.narration,
+      evidenceRequired: scene.needsEvidence,
+      intent: smart.intent,
+      renderer: smart.renderer,
+      layout: smart.layout,
+      estimatedDurationSec: smart.estimatedDurationSec,
+      subtitleChunks: smart.subtitleChunks,
+      rendererReason: smart.reason,
+      imagePrompt: [
+        'Create an original fictional scene.',
+        styleBible.visualDirection,
+        styleBible.lighting,
+        styleBible.camera,
+        anchors,
+        `continuity key ${characterBible.continuityKey}`,
+        `story beat ${scene.beat}`,
+        `scene intent ${smart.intent}; layout ${smart.layout}; renderer preference ${smart.renderer}`,
+        `visual intent: ${scene.visualPromptSeed}`,
+        `narration context: ${clean(scene.narration, 700)}`,
+        'no text inside generated image; no logo; no watermark; no copied artwork',
+      ].join('; '),
+      videoPrompt: [
+        scene.videoPromptSeed,
+        `continuity key ${characterBible.continuityKey}`,
+        'preserve face, age, wardrobe and environment identity from the approved keyframe',
+        'subtle natural body movement and environmental motion only',
+        'no morphing, no identity drift, no abrupt camera move',
+      ].join('; '),
+    };
+  });
 }
 
 function emptyOpenMedia(topic: string, warning: string): OpenMediaResult {
@@ -309,7 +326,7 @@ function researchSnapshot(
   pack: HealthResearchPack | undefined,
   externalSkipped: boolean,
 ): PipelineResearchSnapshot {
-  if (!project.plan.template.researchRequired) {
+  if (project.plan.gates.research !== 'required') {
     return {
       status: 'not_required',
       topicEntityMatch: true,
@@ -366,7 +383,15 @@ function researchSnapshot(
   };
 }
 
-function composePlan(outputs: PipelineOutputProfile[]): ComposeOutputPlan[] {
+function composePlan(outputs: PipelineOutputProfile[],scenes:ScenePromptPack[]): ComposeOutputPlan[] {
+  const summary=rendererSummary(scenes.map(scene=>({
+    intent:scene.intent||'story',
+    renderer:scene.renderer||'ffmpeg',
+    layout:scene.layout||'cinematic',
+    estimatedDurationSec:scene.estimatedDurationSec||3,
+    subtitleChunks:scene.subtitleChunks||[],
+    reason:scene.rendererReason||'',
+  })));
   return outputs.map((output) => ({
     ...output,
     status: 'planned',
@@ -375,7 +400,7 @@ function composePlan(outputs: PipelineOutputProfile[]): ComposeOutputPlan[] {
         ? 'audio-export'
         : output.kind === 'comic' || output.kind === 'thumbnail'
           ? 'image-sequence'
-          : 'ffmpeg',
+          : summary.hybrid ? 'hybrid' : summary.hyperframes>0 ? 'hyperframes' : 'ffmpeg',
     source: 'approved-scenes',
   }));
 }
@@ -463,7 +488,7 @@ export async function preparePipelineProject(
   const scenePrompts = buildScenePrompts(project, characterBible, styleBible);
 
   let pack: HealthResearchPack | undefined;
-  if (project.plan.template.researchRequired && !options.skipExternal) {
+  if (project.plan.gates.research === 'required' && !options.skipExternal) {
     try {
       pack = await researchHealthTopic(project.topic, 5, project.plan.sourceUrls);
     } catch {
@@ -518,7 +543,7 @@ export async function preparePipelineProject(
     subtitleLanguage: 'vi',
   };
 
-  const medicalReview: PipelineReviewStatus = project.plan.template.medicalReviewRequired ? 'pending' : 'not_required';
+  const medicalReview: PipelineReviewStatus = project.plan.gates.medicalReview === 'required' ? 'pending' : 'not_required';
   const blocked = research.status === 'block';
   const generationAllowed = !blocked && research.status !== 'review' && medicalReview === 'not_required';
   const status: PipelineRuntimeStatus = blocked ? 'blocked' : generationAllowed ? 'generation_ready' : 'prepared';
@@ -558,7 +583,7 @@ export async function preparePipelineProject(
     JSON.stringify(shotPlan),
     JSON.stringify(openMedia),
     JSON.stringify(voicePlan),
-    JSON.stringify(composePlan(project.plan.outputs)),
+    JSON.stringify(composePlan(project.plan.outputs,scenePrompts)),
     medicalReview,
     'pending',
     'pending',
@@ -588,7 +613,7 @@ export function setPipelineMedicalReview(input: {
   if (!project) throw new Error('Content Studio project not found');
   const runtime = getPipelineRuntime(input.ownerId, input.projectId);
   if (!runtime) throw new Error('Project chưa chạy prepare runtime');
-  if (!project.plan.template.medicalReviewRequired) throw new Error('Template này không yêu cầu Medical Review');
+  if (project.plan.gates.medicalReview !== 'required') throw new Error('Project này không yêu cầu Medical Review');
   if (input.status === 'accepted' && runtime.research.status !== 'pass') {
     throw new Error('Research Gate chưa PASS; chưa thể xác nhận Medical Review.');
   }

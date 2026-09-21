@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import { readFile, stat } from 'node:fs/promises';
+import { basename,resolve } from 'node:path';
 import { z } from 'zod';
 import { deleteRenderJob,enqueueRender,renderJobs } from './video/job.js';
 import { directScenes } from './video/scenes.js';

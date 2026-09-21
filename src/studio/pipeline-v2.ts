@@ -51,7 +51,7 @@ export interface PipelineScene {
 }
 
 export interface PipelinePlan {
-  version: '2.0.0-alpha.1';
+  version: '2.1.0-phase7a';
   template: PipelineTemplate;
   topic: string;
   seriesName?: string;
@@ -363,13 +363,14 @@ export function buildPipelinePlan(input: Omit<CreatePipelineProjectInput, 'owner
     .map((url) => clean(url, 2000))
     .filter(Boolean)
     .slice(0, 20);
+  if(template.id==='url-story'&&!sourceUrls.length)throw new Error('URL → Video cần ít nhất một URL nguồn.');
 
   const medicalSensitive = ['topic-explainer','url-story','knowledge-compare'].includes(template.id) && likelyMedicalTopic(topic+' '+script);
   const researchRequired = template.researchRequired || medicalSensitive;
   const medicalReviewRequired = template.medicalReviewRequired || medicalSensitive;
 
   return {
-    version: '2.0.0-alpha.1',
+    version: '2.1.0-phase7a',
     template,
     topic,
     seriesName: clean(input.seriesName, 160) || undefined,

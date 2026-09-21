@@ -73,6 +73,8 @@ jobs:
         run: npm run smoke:content-studio-v2-package
       - name: Content Studio Pipeline v2 Phase 6C package verification smoke test
         run: npm run smoke:content-studio-v2-package-verify
+      - name: Content Studio Pipeline v2 Phase 7A smart template engine smoke test
+        run: npm run smoke:content-studio-v2-phase7a
       - name: ShotCraft Lite cinematic scene planning smoke test
         run: npm run smoke:shotcraft-lite
       - name: ShotCraft render manifest smoke test

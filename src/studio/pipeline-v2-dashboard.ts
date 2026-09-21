@@ -25,6 +25,11 @@ export interface ContentStudioDashboardScene {
   image?:ReturnType<typeof summarizeMediaJob>;
   video?:ReturnType<typeof summarizeMediaJob>;
   preferredMedia?:'video'|'image'|'fallback';
+  intent?:string;
+  renderer?:string;
+  layout?:string;
+  estimatedDurationSec?:number;
+  subtitleChunks?:string[];
 }
 
 function summarizeMediaJob(job:SceneMediaJob){
@@ -100,7 +105,11 @@ export function contentStudioProjectDashboard(ownerId:string,projectId:string){
     const imageSummary=image?summarizeMediaJob(image):undefined;
     const videoSummary=video?summarizeMediaJob(video):undefined;
     const preferredMedia=video?.status==='ready'?'video':image?.status==='ready'?'image':'fallback';
-    return{sceneIndex:scene.index,beat:scene.beat,narration:scene.narration,image:imageSummary,video:videoSummary,preferredMedia};
+    const smart=runtime?.scenePrompts?.find(item=>item.sceneIndex===scene.index);
+    return{
+      sceneIndex:scene.index,beat:scene.beat,narration:scene.narration,image:imageSummary,video:videoSummary,preferredMedia,
+      intent:smart?.intent,renderer:smart?.renderer,layout:smart?.layout,estimatedDurationSec:smart?.estimatedDurationSec,subtitleChunks:smart?.subtitleChunks,
+    };
   });
 
   const visualOutputs=project.plan.outputs.filter(output=>output.kind==='video'||output.kind==='short');

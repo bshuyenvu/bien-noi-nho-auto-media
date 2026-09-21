@@ -826,3 +826,65 @@ npm run smoke:content-studio-v2-package
 npm run smoke:content-studio-v2-package-verify
 npm run smoke:ui
 ```
+
+
+## Phase 7A — Smart Template + Renderer Engine
+
+Phase 7A mở rộng Content Studio V2 nhưng giữ nguyên một codebase và toàn bộ gate hiện có.
+
+### Template mới
+
+- `topic-explainer`: giải thích một chủ đề theo video ngắn.
+- `url-story`: URL/bài viết → biên tập lại an toàn → storyboard → video.
+- `knowledge-compare`: A vs B → split comparison / stat / list / takeaway.
+
+Các template mới tự bật Research + Medical Review khi chủ đề được nhận diện là y khoa. Nội dung không y khoa không bị ép qua Health Evidence Gate.
+
+### Scene Intelligence
+
+Mỗi scene có thêm:
+
+- intent;
+- layout;
+- renderer preference;
+- estimated duration;
+- semantic subtitle chunks;
+- renderer reason.
+
+Renderer preference:
+
+- cinematic/story → FFmpeg;
+- compare/stat/list/process/evidence/takeaway/CTA → motion-graphics preference;
+- production luôn có FFmpeg fallback.
+
+### Timing
+
+TTS hiện hữu tạo audio trước, `ffprobe` đo thời lượng audio thật. Smart Scene duration chỉ quyết định **tỷ lệ phân bổ scene**; worker chuẩn hóa các tỷ lệ đó vào tổng audio duration thật trước khi FFmpeg render. Điều này tránh hard-code thời lượng theo số chữ.
+
+### URL → Video và copyright
+
+Nếu URL Story không có script:
+
+1. importer đọc URL;
+2. AI/rules editor hiện hữu biên tập lại thành script nguyên bản;
+3. source URL được giữ làm provenance;
+4. không dùng nguyên văn bài làm voiceover.
+
+### HyperFrames strategy
+
+Phase 7A thêm renderer capability và scene routing cho motion graphics. Execution HyperFrames được feature-gate bằng `CONTENT_STUDIO_HYPERFRAMES_ENABLED`; trên server cấu hình nhẹ, FFmpeg fallback vẫn là mặc định để bảo đảm ổn định.
+
+### UI
+
+Project Creator tự đổi hướng dẫn theo template và không bắt người dùng chọn renderer. Dashboard hiển thị intent/layout/renderer/timing/subtitle chunks để operator kiểm tra khi cần.
+
+### Verify
+
+```bash
+npm run typecheck
+npm run build
+npm run smoke:content-studio-v2-phase7a
+npm run smoke:content-studio-v2-wizard
+npm run smoke:content-studio-v2-user-evidence
+npm run smoke:ui
+```

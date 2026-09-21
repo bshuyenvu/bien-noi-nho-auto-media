@@ -159,8 +159,9 @@
   $('contentStudioSceneSummary').textContent=`${scenes.readyVisual||0}/${scenes.total||0} scene có generated media • thiếu ${scenes.missingVisual||0} • ${Object.entries(scenes.statusCounts||{}).map(([k,v])=>`${k}: ${v}`).join(' • ')||'chưa có media job'}`;
   $('contentStudioSceneList').innerHTML=(scenes.items||[]).slice(0,12).map(scene=>{
     const preferred=scene.preferredMedia||'fallback',img=scene.image,vid=scene.video,status=vid?.status==='ready'?'ready':img?.status==='ready'?'ready':vid?.status||img?.status||'fallback';
-    const meta=[`beat: ${scene.beat||'—'}`,img?`image ${img.status} • ${img.providerId}`:'image —',vid?`video ${vid.status} • ${vid.providerId}`:'video —'].join(' • ');
-    return `<div class="pipeline-scene"><div class="pipeline-scene-main"><div class="pipeline-scene-title">SCENE ${scene.sceneIndex+1} • ${esc(preferred.toUpperCase())}</div><div class="pipeline-scene-meta">${esc(meta)}</div></div><span class="pipeline-state ${pipelineStateClass(status)}">${esc(status)}</span></div>`;
+    const smart=[scene.intent&&`intent ${scene.intent}`,scene.layout&&`layout ${scene.layout}`,scene.renderer&&`renderer ${scene.renderer}`,scene.estimatedDurationSec&&`~${Number(scene.estimatedDurationSec).toFixed(1)}s`].filter(Boolean).join(' • ');
+    const meta=[`beat: ${scene.beat||'—'}`,smart,img?`image ${img.status} • ${img.providerId}`:'image —',vid?`video ${vid.status} • ${vid.providerId}`:'video —'].filter(Boolean).join(' • ');
+    return `<div class="pipeline-scene"><div class="pipeline-scene-main"><div class="pipeline-scene-title">SCENE ${scene.sceneIndex+1} • ${esc(preferred.toUpperCase())}</div><div class="pipeline-scene-meta">${esc(meta)}</div>${scene.subtitleChunks?.length?`<div class="pipeline-scene-subtitle">Subtitle: ${esc(scene.subtitleChunks.slice(0,3).join(' / '))}</div>`:''}</div><span class="pipeline-state ${pipelineStateClass(status)}">${esc(status)}</span></div>`;
   }).join('')||'<div class="muted">Chưa có scene runtime.</div>';
   const g=x.generation||{},batch=g.latestBatch;
   $('contentStudioOutputSummary').textContent=batch?`Batch ${String(batch.id).slice(0,8)}… • ${batch.status} • ${Object.entries(g.statusCounts||{}).map(([k,v])=>`${k}: ${v}`).join(' • ')}`:'Chưa có generation batch.';
@@ -174,10 +175,14 @@
   return (state.contentStudioTemplates||[]).find(t=>t.id===id);
  }
  function renderCreatorTemplate(){
-  const t=selectedCreatorTemplate(),box=$('contentStudioCreateOutputs'),note=$('contentStudioTemplateNote');
+  const t=selectedCreatorTemplate(),box=$('contentStudioCreateOutputs'),note=$('contentStudioTemplateNote'),script=$('contentStudioCreateScript'),sources=$('contentStudioCreateSources'),topic=$('contentStudioCreateTopic');
   if(!t||!box)return;
   box.innerHTML=(t.outputs||[]).map(o=>`<label class="creator-output"><input type="checkbox" data-creator-output="${esc(o.id)}" checked><span><b>${esc(o.label||o.id)}</b><small>${esc([o.kind,o.aspectRatio,o.targetSeconds?o.targetSeconds+'s':''].filter(Boolean).join(' • '))}</small></span></label>`).join('');
-  if(note)note.textContent=`${t.description||''} • Research: ${t.researchRequired?'bắt buộc':'tùy chọn'} • Medical Review: ${t.medicalReviewRequired?'bắt buộc':'không bắt buộc'} • tối đa ${t.maxScenes||'—'} scene.`;
+  const adaptive=['topic-explainer','url-story','knowledge-compare'].includes(t.id);
+  if(note)note.textContent=`${t.description||''} • Research/Medical Review ${adaptive?'tự bật khi nội dung có tính y khoa':(t.researchRequired||t.medicalReviewRequired?'theo template':'không bắt buộc')} • Smart Scene tự chọn motion/visual • tối đa ${t.maxScenes||'—'} scene.`;
+  if(script)script.placeholder=t.id==='url-story'?'Có thể để trống: hệ thống sẽ trích nội dung từ URL đầu tiên. Hoặc nhập kịch bản để biên tập chủ động.':t.id==='knowledge-compare'?'Nhập kịch bản so sánh A và B; mỗi ý khác biệt sẽ được Scene Intelligence chọn split/stat/list layout.':'Nhập kịch bản hoàn chỉnh hoặc bản nháp; hệ thống tự chia scene, subtitle và renderer.';
+  if(sources)sources.placeholder=t.id==='url-story'?'URL chính bắt buộc ở dòng đầu; các URL bổ sung ở dòng tiếp theo.':'https://…';
+  if(topic)topic.placeholder=t.id==='knowledge-compare'?'Ví dụ: Troponin I vs Troponin T':t.id==='url-story'?'Tiêu đề/chủ đề video':t.id==='topic-explainer'?'Ví dụ: Vì sao huyết áp tăng?':'Ví dụ: Dấu hiệu cảnh báo đột quỵ';
   if(!$('contentStudioCreateSeries').value.trim()&&t.id==='health-story')$('contentStudioCreateSeries').value='Chuyện Sức Khỏe Quanh Ta';
  }
  async function loadContentStudioCreatorTemplates(){
@@ -192,8 +197,10 @@
  async function createContentStudioProject(){
   const templateId=$('contentStudioCreateTemplate').value,topic=$('contentStudioCreateTopic').value.trim(),script=$('contentStudioCreateScript').value.trim();
   if(topic.length<3)return alert('Chủ đề phải có ít nhất 3 ký tự.');
-  if(script.length<20)return alert('Kịch bản phải có ít nhất 20 ký tự.');
   const sourceUrls=$('contentStudioCreateSources').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  if(templateId==='url-story'&&!sourceUrls.length)return alert('URL → Video cần ít nhất một URL nguồn.');
+  if(templateId!=='url-story'&&script.length<20)return alert('Kịch bản phải có ít nhất 20 ký tự.');
+  if(templateId==='url-story'&&script.length>0&&script.length<20)return alert('Nếu nhập kịch bản, cần ít nhất 20 ký tự; hoặc để trống để hệ thống tự trích URL.');
   for(const u of sourceUrls){try{const x=new URL(u);if(!/^https?:$/.test(x.protocol))throw Error()}catch{return alert('Nguồn tham khảo phải là URL HTTP/HTTPS hợp lệ: '+u)}}
   const outputIds=[...document.querySelectorAll('[data-creator-output]:checked')].map(x=>x.dataset.creatorOutput).filter(Boolean);
   if(!outputIds.length)return alert('Hãy chọn ít nhất một output.');

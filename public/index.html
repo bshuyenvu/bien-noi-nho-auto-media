@@ -143,17 +143,23 @@ Nội dung câu đầu..."></textarea><div class="actions"><button id="analyzeSr
   <section id="contentStudioCreatorPanel" class="panel content-studio-creator-panel">
     <div class="section-head content-studio-v2-head">
       <div><div class="step">CONTENT STUDIO V2 • PROJECT CREATOR</div><h2>Ý tưởng → Project → Auto-Advance → Review</h2></div>
-      <span class="badge">PHASE 6A</span>
+      <span class="badge">SMART CREATOR</span>
     </div>
-    <p class="muted">Tạo project mới từ một form duy nhất. Output thay đổi theo template; Auto-Advance chỉ chạy bước kỹ thuật và tự dừng ở review gate.</p>
+    <p class="muted">Nhập chủ đề để AI tự nghiên cứu, tìm nguồn và soạn kịch bản; vẫn có thể chỉnh thủ công trước khi tạo project. Auto-Advance tự dừng ở review gate.</p>
     <div class="creator-grid">
       <label>Template<select id="contentStudioCreateTemplate"></select></label>
       <label>Tên series<input id="contentStudioCreateSeries" placeholder="Ví dụ: Chuyện Sức Khỏe Quanh Ta"></label>
       <label>Số tập<input id="contentStudioCreateEpisode" type="number" min="1" placeholder="Ví dụ: 7"></label>
       <label class="creator-topic">Chủ đề<input id="contentStudioCreateTopic" placeholder="Ví dụ: Dấu hiệu cảnh báo đột quỵ"></label>
     </div>
-    <label>Kịch bản<textarea id="contentStudioCreateScript" rows="7" placeholder="Nhập kịch bản hoàn chỉnh hoặc bản nháp đủ nội dung để chia scene…"></textarea></label>
-    <label>Nguồn tham khảo <span class="optional">(mỗi dòng một URL)</span><textarea id="contentStudioCreateSources" rows="3" placeholder="https://…"></textarea></label>
+    <div class="creator-ai-bar">
+      <div><b>AI CONTENT PREP</b><span>Chỉ cần nhập chủ đề: hệ thống tự tìm nguồn, tạo Evidence Pack và soạn kịch bản nguyên bản.</span></div>
+      <button id="contentStudioAutoDraftBtn" class="btn small">AI TẠO KỊCH BẢN + TÌM NGUỒN</button>
+    </div>
+    <div id="contentStudioAutoDraftStatus" class="status-line muted">Có thể nhập kịch bản/nguồn thủ công hoặc dùng AI tự chuẩn bị.</div>
+    <div id="contentStudioAutoDraftSources" class="creator-source-preview"></div>
+    <label>Kịch bản<textarea id="contentStudioCreateScript" rows="7" placeholder="Có thể để trống rồi dùng AI TẠO KỊCH BẢN + TÌM NGUỒN…"></textarea></label>
+    <label>Nguồn tham khảo <span class="optional">(mỗi dòng một URL)</span><textarea id="contentStudioCreateSources" rows="3" placeholder="AI có thể tự tìm nguồn phù hợp…"></textarea></label>
     <div class="creator-output-block"><div class="meta-label">OUTPUT</div><div id="contentStudioCreateOutputs" class="creator-output-grid"></div></div>
     <div id="contentStudioTemplateNote" class="status-line muted"></div>
     <div class="creator-actions">

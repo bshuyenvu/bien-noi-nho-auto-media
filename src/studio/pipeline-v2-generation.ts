@@ -314,6 +314,7 @@ export async function enqueuePipelineGeneration(input: {
 
   const batchId=randomUUID();
   const voice=chooseVoice(handoff.voicePlan.voice),voiceStyle=chooseStyle(handoff.voicePlan.style);
+  const smartTemplate=['topic-explainer','url-story','knowledge-compare'].includes(project.templateId);
   const smartDurations=runtime.scenePrompts.map(scene=>Math.max(.5,Number(scene.estimatedDurationSec||1)));
   const smartTotal=smartDurations.reduce((a,b)=>a+b,0)||1;
   let smartCursor=0;
@@ -326,7 +327,7 @@ export async function enqueuePipelineGeneration(input: {
     const renderMode=output.kind==='podcast'?'audio':output.aspectRatio==='16:9'?'landscape':'vertical';
     const job=enqueueRender({
       draftId:project.id,ownerId:input.ownerId,text:project.script,headline:project.topic,source:project.seriesName,
-      autoCollectImages:false,smartScenes:true,shotCraft:true,scenes:renderMode==='audio'?undefined:smartTimeline,voice,voiceStyle,template:'classic',motion:'light',
+      autoCollectImages:false,smartScenes:true,shotCraft:true,scenes:renderMode==='audio'||!smartTemplate?undefined:smartTimeline,voice,voiceStyle,template:'classic',motion:'light',
       tickerMode:'off',channelName:project.seriesName||'Content Studio',mediaProvenance:[],localMedia:renderMode==='audio'?[]:(input.localMedia||[]),renderMode
     });
     jobs.set(output.id,job);
@@ -357,7 +358,7 @@ export async function enqueuePipelineGeneration(input: {
       return{outputId:output.id,kind:output.kind,aspectRatio:output.aspectRatio,status:'ready',worker:'local-thumbnail-png',outputPath:thumbResult.outputPath,assets:thumbResult.assets};
     }
     const smartCompose=runtime.composePlan.find(x=>x.id===output.id)?.renderer;
-    const worker=output.kind==='podcast'?'tts-audio-export':output.kind==='comic'?'local-comic-png':output.kind==='thumbnail'?'local-thumbnail-png':smartCompose==='hybrid'?'smart-hybrid-ffmpeg-fallback':smartCompose==='hyperframes'?'smart-motion-ffmpeg-fallback':output.aspectRatio==='16:9'&&output.kind==='video'?'ffmpeg-landscape-16x9':output.aspectRatio==='9:16'&&(output.kind==='short'||output.kind==='video')?'ffmpeg-short-9x16':'planned';
+    const worker=output.kind==='podcast'?'tts-audio-export':output.kind==='comic'?'local-comic-png':output.kind==='thumbnail'?'local-thumbnail-png':smartTemplate&&smartCompose==='hybrid'?'smart-hybrid-ffmpeg-fallback':smartTemplate&&smartCompose==='hyperframes'?'smart-motion-ffmpeg-fallback':output.aspectRatio==='16:9'&&output.kind==='video'?'ffmpeg-landscape-16x9':output.aspectRatio==='9:16'&&(output.kind==='short'||output.kind==='video')?'ffmpeg-short-9x16':'planned';
     return{outputId:output.id,kind:output.kind,aspectRatio:output.aspectRatio,status:job?'queued':'planned',worker,renderJobId:job?.id};
   });
 

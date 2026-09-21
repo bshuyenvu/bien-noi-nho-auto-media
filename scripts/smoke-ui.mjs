@@ -5,7 +5,7 @@ const h=fs.readFileSync('public/index.html','utf8');
 const required=[
   'MULTI-CONTENT STUDIO V3.5','SRT → giọng','Lồng tiếng video',
   'MEDIA RIGHTS ENGINE','evidenceConfirm','GIỌNG CỦA TÔI','MEDIA UPLOAD',
-  'TIN NÓNG','previewScenesBtn','LỊCH SỬ RENDER','CONTENT STUDIO V2 • PROJECT PIPELINE','contentStudioV2Panel','contentStudioProjectSelect','contentStudioSceneList','contentStudioAutoDraftBtn','AI TẠO KỊCH BẢN + TÌM NGUỒN','contentStudioAutoDraftStatus',
+  'TIN NÓNG','previewScenesBtn','LỊCH SỬ RENDER','CONTENT STUDIO V2 • PROJECT PIPELINE','contentStudioV2Panel','contentStudioProjectSelect','contentStudioSceneList','contentStudioAutoDraftAuto','AI CONTENT PREP','contentStudioAutoDraftBtn','AI TẠO KỊCH BẢN + TÌM NGUỒN','contentStudioAutoDraftStatus',
   'data-task-target="configPanel"','channelNameInput','CẤU HÌNH WORKSPACE','openAccountConfigBtn','workspace-drawer hidden'
 ];
 const missing=required.filter(x=>!h.includes(x));

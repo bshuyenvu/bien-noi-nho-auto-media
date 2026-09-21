@@ -773,3 +773,56 @@ npm run build
 npm run smoke:content-studio-v2-package
 npm run smoke:ui
 ```
+
+
+## Phase 6C — Release Verification & Cleanup
+
+Phase 6C hoàn tất vòng đời của release package.
+
+### Verify
+
+```
+POST /api/content-studio-v2/packages/:packageId/verify
+```
+
+Hệ thống stream lại ZIP để tính SHA-256 và đối chiếu với checksum đã lưu khi tạo package. Đồng thời kiểm tra:
+
+- file còn tồn tại;
+- size khớp;
+- ZIP local header hợp lệ;
+- ZIP end-of-central-directory signature hợp lệ.
+
+Trạng thái được lưu:
+
+- `unverified`
+- `verified`
+- `tampered`
+- `missing`
+
+Nếu package bị thêm/sửa byte sau khi tạo, verify chuyển sang `tampered`.
+
+### Cleanup
+
+```
+DELETE /api/content-studio-v2/packages/:packageId
+```
+
+Xóa ZIP và staging metadata của package nhưng **không xóa artifact gốc**. Tenant isolation áp dụng cho verify/delete.
+
+### UI
+
+Release Package Center có:
+
+- VERIFY;
+- trạng thái integrity;
+- thời điểm verify;
+- tải ZIP;
+- xóa package cũ.
+
+### Verify CI
+
+```bash
+npm run smoke:content-studio-v2-package
+npm run smoke:content-studio-v2-package-verify
+npm run smoke:ui
+```

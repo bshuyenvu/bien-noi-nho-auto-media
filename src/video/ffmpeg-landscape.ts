@@ -1,6 +1,9 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { runFfmpeg, type RenderMediaItem, type VideoScene } from './ffmpeg.js';
+const RENDER_FPS=Math.max(20,Math.min(30,Number(process.env.FFMPEG_RENDER_FPS||30)));
+const X264_PRESET=String(process.env.FFMPEG_X264_PRESET||'veryfast');
+const X264_CRF=String(process.env.FFMPEG_CRF||'23');
 
 function escPath(value:string){
   return value.replace(/\\/g,'/').replace(/:/g,'\\:').replace(/'/g,"\\'");
@@ -18,10 +21,10 @@ function wrapHeadline(input:string,max=48,maxLines=2){
   return lines.join('\n');
 }
 function clipImage(inputIndex:number,label:string,duration:number,start:number){
-  return `[${inputIndex}:v]scale=1600:720:force_original_aspect_ratio=increase,crop=1600:720,fps=30,setsar=1,format=yuv420p,trim=duration=${duration.toFixed(3)},setpts=PTS-STARTPTS+${start.toFixed(3)}/TB[${label}]`;
+  return `[${inputIndex}:v]scale=1600:720:force_original_aspect_ratio=increase,crop=1600:720,fps=${RENDER_FPS},setsar=1,format=yuv420p,trim=duration=${duration.toFixed(3)},setpts=PTS-STARTPTS+${start.toFixed(3)}/TB[${label}]`;
 }
 function clipVideo(inputIndex:number,label:string,duration:number,start:number){
-  return `[${inputIndex}:v]fps=30,scale=1600:720:force_original_aspect_ratio=increase,crop=1600:720,trim=duration=${duration.toFixed(3)},setpts=PTS-STARTPTS+${start.toFixed(3)}/TB,setsar=1,format=yuv420p[${label}]`;
+  return `[${inputIndex}:v]fps=${RENDER_FPS},scale=1600:720:force_original_aspect_ratio=increase,crop=1600:720,trim=duration=${duration.toFixed(3)},setpts=PTS-STARTPTS+${start.toFixed(3)}/TB,setsar=1,format=yuv420p[${label}]`;
 }
 
 export async function renderStudioLandscapeVideo(opts:{
@@ -70,7 +73,7 @@ export async function renderStudioLandscapeVideo(opts:{
       const start=scene.startRatio*duration,end=scene.endRatio*duration,d=Math.max(.2,end-start),item=media[scene.imageIndex];
       chains.push(item.kind==='video'?clipVideo(scene.imageIndex+1,`ls${i}`,d,start):clipImage(scene.imageIndex+1,`ls${i}`,d,start));
     }
-    chains.push('[0:v]fps=30,setsar=1,format=yuv420p[bg0]');
+    chains.push('[0:v]fps=${RENDER_FPS},setsar=1,format=yuv420p[bg0]');
     let previous='bg0';
     for(const [i,scene] of scenes.entries()){
       const start=scene.startRatio*duration,end=scene.endRatio*duration,next=`scene${i}`;
@@ -78,7 +81,7 @@ export async function renderStudioLandscapeVideo(opts:{
       previous=next;
     }
     chains.push(`[${previous}]${overlay}[v]`);
-    const args=['-y','-f','lavfi','-i',`color=c=0x04111f:s=1920x1080:r=30:d=${duration.toFixed(3)}`];
+    const args=['-y','-f','lavfi','-i',`color=c=0x04111f:s=1920x1080:r=${RENDER_FPS}:d=${duration.toFixed(3)}`];
     for(const item of media){
       if(item.kind==='image')args.push('-loop','1','-i',item.path);
       else args.push('-stream_loop','-1','-i',item.path);
@@ -88,7 +91,7 @@ export async function renderStudioLandscapeVideo(opts:{
       '-i',opts.audioPath,
       '-filter_complex',chains.join(';'),
       '-map','[v]','-map',`${audioIndex}:a:0`,
-      '-c:v','libx264','-preset','veryfast','-crf','23','-pix_fmt','yuv420p',
+      '-c:v','libx264','-preset',X264_PRESET,'-crf',X264_CRF,'-pix_fmt','yuv420p',
       '-c:a','aac','-b:a','128k','-t',duration.toFixed(3),'-movflags','+faststart',opts.outputPath,
     );
     await runFfmpeg(args);
@@ -100,10 +103,10 @@ export async function renderStudioLandscapeVideo(opts:{
       overlay,
     ].join(',');
     await runFfmpeg([
-      '-y','-f','lavfi','-i',`color=c=0x04111f:s=1920x1080:r=30:d=${duration.toFixed(3)}`,
+      '-y','-f','lavfi','-i',`color=c=0x04111f:s=1920x1080:r=${RENDER_FPS}:d=${duration.toFixed(3)}`,
       '-i',opts.audioPath,
       '-vf',filters,'-map','0:v:0','-map','1:a:0',
-      '-c:v','libx264','-preset','veryfast','-crf','23','-pix_fmt','yuv420p',
+      '-c:v','libx264','-preset',X264_PRESET,'-crf',X264_CRF,'-pix_fmt','yuv420p',
       '-c:a','aac','-b:a','128k','-t',duration.toFixed(3),'-movflags','+faststart',opts.outputPath,
     ]);
   }

@@ -14,6 +14,45 @@ export interface HealthResearchPack {
 }
 const fold=(v:string)=>v.toLocaleLowerCase('vi-VN').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');
 const clean=(v:unknown,max=5000)=>String(v??'').replace(/<[^>]+>/g,' ').replace(/&[^;]+;/g,' ').replace(/\s+/g,' ').trim().slice(0,max);
+export function normalizeResearchUrl(raw:string){
+ const u=new URL(String(raw||'').trim());
+ if(!/^https?:$/.test(u.protocol))throw new Error('Research URL phải dùng HTTP/HTTPS');
+ for(const k of [...u.searchParams.keys()])if(/^utm_|^(fbclid|gclid|mc_cid|mc_eid)$/i.test(k))u.searchParams.delete(k);
+ u.hash='';
+ return u.toString();
+}
+export function researchSourceAuthority(url:string){
+ const host=new URL(url).hostname.toLowerCase().replace(/^www\./,'');
+ if(host==='cdc.gov'||host.endsWith('.cdc.gov'))return 98;
+ if(host==='who.int'||host.endsWith('.who.int'))return 98;
+ if(host==='nih.gov'||host.endsWith('.nih.gov')||host==='niddk.nih.gov')return 98;
+ if(host==='nhs.uk'||host.endsWith('.nhs.uk'))return 97;
+ if(host==='heart.org'||host.endsWith('.heart.org'))return 96;
+ if(host==='pubmed.ncbi.nlm.nih.gov'||host==='ncbi.nlm.nih.gov'||host.endsWith('.ncbi.nlm.nih.gov'))return 94;
+ if(host.endsWith('.gov'))return 94;
+ if(host.endsWith('.edu'))return 88;
+ return 72;
+}
+function researchSourceKind(url:string):HealthResearchSource['kind']{
+ const host=new URL(url).hostname.toLowerCase();
+ return /(^|\.)(cdc\.gov|who\.int|nih\.gov|nhs\.uk|heart\.org)$/.test(host)||host.endsWith('.gov')?'official':'academic';
+}
+async function userSuppliedSources(topic:string,urls:string[]){
+ const sources:HealthResearchSource[]=[],warnings:string[]=[];
+ const seen=new Set<string>();
+ for(const raw of urls.slice(0,20)){
+  let url:string;
+  try{url=normalizeResearchUrl(raw)}catch{warnings.push('Bỏ qua URL nguồn không hợp lệ: '+clean(raw,180));continue}
+  if(seen.has(url.toLowerCase()))continue;seen.add(url.toLowerCase());
+  try{
+   const a=await importArticleFromUrl(url),summary=clean(a.body,1800),title=clean(a.title||url,500);
+   if(summary.length<160){warnings.push('Nguồn nhập tay quá ít nội dung để dùng làm bằng chứng: '+url);continue}
+   if(!medicalTopicEntityMatch(topic,title+' '+summary)){warnings.push('Nguồn nhập tay không khớp chủ đề y khoa nên chưa dùng: '+url);continue}
+   sources.push({name:clean(a.sourceName||new URL(url).hostname,120),url:a.sourceUrl?normalizeResearchUrl(a.sourceUrl):url,title,summary,imageUrls:[],kind:researchSourceKind(url),authority:researchSourceAuthority(url),publishedAt:a.publishedAt,language:a.language,relevance:140});
+  }catch(e){warnings.push('Không đọc được nguồn nhập tay '+url+': '+(e instanceof Error?e.message:String(e)))}
+ }
+ return{sources,warnings};
+}
 const MEDICAL_TERMS:Array<[RegExp,string]>=[
  [/\b(dot quy|tai bien mach mau nao)\b/i,'stroke'],[/\b(ha duong huyet)\b/i,'hypoglycemia'],[/\b(tang duong huyet)\b/i,'hyperglycemia'],
  [/\b(tang huyet ap|cao huyet ap)\b/i,'hypertension'],[/\b(ha huyet ap)\b/i,'hypotension'],[/\b(dai thao duong|tieu duong)\b/i,'diabetes'],
@@ -102,15 +141,17 @@ async function academicSources(query:string,max=5):Promise<HealthResearchSource[
   return{source:{name:clean(x.journalTitle||'PubMed / Europe PMC',120),url,title,summary,imageUrls:[],kind:'academic' as const,authority:88,publishedAt:date,language:'en',relevance:score},score};
  }).filter((x:any)=>x.source.url&&x.source.summary.length>=180&&x.score>=28&&coreMatch(query,x.source.title)).sort((a:any,b:any)=>b.score-a.score).slice(0,max).map((x:any)=>x.source);
 }
-export async function researchHealthTopic(topic:string,max=5):Promise<HealthResearchPack>{
+export async function researchHealthTopic(topic:string,max=5,userSourceUrls:string[]=[]):Promise<HealthResearchPack>{
  const cleanTopic=clean(topic,180);if(cleanTopic.length<3)throw new Error('Chủ đề sức khỏe quá ngắn.');
  const query=medicalQuery(cleanTopic),warnings:string[]=[];
+ const supplied=await userSuppliedSources(cleanTopic,userSourceUrls);warnings.push(...supplied.warnings);
  let official:HealthResearchSource[]=[],academic:HealthResearchSource[]=[];
  try{official=await officialSources(query,2)}catch(e){warnings.push('Official source lookup: '+(e instanceof Error?e.message:String(e)))}
- if(/^[\x00-\x7F]+$/.test(query)){try{academic=await academicSources(query,Math.max(3,max-official.length))}catch(e){warnings.push('Europe PMC: '+(e instanceof Error?e.message:String(e)))}}else warnings.push('Chủ đề chưa được chuẩn hóa sang thuật ngữ y khoa tiếng Anh; không truy vấn PubMed để tránh ghép nhầm nguồn.')
- const academicFloor=official.length?112:82,filteredAcademic=academic.filter(x=>(x.relevance||0)>=academicFloor);
- const seen=new Set<string>(),sources=[...official,...filteredAcademic].filter(x=>{const k=x.url.toLowerCase();if(seen.has(k))return false;seen.add(k);return true}).slice(0,max);
+ if(/^[\x00-\x7F]+$/.test(query)){try{academic=await academicSources(query,Math.max(3,max-official.length-supplied.sources.length))}catch(e){warnings.push('Europe PMC: '+(e instanceof Error?e.message:String(e)))}}else warnings.push('Chủ đề chưa được chuẩn hóa sang thuật ngữ y khoa tiếng Anh; không truy vấn PubMed để tránh ghép nhầm nguồn.')
+ const academicFloor=(official.length||supplied.sources.some(x=>x.authority>=90))?112:82,filteredAcademic=academic.filter(x=>(x.relevance||0)>=academicFloor);
+ const seen=new Set<string>(),sources=[...supplied.sources,...official,...filteredAcademic].filter(x=>{const k=normalizeResearchUrl(x.url).toLowerCase();if(seen.has(k))return false;seen.add(k);return true}).slice(0,max);
  if(!sources.length)warnings.push('Chưa tìm được Evidence Pack đủ nội dung cho chủ đề này; có thể nhập thêm URL nguồn y khoa chính.');
- const mode=official.length&&filteredAcademic.length?'official+academic':official.length?'official':'academic';
+ const hasOfficial=sources.some(x=>x.kind==='official'),hasAcademic=sources.some(x=>x.kind==='academic');
+ const mode=hasOfficial&&hasAcademic?'official+academic':hasOfficial?'official':'academic';
  return{topic:cleanTopic,query,sources,mode,warnings};
 }

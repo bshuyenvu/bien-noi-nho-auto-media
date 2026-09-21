@@ -15,4 +15,8 @@ for(const hiddenId of ['uploadMediaPanel','voiceStudioPanel','reviewPanel']){
     console.error('Primary task is hidden:',hiddenId);process.exit(1)
   }
 }
-console.log('Multi-Content Studio V3.5 UI + Content Studio V2 dashboard contract OK');
+const js=fs.readFileSync('public/health-studio.js','utf8');
+for(const requiredJs of ['MỞ REVIEW Y KHOA','pipeline-review-summary','✓ ACCEPT & TIẾP TỤC','Research đã PASS. Hãy đối chiếu Evidence Pack']){
+  if(!js.includes(requiredJs)){console.error('Review gate UX contract missing:',requiredJs);process.exit(1)}
+}
+console.log('Multi-Content Studio V3.5 UI + Content Studio V2 dashboard/review contract OK');

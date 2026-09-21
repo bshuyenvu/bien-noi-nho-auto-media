@@ -72,7 +72,8 @@
     "smoke:content-studio-v2-wizard": "tsx scripts/smoke-content-studio-v2-wizard.ts",
     "smoke:content-studio-v2-package": "tsx scripts/smoke-content-studio-v2-package.ts",
     "smoke:content-studio-v2-package-verify": "tsx scripts/smoke-content-studio-v2-package-verify.ts",
-    "smoke:content-studio-v2-user-evidence": "tsx scripts/smoke-content-studio-v2-user-evidence.ts"
+    "smoke:content-studio-v2-user-evidence": "tsx scripts/smoke-content-studio-v2-user-evidence.ts",
+    "smoke:health-evidence-bilingual": "tsx scripts/smoke-health-evidence-bilingual.ts"
   },
   "dependencies": {
     "@clerk/express": "^2.1.66",
